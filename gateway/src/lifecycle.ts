@@ -1,21 +1,30 @@
-import { spawn as spawnCp } from "node:child_process";
+import { spawn as spawnCp, type ChildProcess } from "node:child_process";
+import { closeSync, mkdirSync, openSync } from "node:fs";
+import { open } from "node:fs/promises";
 import net from "node:net";
+import { dirname } from "node:path";
 import { listAvds } from "./avd.ts";
 import { findOwnRunning, pidAlive, type Running } from "./discovery.ts";
-import { emulatorBin } from "./platform.ts";
+import { emulatorBin, emulatorLogPath } from "./platform.ts";
+import { bootLogHint, bootLogReason } from "./boot-log.ts";
 import { adb, ADB_TIMEOUT_MS } from "./adb.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 
 const GRPC_BASE_PORT = 8554;
 const BOOT_TIMEOUT_MS = 180_000;
 const POLL_MS = 1000;
+const LOG_TAIL_BYTES = 64 * 1024;
 
 /** 启动出来的子进程里，生命周期模块用到的部分。 */
 export type Child = { kill(): void; unref(): void; onExit(cb: (code: number | null) => void): void };
 
 /** 可注入的外部依赖，测试里换成假的。 */
 export type LifecycleDeps = {
-  spawn: (cmd: string, args: string[]) => Child;
+  /** 子进程的 stdout / stderr 写进 logPath（从头覆盖）。 */
+  spawn: (cmd: string, args: string[], logPath: string) => Child;
+  logPath: (avd: string) => string;
+  /** 日志文件末尾一段；读不到为 null。 */
+  readLog: (path: string) => Promise<string | null>;
   /** 跑 adb，返回 stdout。 */
   adb: (args: string[]) => Promise<string>;
   listAvds: () => Promise<AvdInfo[]>;
@@ -47,10 +56,44 @@ function portFree(port: number): Promise<boolean> {
   });
 }
 
+/** 打开（截断）日志文件给子进程用；打不开就不记日志，不能因此启动失败。 */
+function openLog(path: string): number | "ignore" {
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    return openSync(path, "w");
+  } catch {
+    return "ignore";
+  }
+}
+
+async function readTail(path: string): Promise<string | null> {
+  try {
+    const f = await open(path, "r");
+    try {
+      const { size } = await f.stat();
+      const len = Math.min(size, LOG_TAIL_BYTES);
+      const buf = Buffer.alloc(len);
+      await f.read(buf, 0, len, size - len);
+      return buf.toString("utf8");
+    } finally {
+      await f.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
 const defaults: LifecycleDeps = {
-  spawn: (cmd, args) => {
-    // detached：模拟器在自己的进程组里，网关退出后它还在；emulator 会再拉起 qemu，结束时要杀整个进程组
-    const c = spawnCp(cmd, args, { detached: true, stdio: "ignore" });
+  spawn: (cmd, args, logPath) => {
+    // detached：模拟器在自己的进程组里，网关退出后它还在；emulator 会再拉起 qemu，结束时要杀整个进程组。
+    // 输出直接写文件描述符而不是管道：网关退出后模拟器还要接着写
+    const log = openLog(logPath);
+    let c: ChildProcess;
+    try {
+      c = spawnCp(cmd, args, { detached: true, stdio: ["ignore", log, log] });
+    } finally {
+      if (log !== "ignore") closeSync(log);
+    }
     return {
       kill: () => {
         try {
@@ -62,6 +105,8 @@ const defaults: LifecycleDeps = {
     };
   },
   adb: (args) => adb.run(args),
+  logPath: emulatorLogPath,
+  readLog: readTail,
   listAvds: () => listAvds(),
   findRunning: (name) => findOwnRunning(name),
   alive: pidAlive,
@@ -95,6 +140,16 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
   let child: Child | undefined;
   let exited: { code: number | null } | undefined;
   let myPort = 0;
+  const logPath = d.logPath(name);
+  // 开机中退出时把日志里的原因带上，用户不用自己去翻日志
+  const exitError = async (what: string): Promise<Error> => {
+    const log = await d.readLog(logPath);
+    if (log === null) return new Error(`模拟器进程在开机中退出（${what}）`);
+    const reason = bootLogReason(log);
+    const hint = bootLogHint(log);
+    const detail = [reason, hint].filter(Boolean).join("。");
+    return new Error(`模拟器进程在开机中退出（${what}）${detail ? `：${detail}` : ""}。完整日志：${logPath}`);
+  };
   const run = async (): Promise<Running> => {
     const info = (await d.listAvds()).find((a) => a.name === name);
     if (!info) throw new Error(`没有这个 AVD：${name}`);
@@ -115,7 +170,7 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
       myPort = 0;
     }
     job.grpcPort = port;
-    child = d.spawn(emulatorBin(), ["-avd", name, "-no-window", "-grpc", String(port), "-no-boot-anim", "-gpu", "host"]);
+    child = d.spawn(emulatorBin(), ["-avd", name, "-no-window", "-grpc", String(port), "-no-boot-anim", "-gpu", "host"], logPath);
     child.unref();
     // 实测 macOS 上 emulator 直接 exec 成 qemu，所以开机中它退出（含 emu kill 的 code 0、被信号杀的 null）就是失败
     child.onExit((code) => (exited = { code }));
@@ -124,10 +179,10 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
     const start = d.now();
     let running: Running | null = null;
     while (d.now() - start < BOOT_TIMEOUT_MS) {
-      if (exited) throw new Error(`模拟器进程在开机中退出（code ${exited.code}）`);
+      if (exited) throw await exitError(`code ${exited.code}`);
       running ??= await d.findRunning(name);
       if (running) {
-        if (!d.alive(running.pid)) throw new Error(`模拟器进程在开机中退出（pid ${running.pid} 已不在）`);
+        if (!d.alive(running.pid)) throw await exitError(`pid ${running.pid} 已不在`);
         job.serial = running.serial;
         // adb 卡住时按“还没开机”处理，不能拖过开机期限
         const out = await Promise.race([

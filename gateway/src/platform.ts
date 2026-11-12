@@ -29,6 +29,11 @@ export function emulatorBin(): string {
   return join(sdkRoot(), "emulator/emulator");
 }
 
+/** 网关拉起的模拟器的输出日志（每个 AVD 一份，每次启动覆盖）。 */
+export function emulatorLogPath(avd: string): string {
+  return join(homedir(), "Library/Logs/Droidpier", `${avd}.log`);
+}
+
 /** adb 可执行文件的绝对路径（adbPath 的别名）。 */
 export function adbBin(): string {
   return adbPath();

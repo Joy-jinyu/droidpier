@@ -19,23 +19,33 @@ function fakes(
     exitAtMs?: number;
     /** 到这个假时间后模拟器 pid 不在了 */
     deadAtMs?: number;
+    /** 子进程退出时的 code，默认 0 */
+    exitCode?: number;
+    /** 子进程写进日志文件的内容 */
+    log?: string;
+    /** 日志读不到（比如没能打开日志文件） */
+    noLog?: boolean;
   } = {},
 ) {
   let now = 0;
   const spawned: Spawned[] = [];
   const execs: string[] = [];
   const booted = new Map<string, Running>();
+  const logs = new Map<string, string>();
   const deps: LifecycleDeps = {
     now: () => now,
     sleep: async (ms) => {
       now += ms;
-      for (const s of spawned) if (opts.exitAtMs !== undefined && now >= opts.exitAtMs) s.exit(0);
+      for (const s of spawned) if (opts.exitAtMs !== undefined && now >= opts.exitAtMs) s.exit(opts.exitCode ?? 0);
     },
+    logPath: (name) => `/logs/${name}.log`,
+    readLog: async (path) => (opts.noLog ? null : (logs.get(path) ?? null)),
     portFree: async (p) => !(opts.busy ?? []).includes(p),
     listAvds: async () => opts.avds ?? [{ name: "A", running: "no" }, { name: "B", running: "no" }],
     findRunning: async (name) => (opts.preRunning?.avdName === name ? opts.preRunning : (booted.get(name) ?? null)),
     alive: () => opts.deadAtMs === undefined || now < opts.deadAtMs,
-    spawn: (cmd, args) => {
+    spawn: (cmd, args, logPath) => {
+      logs.set(logPath, opts.log ?? "");
       const cbs: Array<(code: number | null) => void> = [];
       const s: Spawned = { cmd, args, killed: false, unref: false, exit: (code) => cbs.splice(0).forEach((cb) => cb(code)) };
       spawned.push(s);
@@ -144,6 +154,46 @@ test("开机中途子进程退出（code 0）→ 很快 failed", async () => {
   await assert.rejects(job.done, /退出/);
   assert.equal(job.progress, "failed");
   assert.ok(f.now() < 10_000, `假时间 ${f.now()}`);
+});
+
+test("开机中途退出（code 1）→ error 带上日志里的原因、提示和日志路径", async () => {
+  const log = "WARNING | x is not a valid directory.\nPANIC: Cannot find AVD system path. Please define ANDROID_SDK_ROOT\nINFO    | version\n";
+  const f = fakes({ bootAfterMs: Infinity, exitAtMs: 2000, exitCode: 1, log });
+  const job = startAvd("A", f.deps);
+  await assert.rejects(job.done);
+  const err = job.error ?? "";
+  assert.ok(err.startsWith("模拟器进程在开机中退出（code 1）：PANIC: Cannot find AVD system path. Please define ANDROID_SDK_ROOT"), err);
+  assert.match(err, /系统镜像/);
+  assert.ok(err.endsWith("完整日志：/logs/A.log"), err);
+});
+
+test("开机中途 pid 不在了 → error 也带上日志里的原因", async () => {
+  const f = fakes({ bootAfterMs: Infinity, deadAtMs: 2000, log: "FATAL | boom\n" });
+  const job = startAvd("A", f.deps);
+  await assert.rejects(job.done);
+  assert.match(job.error ?? "", /^模拟器进程在开机中退出（pid \d+ 已不在）：FATAL \| boom。完整日志：\/logs\/A\.log$/);
+});
+
+test("开机中途退出但日志为空 → 只给日志路径", async () => {
+  const f = fakes({ bootAfterMs: Infinity, exitAtMs: 2000, exitCode: 1, log: "" });
+  const job = startAvd("A", f.deps);
+  await assert.rejects(job.done);
+  assert.equal(job.error, "模拟器进程在开机中退出（code 1）。完整日志：/logs/A.log");
+});
+
+test("开机中途退出且日志读不到 → 保持原来的错误", async () => {
+  const f = fakes({ bootAfterMs: Infinity, exitAtMs: 2000, exitCode: 1, noLog: true });
+  const job = startAvd("A", f.deps);
+  await assert.rejects(job.done);
+  assert.equal(job.error, "模拟器进程在开机中退出（code 1）");
+});
+
+test("spawn 收到这个 AVD 的日志路径", async () => {
+  const paths: string[] = [];
+  const f = fakes();
+  const spawn = f.deps.spawn;
+  await startAvd("A", { ...f.deps, spawn: (c, a, p) => (paths.push(p), spawn(c, a, p)) }).done;
+  assert.deepEqual(paths, ["/logs/A.log"]);
 });
 
 test("开机中途模拟器 pid 不在了 → 很快 failed", async () => {

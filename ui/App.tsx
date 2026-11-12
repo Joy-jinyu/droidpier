@@ -16,7 +16,8 @@ type State =
   | "unsupported-browser" | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway";
 type Avd = { name: string; width?: number; height?: number; apiLevel?: number; running: "no" | "grpc" | "no-grpc"; serial?: number };
 type Boot = { name: string; progress: string; error?: string; seconds: number };
-type Notice = { text: string; error?: boolean };
+/** sticky：不自动消失，文字可选中复制，带关闭按钮。 */
+type Notice = { text: string; error?: boolean; sticky?: boolean };
 type Page = { socket: string; pkg?: string; id: string; title: string; url: string; visible: boolean };
 type InspectResult = { opened: true } | { cancelled: true } | { hint: string } | { error: string; adbStuck?: boolean };
 type Inspected = { key: string; title: string; serial: number };
@@ -700,7 +701,7 @@ function App() {
   const showNotice = (n: Notice) => {
     notice.set(n);
     clearTimeout(noticeTimer);
-    noticeTimer = setTimeout(() => notice.set(null), 4000);
+    if (!n.sticky) noticeTimer = setTimeout(() => notice.set(null), 4000);
   };
 
   // H5 页面列表：连着设备时一直轮询（3 秒一次，连续成功后放宽到 5 秒；标签页隐藏时跳过，回到前台立即刷一次），左侧 H5 键和控制台都用它
@@ -784,7 +785,7 @@ function App() {
   host.on("emu.avds", (p: { list: Avd[] }) => avds.set(p.list));
   host.on("emu.boot", (b: Boot) => {
     boots.set({ ...boots(), [b.name]: b });
-    if (b.progress === "failed") showNotice({ text: `${b.name} 启动失败${b.error ? `：${b.error}` : ""}`, error: true });
+    if (b.progress === "failed") showNotice({ text: `${b.name} 启动失败${b.error ? `：${b.error}` : ""}`, error: true, sticky: true });
   });
   host.on("emu.notice", (n: Notice) => showNotice(n));
   // 自动写电脑剪贴板失败时带内容来，等用户点一下再写；之后有新内容写成功时带 null 来，收起
@@ -1040,8 +1041,13 @@ function App() {
             </If>
             <If when={notice()}>
               {(n) => (
-                <View role="status" style={{ backgroundColor: C.overlay, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: n().error ? C.danger : C.line }}>
-                  <Text style={{ color: n().error ? C.danger : C.text, fontSize: 13 }}>{n().text}</Text>
+                <View role="status" style={{ gap: 8, backgroundColor: C.overlay, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: n().error ? C.danger : C.line, maxWidth: 520 }}>
+                  <Text style={{ color: n().error ? C.danger : C.text, fontSize: 13, userSelect: n().sticky ? "text" : undefined }}>{n().text}</Text>
+                  <If when={n().sticky}>
+                    <View style={{ flexDirection: "row" }}>
+                      <Btn label="关闭" onPress={() => notice.set(null)} />
+                    </View>
+                  </If>
                 </View>
               )}
             </If>

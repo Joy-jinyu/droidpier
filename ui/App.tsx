@@ -4,7 +4,8 @@ import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
 import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, ramMbFor } from "../shared/avd-spec";
-import { ADB_UNRESPONSIVE, NEEDS_JAVA } from "../shared/protocol";
+import { ADB_UNRESPONSIVE, NEEDS_JAVA, type Rotation } from "../shared/protocol";
+import { deviceFrame } from "../shared/screen";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
 import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
@@ -126,6 +127,9 @@ const ANDROID: Record<number, string> = {
   31: "12", 32: "12L", 33: "13", 34: "14", 35: "15", 36: "16",
 };
 
+// 机身边框（内边距 + 1 像素描边）和机身两边到按键的间距
+const BEZEL = 11;
+const DEVICE_GAP = 16;
 const H5_EMPTY = "没有可审查的 H5。只有 debug 包或开启了 WebView 调试的 App 才能审查；先在 App 里打开一个 H5 页面。";
 // 下拉框里没有标题的页面，地址大约放得下的字符数
 const URL_CHARS = 28;
@@ -821,11 +825,14 @@ function App() {
   const bootingName = () => Object.values(boots()).find(isBooting);
   const currentAvd = () => (avds() ?? []).find((a) => a.running === "grpc" && a.serial === serial());
   // 设备框的宽高比：当前设备的分辨率，横屏时对调；不知道分辨率时按 1080×2340
-  const screenRatio = () => {
+  // 机身大小：放进按键之间剩下的地方，屏幕区按当前设备转过之后的宽高比；不知道分辨率时按 1080×2340
+  const deviceArea = signal({ width: 0, height: 0 });
+  const sideKeys = signal({ left: 0, right: 0 });
+  const frame = () => {
     const a = currentAvd();
-    const w = a?.width ?? 1080;
-    const h = a?.height ?? 2340;
-    return rotation() % 180 ? h / w : w / h;
+    const area = deviceArea();
+    const box = { width: area.width - sideKeys().left - sideKeys().right - 2 * DEVICE_GAP, height: area.height };
+    return deviceFrame(box, { width: a?.width ?? 1080, height: a?.height ?? 2340 }, rotation() as Rotation, BEZEL);
   };
   const toggleH5 = () => {
     if (h5Open()) closeDevtools();
@@ -936,27 +943,32 @@ function App() {
         <View style={{ flex: 1, minHeight: 0, flexDirection: "row" }}>
         <View style={{ flex: 1, minWidth: 0, minHeight: 0, position: "relative" }}>
           <View style={{ flex: 1, minHeight: 0, alignItems: "center", justifyContent: "center", gap: 16, paddingVertical: 24, paddingHorizontal: 16 }}>
-            <View style={{ flex: 1, minHeight: 0, maxWidth: "100%", flexDirection: "row", gap: 16 }}>
-              <KeyGroup label="工具" style={{ alignSelf: "flex-start", marginTop: 96 }}>
-                <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
-                <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
-                <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
-                <If when={h5Key()}>
-                  <View style={{ height: 1, marginHorizontal: 8, marginVertical: 2, backgroundColor: C.line }} />
-                  <Key icon="code" label="H5" pressed={h5Open()} onPress={toggleH5} />
-                </If>
-              </KeyGroup>
-              <View style={{ aspectRatio: screenRatio(), flexShrink: 1, minWidth: 0, padding: 10, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000" }}>
-                <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
-              </View>
-              <View style={{ alignSelf: "flex-start", marginTop: 96, gap: 12 }}>
-                <KeyGroup label="电源键">
-                  <Key icon="power" label="电源" onPress={() => key("Power")} />
-                </KeyGroup>
-                <KeyGroup label="音量键">
-                  <Key icon="volUp" label="音量+" onPress={() => key("AudioVolumeUp")} />
-                  <Key icon="volDown" label="音量−" onPress={() => key("AudioVolumeDown")} />
-                </KeyGroup>
+            <View onLayout={({ bounds }) => deviceArea.set({ width: bounds.size.width, height: bounds.size.height })}
+              style={{ flex: 1, minHeight: 0, alignSelf: "stretch", alignItems: "center", justifyContent: "center" }}>
+              <View style={{ flexDirection: "row", gap: DEVICE_GAP }}>
+                <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), left: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96 }}>
+                  <KeyGroup label="工具">
+                    <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
+                    <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
+                    <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
+                    <If when={h5Key()}>
+                      <View style={{ height: 1, marginHorizontal: 8, marginVertical: 2, backgroundColor: C.line }} />
+                      <Key icon="code" label="H5" pressed={h5Open()} onPress={toggleH5} />
+                    </If>
+                  </KeyGroup>
+                </View>
+                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000" }}>
+                  <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
+                </View>
+                <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), right: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96, gap: 12 }}>
+                  <KeyGroup label="电源键">
+                    <Key icon="power" label="电源" onPress={() => key("Power")} />
+                  </KeyGroup>
+                  <KeyGroup label="音量键">
+                    <Key icon="volUp" label="音量+" onPress={() => key("AudioVolumeUp")} />
+                    <Key icon="volDown" label="音量−" onPress={() => key("AudioVolumeDown")} />
+                  </KeyGroup>
+                </View>
               </View>
             </View>
             <KeyGroup label="系统导航" row>

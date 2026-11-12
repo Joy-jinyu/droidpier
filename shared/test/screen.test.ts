@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fitSize, frameLatencyMs } from "../screen.ts";
+import { deviceFrame, fitSize, frameLatencyMs } from "../screen.ts";
 
 const dev = { width: 1080, height: 2340 };
 
@@ -50,4 +50,40 @@ test("frameLatencyMs：时间戳是 u32 毫秒，跨回绕仍得到正确差值"
 test("frameLatencyMs：时间戳比本机时钟略超前时返回 0，不是 40 多亿", () => {
   const now = 1_762_000_000_123;
   assert.equal(frameLatencyMs(now, (now + 3) % 2 ** 32), 0);
+});
+
+test("deviceFrame：竖屏的机身按高度放进容器，屏幕区（去掉两边边框）是设备的宽高比", () => {
+  const f = deviceFrame({ width: 1000, height: 800 }, dev, 0, 11);
+  assert.equal(f.height, 800);
+  assert.ok(Math.abs((f.width - 22) / (f.height - 22) - 1080 / 2340) < 0.01);
+});
+
+test("deviceFrame：横过来机身变横，宽高对调，屏幕区是转过来的宽高比，整块放得下", () => {
+  const box = { width: 1000, height: 800 };
+  const f = deviceFrame(box, dev, 90, 11);
+  assert.ok(f.width > f.height);
+  assert.equal(f.width, 1000);
+  assert.ok(f.height <= 800);
+  assert.ok(Math.abs((f.width - 22) / (f.height - 22) - 2340 / 1080) < 0.01);
+  assert.deepEqual(deviceFrame(box, dev, 270, 11), f);
+  assert.deepEqual(deviceFrame(box, dev, 180, 11), deviceFrame(box, dev, 0, 11));
+});
+
+test("deviceFrame：横屏放进矮容器时按高度缩放", () => {
+  const f = deviceFrame({ width: 2000, height: 400 }, dev, 90, 11);
+  assert.equal(f.height, 400);
+  assert.ok(f.width <= 2000);
+  assert.ok(Math.abs((f.width - 22) / (f.height - 22) - 2340 / 1080) < 0.01);
+});
+
+test("deviceFrame：结果取整、不超出容器；容器放不下边框或尺寸未知时返回 0", () => {
+  for (const box of [{ width: 333, height: 777 }, { width: 1234, height: 567 }]) {
+    for (const rot of [0, 90, 180, 270] as const) {
+      const f = deviceFrame(box, dev, rot, 11);
+      assert.ok(f.width <= box.width && f.height <= box.height, JSON.stringify({ box, rot, f }));
+      assert.ok(Number.isInteger(f.width) && Number.isInteger(f.height));
+    }
+  }
+  assert.deepEqual(deviceFrame({ width: 20, height: 500 }, dev, 0, 11), { width: 0, height: 0 });
+  assert.deepEqual(deviceFrame({ width: 500, height: 500 }, { width: 0, height: 0 }, 0, 11), { width: 0, height: 0 });
 });

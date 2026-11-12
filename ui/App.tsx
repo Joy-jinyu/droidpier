@@ -171,9 +171,9 @@ function MsgLine(props: { msg: Msg; onReboot: () => void }) {
 
 /** H5 控制台：挂载期间轮询页面列表（3 秒一次，连续成功后放宽到 5 秒；标签页隐藏时跳过，回到前台立即刷一次），卸载即停止轮询。
  * 只看前台页面所在的 App；还没在审查时自动审查它的前台页面，下拉框切到同一 App 的其他页面。
- * onInspect：控制台已在页面里打开；onList：每次读列表的结果（失败也报，失败不代表页面没了）；onPkg：当前 App 的包名；note：一句临时说明。 */
+ * onInspect：控制台已在页面里打开；onList：每次读列表的结果（失败也报，失败不代表页面没了）；onPkg：当前 App 的包名。 */
 function H5Console(props: {
-  hidden: () => boolean; connected: () => boolean; inspected: () => Inspected | null; note: () => string | null; onReboot: () => void;
+  hidden: () => boolean; connected: () => boolean; inspected: () => Inspected | null; onReboot: () => void;
   onInspect: (key: string, title: string) => void; onList: (ev: ConsoleEvent) => void; onPkg: (pkg: string | null) => void; onClose: () => void;
 }) {
   const pages = signal<Page[] | null>(null);
@@ -320,11 +320,8 @@ function H5Console(props: {
         <IconBtn icon="rotate" label="重新加载控制台" disabled={!props.inspected()} onPress={() => host.call("emu.devtoolsReload", {})} />
         <IconBtn icon="close" label="关闭控制台" onPress={props.onClose} />
       </View>
-      <If when={props.note() || inspectMsg() || listError() || result()}>
+      <If when={inspectMsg() || listError() || result()}>
         <View style={{ gap: 4, paddingVertical: 6, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: C.lineSoft }}>
-          <If when={props.note()}>
-            {(n) => <Text role="text" style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>{n()}</Text>}
-          </If>
           <If when={inspectMsg()}>
             {(m) => (
               <If when={!m().adbStuck} else={<AdbStuck onReboot={props.onReboot} />}>
@@ -725,15 +722,12 @@ function App() {
     inspected.set(null);
     host.call("emu.devtoolsClose", {});
   };
-  // 被审查的页面没了（返回退出 H5、App 退出、设备换了或重启）：断开控制台并说一句，控制台随后自动接上当前 App 的前台页面
-  const consoleNote = signal<string | null>(null);
-  let consoleNoteTimer: number | undefined;
+  // 被审查的页面没了（返回退出 H5、App 退出、设备换了或重启）：和点关闭按钮一样收起控制台，再提示一句
   const closeIfGone = (ev: ConsoleEvent) => {
     if (!shouldCloseConsole(inspected(), ev)) return;
     closeDevtools();
-    consoleNote.set("审查的页面已关闭");
-    clearTimeout(consoleNoteTimer);
-    consoleNoteTimer = setTimeout(() => consoleNote.set(null), 4000);
+    h5Open.set(false);
+    showNotice({ text: "页面已关闭，控制台已收起" });
   };
   // 重启：确认框；adb 无响应的提示条（输入时发现的）
   const rebootAsk = signal(false);
@@ -1027,7 +1021,7 @@ function App() {
           </View>
         </View>
         <If when={h5Open()}>
-          <H5Console hidden={pageHidden} connected={() => state() === "connected"} inspected={inspected} note={consoleNote} onReboot={() => rebootAsk.set(true)}
+          <H5Console hidden={pageHidden} connected={() => state() === "connected"} inspected={inspected} onReboot={() => rebootAsk.set(true)}
             onInspect={(key, title) => inspected.set({ key, title, serial: serial() })}
             onList={closeIfGone} onPkg={(pkg) => appPkg.set(pkg)} onClose={toggleH5} />
         </If>

@@ -13,7 +13,7 @@ export interface EmulatorSession {
   device: Size;
   /** 控制台端口，adb 里是 emulator-<serial>。 */
   serial: number;
-  /** AVD 名称（来自 discovery avd.name），未知时为 undefined。 */
+  /** AVD 名称（来自发现文件，见 discoveryAvdName），未知时为 undefined。 */
   avdName?: string;
   /** 设备顺时针转过的角度。 */
   rotation: Rotation;

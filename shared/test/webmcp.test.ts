@@ -68,7 +68,7 @@ test("截图编码失败时返回原因，不抛出", async () => {
 
 test("点击要先截图；截图后按截图坐标发按下和抬起", async () => {
   const { h, run } = harness();
-  await assert.rejects(run("droidpier_tap", { x: 10, y: 10 }), /先调用 droidpier_screenshot/);
+  assert.match(String((await run("droidpier_tap", { x: 10, y: 10 })).error), /先调用 droidpier_screenshot/);
   await run("droidpier_screenshot");
   await run("droidpier_tap", { x: 270, y: 600, durationMs: 10 });
   assert.deepEqual(h.sent, [{ t: "touch", x: 540, y: 1200, down: true }, { t: "touch", x: 540, y: 1200, down: false }]);
@@ -78,7 +78,7 @@ test("截图后设备转了方向，点击要求重新截图", async () => {
   const { h, run } = harness();
   await run("droidpier_screenshot");
   h.rotation = 90;
-  await assert.rejects(run("droidpier_tap", { x: 1, y: 1 }), /方向变了/);
+  assert.match(String((await run("droidpier_tap", { x: 1, y: 1 })).error), /方向变了/);
   assert.equal(h.sent.length, 0);
 });
 
@@ -101,11 +101,19 @@ test("没有设备时操作类工具不发消息，返回原因", async () => {
   assert.equal(h.sent.length, 0);
 });
 
+test("参数不对时返回 ok:false 和原因，不抛出（Chrome 会把抛出的错误换成笼统的 UnknownError）", async () => {
+  const { run } = harness();
+  await run("droidpier_screenshot");
+  const r = await run("droidpier_tap", { x: "a", y: 1 });
+  assert.equal(r.ok, false);
+  assert.match(String(r.error), /x 需要是数字/);
+});
+
 test("按键只认列表里的键", async () => {
   const { h, run } = harness();
   await run("droidpier_press_key", { key: "GoHome" });
   assert.deepEqual(h.sent, [{ t: "key", key: "GoHome", eventType: "keypress" }]);
-  await assert.rejects(run("droidpier_press_key", { key: "Shutdown" }), /不认识的键/);
+  assert.match(String((await run("droidpier_press_key", { key: "Shutdown" })).error), /不认识的键/);
 });
 
 test("重启、关闭设备先问用户：拒绝时什么都不发", async () => {

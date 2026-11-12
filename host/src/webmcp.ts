@@ -104,7 +104,7 @@ export function createTools(d: ToolDeps): Tool[] {
     [y]: { type: "number", description: `${what}纵坐标，截图上的像素` },
   });
 
-  return [
+  const tools: Tool[] = [
     {
       name: "droidpier_screenshot",
       title: "截图",
@@ -288,6 +288,11 @@ export function createTools(d: ToolDeps): Tool[] {
       },
     },
   ];
+  // Chrome 把抛出的错误换成笼统的 UnknownError，AI 看不到原因：一律改成 { ok: false, error } 返回
+  return tools.map((t) => ({
+    ...t,
+    execute: (input, opts) => t.execute(input, opts).catch((e: Error) => ({ ok: false, error: e.message })),
+  }));
 }
 
 type ModelContext = { registerTool(tool: Tool, opts?: { signal?: AbortSignal }): unknown };

@@ -7,6 +7,7 @@ import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, ramMbFor } from
 import { ADB_UNRESPONSIVE, NEEDS_JAVA } from "../shared/protocol";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
+import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
 
 type State =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
@@ -169,71 +170,27 @@ function MsgLine(props: { msg: Msg; onReboot: () => void }) {
   );
 }
 
-/** H5 控制台：挂载期间轮询页面列表（3 秒一次，连续成功后放宽到 5 秒；标签页隐藏时跳过，回到前台立即刷一次），卸载即停止轮询。
+/** H5 控制台：页面列表由 App 轮询后传进来（pages 为 null 表示还没读到）；refresh 让 App 立刻再读一次。
  * 只看前台页面所在的 App；还没在审查时自动审查它的前台页面，下拉框切到同一 App 的其他页面。
- * onInspect：控制台已在页面里打开；onList：每次读列表的结果（失败也报，失败不代表页面没了）；onPkg：当前 App 的包名。 */
+ * onInspect：控制台已在页面里打开。 */
 function H5Console(props: {
-  hidden: () => boolean; connected: () => boolean; inspected: () => Inspected | null; onReboot: () => void;
-  onInspect: (key: string, title: string) => void; onList: (ev: ConsoleEvent) => void; onPkg: (pkg: string | null) => void; onClose: () => void;
+  pages: () => Page[] | null; listError: () => Msg | null; refresh: () => void; inspected: () => Inspected | null; onReboot: () => void;
+  onInspect: (key: string, title: string) => void; onClose: () => void;
 }) {
-  const pages = signal<Page[] | null>(null);
-  const listError = signal<Msg | null>(null);
+  const pages = props.pages;
+  const listError = props.listError;
   const selected = signal<string | null>(null);
   const address = signal("");
   const navigating = signal(false);
   const inspecting = signal(false);
   const result = signal<Msg | null>(null);
   const inspectMsg = signal<Msg | null>(null);
-
-  let loading = false;
-  let okStreak = 0;
-  const refresh = () => {
-    if (loading) return;
-    loading = true;
-    call<WebViewsResult>("emu.webviews", {}).then(
-      (r: WebViewsResult) => {
-        if (r.error) {
-          okStreak = 0;
-          listError.set(r.adbStuck ? { text: r.error, error: true, adbStuck: true } : { text: `读取 H5 列表失败：${r.error}`, error: true });
-          props.onList({ kind: "list-failed" });
-          return;
-        }
-        okStreak++;
-        pages.set(r.list);
-        listError.set(null);
-        props.onList({ kind: "list", keys: r.list.map(pageKey) });
-        if (selected() && !r.list.some((p) => pageKey(p) === selected())) selected.set(null);
-      },
-      (e: Error) => {
-        okStreak = 0;
-        listError.set({ text: `读取 H5 列表失败：${e.message}`, error: true });
-        props.onList({ kind: "list-failed" });
-      },
-    ).finally(() => (loading = false));
-  };
-  // 回到前台、重新连上设备（比如重启结束）时立刻刷一次
   effect(() => {
-    if (!props.hidden() && props.connected()) refresh();
-  });
-  let timer: number | undefined;
-  const tick = () => {
-    timer = setTimeout(() => {
-      if (!props.hidden()) refresh();
-      tick();
-    }, h5PollMs(okStreak, props.inspected() !== null));
-  };
-  tick();
-  cleanup(() => {
-    clearTimeout(timer);
-    props.onPkg(null);
+    const list = pages();
+    if (list && selected() && !list.some((p) => pageKey(p) === selected())) selected.set(null);
   });
 
-  // 当前 App：前台页面的包名；没有前台页面时取列表第一项的
-  const currentPkg = () => {
-    const list = pages() ?? [];
-    return (list.find((p) => p.visible) ?? list[0])?.pkg ?? null;
-  };
-  effect(() => props.onPkg(currentPkg()));
+  const currentPkg = () => foregroundPkg(pages() ?? []);
   const appPages = () => (pages() ?? []).filter((p) => (p.pkg ?? null) === currentPkg());
   const activeKey = () => props.inspected()?.key ?? selected();
   const activePage = () => appPages().find((p) => pageKey(p) === activeKey());
@@ -256,8 +213,7 @@ function H5Console(props: {
   let autoTried: string | null = null;
   effect(() => {
     if (props.inspected() || inspecting()) return;
-    const list = appPages();
-    const p = list.find((x) => x.visible) ?? list[0];
+    const p = pickPage(appPages());
     if (!p || autoTried === pageKey(p)) return;
     autoTried = pageKey(p);
     inspect(p);
@@ -276,7 +232,7 @@ function H5Console(props: {
       (e: Error) => result.set({ text: e.message, error: true }),
     ).finally(() => {
       navigating.set(false);
-      refresh();
+      props.refresh();
     });
   };
 
@@ -668,8 +624,6 @@ function App() {
   const upgrade = signal<string | null>(null);
   const cmdCopyResult = signal<"ok" | "fail" | null>(null);
   const h5Open = signal(false);
-  // 控制台所看 App 的包名，由 H5Console 报上来
-  const appPkg = signal<string | null>(null);
   const rotation = signal(0);
   host.on("emu.orientation", (p: { rotation: number }) => rotation.set(p.rotation));
   const env = signal<Env | null>(null);
@@ -744,6 +698,66 @@ function App() {
     clearTimeout(noticeTimer);
     noticeTimer = setTimeout(() => notice.set(null), 4000);
   };
+
+  // H5 页面列表：连着设备时一直轮询（3 秒一次，连续成功后放宽到 5 秒；标签页隐藏时跳过，回到前台立即刷一次），左侧 H5 键和控制台都用它
+  const pages = signal<Page[] | null>(null);
+  const listError = signal<Msg | null>(null);
+  const listAdbStuck = signal(false);
+  const device = () => (state() === "connected" ? serial() : 0);
+  let listDevice = 0;
+  let loading = false;
+  let okStreak = 0;
+  const refresh = () => {
+    const dev = device();
+    if (loading || !dev) return;
+    loading = true;
+    const failed = (msg: Msg) => {
+      okStreak = 0;
+      listError.set(msg);
+      listAdbStuck.set(!!msg.adbStuck);
+      closeIfGone({ kind: "list-failed" });
+    };
+    call<WebViewsResult>("emu.webviews", {}).then(
+      (r: WebViewsResult) => {
+        // 读的过程中设备换了：这份列表是旧设备的
+        if (dev !== device()) return;
+        if (r.error) return failed(r.adbStuck ? { text: r.error, error: true, adbStuck: true } : { text: `读取 H5 列表失败：${r.error}`, error: true });
+        okStreak++;
+        pages.set(r.list);
+        listError.set(null);
+        listAdbStuck.set(false);
+        closeIfGone({ kind: "list", keys: r.list.map(pageKey) });
+      },
+      (e: Error) => {
+        if (dev === device()) failed({ text: `读取 H5 列表失败：${e.message}`, error: true });
+      },
+    ).finally(() => (loading = false));
+  };
+  // 设备换了、断开了：旧列表作废；回到前台、连上设备（比如重启结束）时立刻刷一次
+  effect(() => {
+    const dev = device();
+    if (dev !== listDevice) {
+      listDevice = dev;
+      okStreak = 0;
+      pages.set(null);
+      listError.set(null);
+      listAdbStuck.set(false);
+    }
+    if (!pageHidden() && dev) refresh();
+  });
+  const tick = () => setTimeout(() => {
+    if (!pageHidden()) refresh();
+    tick();
+  }, h5PollMs(okStreak, inspected() !== null));
+  tick();
+  const h5Key = () => h5KeyShown({ connected: device() !== 0, adbStuck: listAdbStuck(), consoleOpen: h5Open(), list: pages() });
+  // 设备断开时控制台没有东西可看，和点关闭一样收起
+  effect(() => {
+    if (h5Open() && !device()) {
+      closeDevtools();
+      h5Open.set(false);
+    }
+  });
 
   let statusRev = -1;
   host.on("emu.status", (p: { state: State; serial: number; upgrade: string | null; rev: number }) => {
@@ -910,7 +924,7 @@ function App() {
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 12, paddingHorizontal: 20, borderBottomWidth: 1, borderColor: C.lineSoft }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12, minWidth: 0, flexShrink: 1 }}>
             <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "600", numberOfLines: 1 }}>{currentAvd()?.name ?? "没有连接设备"}</Text>
-            <If when={appPkg()}>
+            <If when={h5Open() && foregroundPkg(pages() ?? [])}>
               {(pkg) => <Text style={{ flexShrink: 1, color: C.muted, fontSize: 12, fontFamily: "monospace", numberOfLines: 1 }}>{pkg()}</Text>}
             </If>
           </View>
@@ -927,8 +941,10 @@ function App() {
                 <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
                 <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
                 <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
-                <View style={{ height: 1, marginHorizontal: 8, marginVertical: 2, backgroundColor: C.line }} />
-                <Key icon="code" label="H5" pressed={h5Open()} onPress={toggleH5} />
+                <If when={h5Key()}>
+                  <View style={{ height: 1, marginHorizontal: 8, marginVertical: 2, backgroundColor: C.line }} />
+                  <Key icon="code" label="H5" pressed={h5Open()} onPress={toggleH5} />
+                </If>
               </KeyGroup>
               <View style={{ aspectRatio: screenRatio(), flexShrink: 1, minWidth: 0, padding: 10, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000" }}>
                 <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
@@ -1021,9 +1037,8 @@ function App() {
           </View>
         </View>
         <If when={h5Open()}>
-          <H5Console hidden={pageHidden} connected={() => state() === "connected"} inspected={inspected} onReboot={() => rebootAsk.set(true)}
-            onInspect={(key, title) => inspected.set({ key, title, serial: serial() })}
-            onList={closeIfGone} onPkg={(pkg) => appPkg.set(pkg)} onClose={toggleH5} />
+          <H5Console pages={pages} listError={listError} refresh={refresh} inspected={inspected} onReboot={() => rebootAsk.set(true)}
+            onInspect={(key, title) => inspected.set({ key, title, serial: serial() })} onClose={toggleH5} />
         </If>
         </View>
       </View>

@@ -1,6 +1,8 @@
 // 拼出 Cloudflare Pages 的部署目录 dist/pages：官网 dist 在根目录，本仓库的 nsh 页面产物放 /app/，
 // 下载文件放 /download/，install.sh 放根目录
 // 用法：node scripts/build-pages.ts <官网 dist 目录>（先跑 build:bin，它会顺带生成页面产物和下载文件）
+import { homedir } from "node:os";
+import { scrubDir } from "./scrub-paths.ts";
 import { cp, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -23,6 +25,8 @@ export async function buildPages(p: PagesInput): Promise<void> {
   await cp(p.siteDist, p.out, { recursive: true, filter: (src) => relative(p.siteDist, src).split("/")[0] !== "app" });
   // .br / .gz 是给能发预压缩文件的服务器用的，Pages 自己压缩
   await cp(p.appDir, join(p.out, "app"), { recursive: true, filter: (src) => !/\.(br|gz)$/.test(src) });
+  // 页面产物里编译进了本机 home 路径，公开发布前抹掉（见 scripts/scrub-paths.ts）
+  await scrubDir(join(p.out, "app"), homedir());
   await mkdir(join(p.out, "download"));
   for (const f of [`${DOWNLOAD_NAME}.tar.xz`, `${DOWNLOAD_NAME}.tar.xz.sha256`]) await cp(join(p.downloadDir, f), join(p.out, "download", f));
   await cp(p.installSh, join(p.out, "install.sh"));

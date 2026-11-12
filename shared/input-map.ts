@@ -62,7 +62,7 @@ export function keyToMsg(
 
 /**
  * 设备按键的快捷键，键位照 Android Studio 模拟器：模拟器 36.4.10 里的快捷键表写的是 Ctrl，在 Mac 上就是 Cmd。
- * 只收页面上有对应按键的几个；向左旋转（Ctrl+Left）协议里没有，不收。键名前的 ⇧ 表示要同时按 Shift。
+ * 只收页面上有对应按键的几个。键名前的 ⇧ 表示要同时按 Shift。
  */
 const SHORTCUTS: Record<string, ClientMsg> = {
   "s": { t: "screenshot" },
@@ -72,6 +72,7 @@ const SHORTCUTS: Record<string, ClientMsg> = {
   "Backspace": { t: "key", key: "GoBack", eventType: "keypress" },
   "=": { t: "key", key: "AudioVolumeUp", eventType: "keypress" },
   "-": { t: "key", key: "AudioVolumeDown", eventType: "keypress" },
+  "ArrowLeft": { t: "rotate", dir: "left" },
   "ArrowRight": { t: "rotate" },
 };
 

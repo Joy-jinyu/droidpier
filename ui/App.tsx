@@ -1296,7 +1296,7 @@ function App() {
           <Toolbar accessibilityLabel="设备操作" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
             <ZoomControl zoom={zoom()} onZoom={setZoom} />
             <ToolGroup label="画面">
-              <ToolBtn icon="rotateLeft" label="向左旋转" disabled={!shownIsLive()} onPress={() => act(host.call("emu.rotate", { dir: "left" }))} />
+              <ToolBtn icon="rotateLeft" label="向左旋转" tip="点过屏幕后按 ⌘←" disabled={!shownIsLive()} onPress={() => act(host.call("emu.rotate", { dir: "left" }))} />
               <ToolBtn icon="rotateRight" label="向右旋转" tip="点过屏幕后按 ⌘→" disabled={!shownIsLive()} onPress={() => act(host.call("emu.rotate", { dir: "right" }))} />
               <ToolBtn icon="camera" label="截图" tip="点过屏幕后按 ⌘S" disabled={!shownIsLive()} onPress={() => act(host.call("emu.screenshot", {}))} />
             </ToolGroup>

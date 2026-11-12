@@ -251,6 +251,7 @@ describe("shortcutToMsg", () => {
     assert.deepEqual(shortcutToMsg({ key: "Backspace", ...cmd }), press("GoBack"));
     assert.deepEqual(shortcutToMsg({ key: "=", ...cmd }), press("AudioVolumeUp"));
     assert.deepEqual(shortcutToMsg({ key: "-", ...cmd }), press("AudioVolumeDown"));
+    assert.deepEqual(shortcutToMsg({ key: "ArrowLeft", ...cmd }), { t: "rotate", dir: "left" });
     assert.deepEqual(shortcutToMsg({ key: "ArrowRight", ...cmd }), { t: "rotate" });
   });
 
@@ -269,7 +270,7 @@ describe("shortcutToMsg", () => {
     assert.equal(shortcutToMsg({ key: "+", ...cmd, shiftKey: true }), null);
   });
 
-  it("浏览器自己的快捷键和协议里没有的向左旋转留给浏览器", () => {
-    for (const key of ["r", "w", "t", "v", "c", "ArrowLeft"]) assert.equal(shortcutToMsg({ key, ...cmd }), null);
+  it("浏览器自己的快捷键留给浏览器", () => {
+    for (const key of ["r", "w", "t", "v", "c"]) assert.equal(shortcutToMsg({ key, ...cmd }), null);
   });
 });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFile, rm } from "node:fs/promises";
+import { chmod, readFile, rm } from "node:fs/promises";
 import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,9 +57,9 @@ test("listAvds 合并运行状态：正在运行的 AVD 显示 grpc 并带 grpcP
   );
 
   const avds = await listAvds({
-    exec: async (cmd: string) => {
-      if (cmd.includes("-list-avds")) return { stdout: "Pixel_5_API_34\n", stderr: "" };
-      if (cmd.includes("devices")) return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
+    exec: async (_file: string, args: string[]) => {
+      if (args.includes("-list-avds")) return { stdout: "Pixel_5_API_34\n", stderr: "" };
+      if (args.includes("devices")) return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
       return { stdout: "", stderr: "" };
     },
     discoveryDir: discDir,
@@ -82,8 +82,8 @@ test("listAvds emulator -list-avds 有 INFO 行时过滤掉", async (t) => {
   t.after(() => Promise.all([rm(tmpBase, { recursive: true, force: true }), rm(discDir, { recursive: true, force: true })]));
 
   const avds = await listAvds({
-    exec: async (cmd: string) => {
-      if (cmd.includes("-list-avds"))
+    exec: async (_file: string, args: string[]) => {
+      if (args.includes("-list-avds"))
         return { stdout: "INFO: Storing crashdata in /tmp/xyz\nPixel_5_API_34\n", stderr: "" };
       return { stdout: "", stderr: "" };
     },
@@ -93,4 +93,32 @@ test("listAvds emulator -list-avds 有 INFO 行时过滤掉", async (t) => {
 
   assert.equal(avds.length, 1);
   assert.equal(avds[0].name, "Pixel_5_API_34");
+});
+
+test("listAvds SDK 路径带空格（比如装在名字带空格的外置盘上）时也能列出 AVD", async (t) => {
+  const base = await mkdtemp(join(tmpdir(), "emu avd sdk-"));
+  const sdk = join(base, "Android SDK");
+  const avdHome = join(base, "avd");
+  const discDir = join(base, "running");
+  t.after(() => rm(base, { recursive: true, force: true }));
+  await mkdir(join(sdk, "emulator"), { recursive: true });
+  await mkdir(join(sdk, "platform-tools"), { recursive: true });
+  await mkdir(avdHome);
+  await mkdir(discDir);
+  await writeFile(join(sdk, "emulator/emulator"), "#!/bin/sh\n[ \"$1\" = -list-avds ] && echo Pixel_5_API_34\n");
+  await writeFile(join(sdk, "platform-tools/adb"), "#!/bin/sh\nprintf 'List of devices attached\\nemulator-5554\\tdevice\\n'\n");
+  await chmod(join(sdk, "emulator/emulator"), 0o755);
+  await chmod(join(sdk, "platform-tools/adb"), 0o755);
+  // 没开 gRPC 的运行中模拟器：只有 adb devices 读到了串口，才会报成 no-grpc
+  await writeFile(join(discDir, `pid_${process.pid}.ini`), "port.serial=5554\navd.name=Pixel_5_API_34\n");
+  const saved = process.env.ANDROID_HOME;
+  process.env.ANDROID_HOME = sdk;
+  t.after(() => {
+    if (saved === undefined) delete process.env.ANDROID_HOME;
+    else process.env.ANDROID_HOME = saved;
+  });
+
+  const avds = await listAvds({ discoveryDir: discDir, avdHome });
+
+  assert.deepEqual(avds.map((a) => [a.name, a.running, a.serial]), [["Pixel_5_API_34", "no-grpc", 5554]]);
 });

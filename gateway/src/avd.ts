@@ -1,12 +1,12 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { exec as execCb } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { avdHome as defaultAvdHome, emulatorBin, adbBin, discoveryDir as defaultDiscoveryDir } from "./platform.ts";
 import { pidAlive } from "./discovery.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 
-const execP = promisify(execCb);
+const execFileP = promisify(execFile);
 
 export type { AvdInfo };
 
@@ -48,7 +48,8 @@ export function parseAvdConfig(text: string): Pick<AvdInfo, "width" | "height" |
   return result;
 }
 
-type ExecFn = (cmd: string) => Promise<{ stdout: string; stderr: string }>;
+/** 不经过 shell 跑命令：SDK 路径可能带空格（比如装在名字带空格的外置盘上）。 */
+type ExecFn = (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
 
 type Deps = {
   exec: ExecFn;
@@ -109,12 +110,12 @@ async function resolveConfigIni(home: string, name: string): Promise<string | un
 
 /** 列出所有 AVD 及其运行状态。支持注入依赖方便测试。 */
 export async function listAvds(deps?: Partial<Deps>): Promise<AvdInfo[]> {
-  const execFn: ExecFn = deps?.exec ?? ((cmd) => execP(cmd));
+  const execFn: ExecFn = deps?.exec ?? ((file, args) => execFileP(file, args));
   const discDir = deps?.discoveryDir ?? defaultDiscoveryDir();
   const home = deps?.avdHome ?? defaultAvdHome();
 
   // 1. 获取 AVD 名字列表，过滤掉 INFO 行和含空格的行
-  const { stdout } = await execFn(`${emulatorBin()} -list-avds`);
+  const { stdout } = await execFn(emulatorBin(), ["-list-avds"]);
   const names = stdout
     .split("\n")
     .map((l) => l.trim())
@@ -126,7 +127,7 @@ export async function listAvds(deps?: Partial<Deps>): Promise<AvdInfo[]> {
   // 3. adb devices 里的串口集合（用于 no-grpc 检测）
   const adbSerialSet = new Set<number>();
   try {
-    const { stdout: adbOut } = await execFn(`${adbBin()} devices`);
+    const { stdout: adbOut } = await execFn(adbBin(), ["devices"]);
     for (const line of adbOut.split("\n")) {
       const m = /^emulator-(\d+)\s+device/.exec(line.trim());
       if (m) adbSerialSet.add(Number(m[1]));

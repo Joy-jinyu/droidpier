@@ -321,6 +321,8 @@ function H5Console(props: {
 
 const ICON_PATHS = {
   rotate: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  rotateLeft: '<path d="M20 9V7a2 2 0 0 0-2-2h-6"/><path d="m15 2-3 3 3 3"/><path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>',
+  rotateRight: '<path d="M12 5H6a2 2 0 0 0-2 2v3"/><path d="m9 8 3-3-3-3"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>',
   camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
   reboot: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
@@ -983,7 +985,8 @@ function App() {
               <View style={{ flexDirection: "row", gap: DEVICE_GAP }}>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), left: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96 }}>
                   <KeyGroup label="工具">
-                    <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
+                    <Key icon="rotateLeft" label="向左旋转" onPress={() => act(host.call("emu.rotate", { dir: "left" }))} />
+                    <Key icon="rotateRight" label="向右旋转" onPress={() => act(host.call("emu.rotate", { dir: "right" }))} />
                     <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
                     <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
                     <Key icon="install" label="安装 APK" disabled={!!installBlocked()} tip={installBlocked() ?? "选 APK 安装，也可以直接把文件拖到屏幕上"}

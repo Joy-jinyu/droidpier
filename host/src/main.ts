@@ -541,12 +541,13 @@ export async function createHost(player: Player) {
   };
 
   return {
-    call(name: string, args: { key?: string; text?: string; name?: string; address?: string } | undefined) {
+    call(name: string, args: { key?: string; text?: string; name?: string; address?: string; dir?: string } | undefined) {
       if (name === "emu.key") {
         if (typeof args?.key !== "string") throw new Error("emu.key 需要 key");
         return sent({ t: "key", key: args.key, eventType: "keypress" });
       }
-      if (name === "emu.rotate") return sent({ t: "rotate" });
+      // 顺时针不带 dir，旧网关也照样能转；旧网关不认 dir，会把逆时针也转成顺时针
+      if (name === "emu.rotate") return sent(args?.dir === "left" ? { t: "rotate", dir: "left" } : { t: "rotate" });
       if (name === "emu.screenshot") return sent({ t: "screenshot" });
       // 确认框里点了“重启”才调用
       if (name === "emu.reboot") return state === "connected" ? ctl({ t: "reboot" }) : { ok: false };

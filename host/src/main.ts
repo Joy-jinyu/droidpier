@@ -8,6 +8,7 @@ import { isDevtoolsSrc } from "./devtools-src.ts";
 import { gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
 import { createRenderer } from "./renderer.ts";
 import { createUploads } from "./uploads.ts";
+import { registerTools } from "./webmcp.ts";
 import { INSTALL_CMD, INSTALL_IDS, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
 
 // 以前记端口和启动口令的键，都不用了，清掉
@@ -511,6 +512,45 @@ export async function createHost(player: Player) {
   };
   new MutationObserver(attach).observe(document.documentElement, { childList: true, subtree: true });
   attach();
+
+  // 浏览器里的 AI 助手（WebMCP）能调用的工具；会改状态的操作在 webmcp.ts 里先弹确认
+  registerTools({
+    connected: () => state === "connected" && device.width > 0,
+    device: () => device,
+    rotation: () => rotation,
+    async snapshot() {
+      const f = renderer.shown();
+      if (!f) return null;
+      // 帧里的 alpha 不可靠（画的时候只用 rgb），转成不透明再编码
+      const px = new Uint8ClampedArray(f.pixels);
+      for (let i = 3; i < px.length; i += 4) px[i] = 255;
+      const oc = new OffscreenCanvas(f.width, f.height);
+      oc.getContext("2d")!.putImageData(new ImageData(px, f.width, f.height), 0, 0);
+      return { width: f.width, height: f.height, jpeg: await oc.convertToBlob({ type: "image/jpeg", quality: 0.8 }) };
+    },
+    send: (m) => conn.send(m),
+    control: (m) => conn.control(m),
+    avds: () => (refreshAvds() ? new Promise<AvdInfo[]>((res) => avdWaiters.push(res)) : Promise.resolve(avds ?? [])),
+    webviews: () => conn.request({ t: "webviews" }).then((r) => ({ list: r.list, error: r.error })),
+    navigate: (socket, id, address) => conn.request({ t: "navigate", socket, id, address })
+      .then(({ ok, href, title, error }) => ({ ok, href, title, error })),
+    async installApk(file, signal) {
+      const before = new Set(uploads.list().map((i) => i.id));
+      uploads.add([file]);
+      const id = uploads.list().find((i) => !before.has(i.id))?.id;
+      // 和网关 adb 长任务的超时一样是 10 分钟，到点不再等，安装本身不受影响
+      const until = Date.now() + 10 * 60_000;
+      for (;;) {
+        const it = uploads.list().find((i) => i.id === id);
+        if (!it) return { state: "failed", error: "传输记录不见了" };
+        if (it.state === "done" || it.state === "failed") return { state: it.state, error: it.error };
+        if (signal.aborted) return { state: it.state, error: "调用方取消了等待，安装仍在继续，进度看页面" };
+        if (Date.now() > until) return { state: it.state, error: "等了 10 分钟还没装完，进度看页面" };
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    },
+    confirm: (text) => window.confirm(text),
+  });
 
   const sent = (m: ClientMsg) => ({ ok: conn.send(m) });
   const ctl = (m: ClientMsg) => ({ ok: conn.control(m) });

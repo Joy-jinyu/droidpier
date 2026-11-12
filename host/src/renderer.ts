@@ -16,6 +16,8 @@ void main() { o = vec4(texture(t, uv).rgb, 1.0); }`;
 /** WebGL2 画面渲染：put 只存最新一帧，绘制只发生在 requestAnimationFrame 里；没有新帧时不调度 rAF。 */
 export function createRenderer(canvas: HTMLCanvasElement, onDraw: (tsMs: number) => void): {
   put(pixels: Uint8Array, width: number, height: number, tsMs: number): void;
+  /** 最后画到画布上的那一帧（RGBA，自上而下），还没画过为 null。 */
+  shown(): { pixels: Uint8Array; width: number; height: number } | null;
 } {
   const gl = canvas.getContext("webgl2", { antialias: false, preserveDrawingBuffer: false })!;
   const shader = (type: number, src: string) => {
@@ -57,6 +59,7 @@ export function createRenderer(canvas: HTMLCanvasElement, onDraw: (tsMs: number)
   };
 
   let latest: { pixels: Uint8Array; width: number; height: number; tsMs: number } | null = null;
+  let shown: { pixels: Uint8Array; width: number; height: number } | null = null;
   let scheduled = false;
   const draw = () => {
     scheduled = false;
@@ -66,6 +69,7 @@ export function createRenderer(canvas: HTMLCanvasElement, onDraw: (tsMs: number)
     ensureTexture(f.width, f.height);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, f.width, f.height, gl.RGBA, gl.UNSIGNED_BYTE, f.pixels);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    shown = f;
     onDraw(f.tsMs);
   };
 
@@ -77,5 +81,6 @@ export function createRenderer(canvas: HTMLCanvasElement, onDraw: (tsMs: number)
         requestAnimationFrame(draw);
       }
     },
+    shown: () => shown,
   };
 }

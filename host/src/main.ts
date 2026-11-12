@@ -7,6 +7,7 @@ import { createPointerTracker } from "./pointer.ts";
 import { isDevtoolsSrc } from "./devtools-src.ts";
 import { gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
 import { createRenderer } from "./renderer.ts";
+import { createUploads } from "./uploads.ts";
 import { INSTALL_CMD, INSTALL_IDS, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
 
 // 以前记端口和启动口令的键，都不用了，清掉
@@ -135,6 +136,15 @@ export async function createHost(player: Player) {
   const boots = new Map<string, { since: number; last: Boot }>();
   const refreshAvds = () => conn.control({ t: "avds" });
 
+  // 拖进来的文件：传输状态只在这里，App 靠 emu.status 拿全、之后靠 emu.uploads 事件（带 rev）
+  const uploads = createUploads({
+    send: (m) => conn.control(m),
+    sendBinary: (b) => conn.sendBinary(b),
+    onChange: (list) => player.hostEvent("emu.uploads", { list, rev: ++rev }),
+    onNotice: (text) => player.hostEvent("emu.notice", { text }),
+    replyTimeoutMs: 10_000,
+  });
+
   const supported = isSupportedBrowser((navigator as { userAgentData?: { brands: { brand: string }[] } }).userAgentData?.brands);
   if (!supported) state = "unsupported-browser";
   const statusEvent = () => player.hostEvent("emu.status", { state, serial, upgrade, rev: ++rev });
@@ -224,6 +234,8 @@ export async function createHost(player: Player) {
       license = l;
       setupEvent();
     },
+    onUpload: (m) => uploads.onMsg(m),
+    onClose: () => uploads.disconnected(),
     onCatalog: (c) => {
       catalog = c;
       player.hostEvent("emu.catalog", { catalog, rev: ++rev });
@@ -416,6 +428,60 @@ export async function createHost(player: Player) {
     ime.value = "";
   });
 
+  // 文件拖到屏幕上：APK 安装，其他文件放进下载文件夹。拖到屏幕外不让浏览器自己打开文件
+  const dropBlocked = () =>
+    state === "connected" ? null : state === "rebooting" ? "模拟器正在重启，等它开机后再试" : "没有连接设备";
+  const takeFiles = (list: File[]) => {
+    const why = dropBlocked();
+    if (why) return player.hostEvent("emu.notice", { text: why, error: true });
+    if (list.length) uploads.add(list);
+  };
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  let dragDepth = 0;
+  const dragEvent = (active: boolean) => player.hostEvent("emu.drag", { active, blocked: dropBlocked() });
+  box.addEventListener("dragenter", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    if (dragDepth++ === 0) dragEvent(true);
+  });
+  box.addEventListener("dragover", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer!.dropEffect = dropBlocked() ? "none" : "copy";
+  });
+  box.addEventListener("dragleave", (e) => {
+    if (!hasFiles(e) || --dragDepth > 0) return;
+    dragDepth = 0;
+    dragEvent(false);
+  });
+  box.addEventListener("drop", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragDepth = 0;
+    dragEvent(false);
+    takeFiles([...e.dataTransfer!.files]);
+  });
+  window.addEventListener("dragover", (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "none";
+  });
+  window.addEventListener("drop", (e) => { if (hasFiles(e)) e.preventDefault(); });
+  // 不拖的人用按键选文件
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = ".apk";
+  picker.multiple = true;
+  picker.hidden = true;
+  picker.setAttribute("data-testid", "apk-picker");
+  picker.addEventListener("change", () => {
+    takeFiles([...(picker.files ?? [])]);
+    picker.value = "";
+  });
+  document.body.appendChild(picker);
+
   // 占位 View 由 nsh 渲染；出现后把画面和 DevTools 放进去，被重新渲染移走时放回
   // DevTools 前端（appspot）嵌在页面里，连的是 127.0.0.1 网关：Chrome 的本地网络访问检查要求 iframe 显式委托权限，
   // 不加 allow 时 WebSocket 报 ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS（实测 Chrome 157）
@@ -516,8 +582,18 @@ export async function createHost(player: Player) {
       if (name === "emu.status") {
         return {
           state, serial, upgrade, rev, rotation, ...stats, avds, boots: [...boots.values()].map((b) => b.last),
-          env, installs, license,
+          env, installs, license, uploads: uploads.list(),
         };
+      }
+      // 按键点击里调用：打开选文件框
+      if (name === "emu.pickApk") {
+        if (dropBlocked()) return { ok: false };
+        picker.click();
+        return { ok: true };
+      }
+      if (name === "emu.uploadsClear") {
+        uploads.clear();
+        return { ok: true };
       }
       // 页面确认框里点了确认才调用
       if (name === "emu.install") {
@@ -556,6 +632,7 @@ function idleConnection(): ReturnType<typeof createConnection> {
   return {
     send: () => false,
     control: () => false,
+    sendBinary: () => false,
     request: () => Promise.reject(new Error("没有连接网关")),
     wake: () => {},
   };

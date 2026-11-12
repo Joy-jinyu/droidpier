@@ -129,6 +129,8 @@ const srv = await startServer({
     installer,
     catalog: () => buildCatalog(catalogDeps),
   },
+  // 装大 APK 要几分钟；走单独的长任务队列，不挡 H5 列表这类短命令（gateway/src/adb.ts）
+  files: { adb: (serial, args) => adb.long(serial)(args, 10 * 60_000) },
   debug: {
     forDevice: (serial) => {
       const exec = makeAdbExec(serial);

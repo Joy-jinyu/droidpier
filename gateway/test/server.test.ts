@@ -1571,3 +1571,184 @@ test("reboot：没有连接设备时回提示", async (t) => {
   assert.match(c.msgs.find((m) => m.t === "error").message, /没有连接设备/);
   assert.deepEqual(g.calls, []);
 });
+
+// ---- 拖文件进设备 ----
+import { readdir, readFile as readFileFs } from "node:fs/promises";
+import { encodeUploadChunk, UPLOAD_CHUNK_BYTES, UPLOAD_MAX_BYTES } from "../../shared/upload.ts";
+import type { FileOps } from "../src/server.ts";
+
+/** 假 adb：记下参数和调用时临时文件的内容；out / err 决定结果，gate 为真时挂起到 release()。 */
+function fakeFiles(root: string) {
+  const f = {
+    calls: [] as Array<{ serial: number; args: string[]; content: string | null }>,
+    out: "Success\n",
+    err: null as Error | null,
+    gate: false,
+    release: () => {},
+    ops: {
+      tmpRoot: root,
+      adb: async (serial: number, args: string[]) => {
+        const local = args[0] === "install" ? args[3] : args[1];
+        const content = await readFileFs(local, "utf8").catch(() => null);
+        f.calls.push({ serial, args, content });
+        if (f.gate) await new Promise<void>((r) => (f.release = r));
+        if (f.err) throw f.err;
+        return f.out;
+      },
+    } satisfies FileOps,
+  };
+  return f;
+}
+
+async function uploadSetup(t: import("node:test").TestContext, session: FakeSession | null = new FakeSession()) {
+  const root = await mkdtemp(join(tmpdir(), "emu-upload-"));
+  const files = fakeFiles(root);
+  const s = await setup(t, session, undefined, undefined, undefined, undefined, { files: files.ops });
+  const c = await s.connect();
+  hello(c);
+  if (session) await until(() => c.msgs.some((m) => m.t === "ready"));
+  else await until(() => c.msgs.some((m) => m.t === "status"));
+  const ups = (id: number) => c.msgs.filter((m) => m.t === "upload" && m.id === id);
+  const last = (id: number) => ups(id).at(-1);
+  const tempEntries = () => readdir(root);
+  return { ...s, c, files, root, ups, last, tempEntries };
+}
+
+const sendFile = async (c: Client, id: number, name: string, body: Buffer, ups: (id: number) => any[]) => {
+  c.ws.send(JSON.stringify({ t: "upload", id, name, size: body.byteLength }));
+  await until(() => ups(id).length > 0);
+  if (ups(id)[0].state !== "uploading") return;
+  for (let off = 0; off < body.byteLength; off += UPLOAD_CHUNK_BYTES) c.ws.send(encodeUploadChunk(id, body.subarray(off, off + UPLOAD_CHUNK_BYTES)));
+};
+
+test("传 APK：分片逐片确认，收齐后 adb install -r -t 临时文件，装完回 done 并删掉临时文件", async (t) => {
+  const u = await uploadSetup(t);
+  const body = Buffer.alloc(UPLOAD_CHUNK_BYTES * 2 + 10, "a");
+  await sendFile(u.c, 1, "app-debug.apk", body, u.ups);
+  await until(() => u.last(1)?.state === "done");
+  const states = u.ups(1).map((m) => m.state);
+  assert.deepEqual(states.filter((x) => x !== "uploading"), ["installing", "done"]);
+  assert.deepEqual(u.ups(1).filter((m) => m.state === "uploading").map((m) => m.received), [0, UPLOAD_CHUNK_BYTES, 2 * UPLOAD_CHUNK_BYTES, body.byteLength]);
+  assert.equal(u.files.calls.length, 1);
+  const call = u.files.calls[0];
+  assert.equal(call.serial, 5554);
+  assert.deepEqual(call.args.slice(0, 3), ["install", "-r", "-t"]);
+  assert.ok(call.args[3].startsWith(u.root) && call.args[3].endsWith("/app-debug.apk"));
+  assert.equal(call.content, body.toString("utf8"));
+  await until(() => false, 50).catch(() => {});
+  assert.deepEqual(await u.tempEntries(), []);
+});
+
+test("传普通文件：adb push 到下载文件夹，文件名只留最后一段", async (t) => {
+  const u = await uploadSetup(t);
+  await sendFile(u.c, 2, "../../etc/notes.txt", Buffer.from("hello"), u.ups);
+  await until(() => u.last(2)?.state === "done");
+  assert.ok(u.ups(2).some((m) => m.state === "pushing"));
+  const call = u.files.calls[0];
+  assert.equal(call.args[0], "push");
+  assert.ok(call.args[1].startsWith(u.root) && call.args[1].endsWith("/notes.txt"));
+  assert.equal(call.args[2], "/sdcard/Download/notes.txt");
+  assert.equal(call.content, "hello");
+});
+
+test("空文件也能传：不发分片，直接进下一步", async (t) => {
+  const u = await uploadSetup(t);
+  await sendFile(u.c, 3, "empty.txt", Buffer.alloc(0), u.ups);
+  await until(() => u.last(3)?.state === "done");
+  assert.equal(u.files.calls[0].content, "");
+});
+
+test("安装失败：回 failed，带 adb 的失败码和中文说明，临时文件删掉", async (t) => {
+  const u = await uploadSetup(t);
+  u.files.err = new Error("Command failed: adb install\nadb: failed to install /x/a.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]");
+  await sendFile(u.c, 4, "a.apk", Buffer.from("x"), u.ups);
+  await until(() => u.last(4)?.state === "failed");
+  assert.match(u.last(4).error, /^INSTALL_FAILED_UPDATE_INCOMPATIBLE（.*签名.*）$/);
+  await until(() => false, 50).catch(() => {});
+  assert.deepEqual(await u.tempEntries(), []);
+});
+
+test("adb 退出 0 但输出里有 Failure：也算失败", async (t) => {
+  const u = await uploadSetup(t);
+  u.files.out = "Performing Streamed Install\nFailure [INSTALL_FAILED_NO_MATCHING_ABIS: Failed to extract native libraries]\n";
+  await sendFile(u.c, 5, "a.apk", Buffer.from("x"), u.ups);
+  await until(() => u.last(5)?.state === "failed");
+  assert.match(u.last(5).error, /arm64/);
+});
+
+test("传到一半连接断开：临时文件删掉，不跑 adb", async (t) => {
+  const u = await uploadSetup(t);
+  const body = Buffer.alloc(UPLOAD_CHUNK_BYTES * 3, "b");
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 6, name: "big.apk", size: body.byteLength }));
+  await until(() => u.ups(6).length > 0);
+  u.c.ws.send(encodeUploadChunk(6, body.subarray(0, UPLOAD_CHUNK_BYTES)));
+  await until(() => u.last(6)?.received === UPLOAD_CHUNK_BYTES);
+  assert.equal((await u.tempEntries()).length, 1);
+  u.c.ws.terminate();
+  await until(() => u.logs.some((l) => l.includes("连接断开")));
+  await sleep(50);
+  assert.deepEqual(await u.tempEntries(), []);
+  assert.equal(u.files.calls.length, 0);
+});
+
+test("安装途中连接断开：等 adb 结束后再删临时文件", async (t) => {
+  const u = await uploadSetup(t);
+  u.files.gate = true;
+  await sendFile(u.c, 7, "a.apk", Buffer.from("x"), u.ups);
+  await until(() => u.files.calls.length === 1);
+  u.c.ws.terminate();
+  await sleep(50);
+  assert.equal((await u.tempEntries()).length, 1);
+  u.files.release();
+  await sleep(50);
+  assert.deepEqual(await u.tempEntries(), []);
+});
+
+test("超过 2 GB：直接拒绝，不建临时文件", async (t) => {
+  const u = await uploadSetup(t);
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 8, name: "huge.apk", size: UPLOAD_MAX_BYTES + 1 }));
+  await until(() => u.ups(8).length > 0);
+  assert.equal(u.last(8).state, "failed");
+  assert.match(u.last(8).error, /太大/);
+  assert.deepEqual(await u.tempEntries(), []);
+});
+
+test("文件名不合法、不支持的格式：拒绝", async (t) => {
+  const u = await uploadSetup(t);
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 9, name: "../..", size: 1 }));
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 10, name: "game.xapk", size: 1 }));
+  await until(() => u.ups(9).length > 0 && u.ups(10).length > 0);
+  assert.deepEqual(u.last(9), { t: "upload", id: 9, state: "failed", error: "文件名不合法" });
+  assert.deepEqual(u.last(10), { t: "upload", id: 10, state: "failed", error: "暂不支持 .xapk，请提供 .apk" });
+  assert.deepEqual(await u.tempEntries(), []);
+});
+
+test("没有连接设备：拒绝", async (t) => {
+  const u = await uploadSetup(t, null);
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 11, name: "a.apk", size: 1 }));
+  await until(() => u.ups(11).length > 0);
+  assert.deepEqual(u.last(11), { t: "upload", id: 11, state: "failed", error: "没有连接设备" });
+});
+
+test("同一连接上一个还没传完：第二个拒绝，第一个照常完成", async (t) => {
+  const u = await uploadSetup(t);
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 12, name: "a.apk", size: 3 }));
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 13, name: "b.apk", size: 3 }));
+  await until(() => u.ups(12).length > 0 && u.ups(13).length > 0);
+  assert.equal(u.last(13).state, "failed");
+  assert.match(u.last(13).error, /上一个/);
+  u.c.ws.send(encodeUploadChunk(12, Buffer.from("abc")));
+  await until(() => u.last(12)?.state === "done");
+});
+
+test("分片超过声明的大小：中止并删掉临时文件", async (t) => {
+  const u = await uploadSetup(t);
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 14, name: "a.apk", size: 2 }));
+  await until(() => u.ups(14).length > 0);
+  u.c.ws.send(encodeUploadChunk(14, Buffer.from("abc")));
+  await until(() => u.last(14)?.state === "failed");
+  assert.match(u.last(14).error, /超过/);
+  await sleep(50);
+  assert.deepEqual(await u.tempEntries(), []);
+  assert.equal(u.files.calls.length, 0);
+});

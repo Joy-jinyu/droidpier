@@ -94,11 +94,17 @@ export function createConnection(opts: {
   onVersionError?: (code: VersionErrorCode, upgrade: string) => void;
   /** hello 发出之后调用：补发页面当前的 pause 等状态。 */
   onOpen?: () => void;
+  /** 传文件的进度和结果。 */
+  onUpload?: (m: Extract<ServerMsg, { t: "upload" }>) => void;
+  /** 打开过的连接断开了。 */
+  onClose?: () => void;
 }): {
   /** 发输入类消息：只在已接上设备时发。 */
   send(m: ClientMsg): boolean;
   /** 发设备管理 / pause 这类消息：连接打开就发，不要求已接上设备。 */
   control(m: ClientMsg): boolean;
+  /** 发二进制消息（传文件的分片）：连接打开就发。 */
+  sendBinary(b: Uint8Array): boolean;
   /** 发带 rid 的请求，等同 rid 的回复；没连上、15 秒没回、连接断开都以失败结束。 */
   request<T extends Reply["t"]>(m: Request & { t: T }): Promise<Extract<Reply, { t: T }>>;
   /** 标签页回到前台时调用：后台期间停下的重连马上接着做。 */
@@ -195,6 +201,8 @@ export function createConnection(opts: {
         opts.onLicenses?.(m.licence);
       } else if (m.t === "catalog") {
         opts.onCatalog?.(m.catalog);
+      } else if (m.t === "upload") {
+        opts.onUpload?.(m);
       } else if (m.t === "reboot") {
         opts.onReboot?.(m.result, m.error);
       } else if (m.t === "webviews" || m.t === "inspect" || m.t === "navigate") {
@@ -214,6 +222,7 @@ export function createConnection(opts: {
     sock.onclose = (e) => {
       if (ws === sock) ws = null;
       pending.failAll("与网关断开");
+      if (opened) opts.onClose?.();
       if (pendingVersionError) {
         const { code, upgrade } = pendingVersionError;
         pendingVersionError = null;
@@ -255,6 +264,11 @@ export function createConnection(opts: {
   return {
     send: (m) => state === "connected" && raw(m),
     control: raw,
+    sendBinary: (b) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+      ws.send(b);
+      return true;
+    },
     request: (m) => pending.request((rid) => raw({ ...m, rid } as ClientMsg)) as never,
     wake: () => {
       if (!waitingVisible) return;

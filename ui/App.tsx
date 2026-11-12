@@ -40,6 +40,10 @@ type Catalog = {
   needTools: boolean; devicesError?: string; imagesError?: string;
 };
 type NewAvd = { name: string; device: DeviceModel; image: SystemImage };
+type Upload = {
+  id: number; name: string; size: number; kind: "apk" | "file";
+  state: "waiting" | "uploading" | "installing" | "pushing" | "done" | "failed"; received: number; error?: string;
+};
 type Confirm = { kind: "install"; ids: EnvId[] } | { kind: "avd"; avd: NewAvd };
 
 // shadcn/ui 设计系统深色模式（Zinc 灰阶 + 品牌紫），紫色只给选中状态和主操作
@@ -119,6 +123,15 @@ const PHASE: Record<InstallProgress["phase"], string> = {
   done: "完成",
   failed: "失败",
 };
+const uploadText = (u: Upload) => {
+  if (u.state === "waiting") return "等待中";
+  if (u.state === "uploading") return `上传 ${u.size ? Math.floor((u.received / u.size) * 100) : 100}%`;
+  if (u.state === "installing") return "安装中…";
+  if (u.state === "pushing") return "放进下载文件夹…";
+  if (u.state === "done") return u.kind === "apk" ? "已安装" : "已放到 下载 文件夹";
+  return `失败：${u.error ?? "未知原因"}`;
+};
+const uploadEnded = (u: Upload) => u.state === "done" || u.state === "failed";
 const isActive = (p: InstallProgress) => p.phase !== "done" && p.phase !== "failed";
 const sizeText = (mb: number) => (mb >= 1024 ? `约 ${(mb / 1024).toFixed(1)} GB` : `约 ${mb} MB`);
 
@@ -319,6 +332,7 @@ const ICON_PATHS = {
   recents: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
+  install: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
 };
 type IconName = keyof typeof ICON_PATHS;
 const iconSrc = (name: IconName) =>
@@ -353,9 +367,10 @@ function Tip(props: { label: string }) {
 }
 
 /** 设备四周的按键：图标在上、名字在下；pressed 是开关类按键的开着状态。 */
-function Key(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean; pressed?: boolean }) {
+function Key(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean; pressed?: boolean; tip?: string }) {
   return (
-    <View onPress={props.onPress} role="button" accessibilityLabel={props.label} disabled={props.disabled}
+    <View onPress={props.onPress} role="button" accessibilityLabel={props.tip ? `${props.label}：${props.tip}` : props.label} disabled={props.disabled}
+      tooltip={props.tip ? <Tip label={props.tip} /> : undefined}
       accessibilityState={props.pressed === undefined ? undefined : { pressed: props.pressed }}
       hoverStyle={{ backgroundColor: props.pressed ? C.accentSoft : C.hover }} focusStyle={{ borderColor: C.muted }}
       style={{
@@ -674,6 +689,17 @@ function App() {
     license.set(p.license);
   };
   host.on("emu.setup", applySetup);
+  // 拖进来的文件：状态在 host，这里只显示
+  const uploads = signal<Upload[]>([]);
+  let uploadsRev = -1;
+  const applyUploads = (list: Upload[] | undefined, rev: number) => {
+    if (!list || isStaleStatus(rev, uploadsRev)) return;
+    uploadsRev = rev;
+    uploads.set(list);
+  };
+  host.on("emu.uploads", (p: { list: Upload[]; rev: number }) => applyUploads(p.list, p.rev));
+  const drag = signal<{ active: boolean; blocked: string | null }>({ active: false, blocked: null });
+  host.on("emu.drag", (p: { active: boolean; blocked: string | null }) => drag.set(p));
   const inspected = signal<Inspected | null>(null);
   const pageHidden = signal(false);
   host.on("emu.visibility", (p: { hidden: boolean }) => pageHidden.set(p.hidden));
@@ -803,8 +829,9 @@ function App() {
       () => copyFailed.set(true),
     );
   };
-  host.call("emu.status", {}).then((s: { state: State; serial: number; rotation: number; fps: number; latencyMs: number; avds: Avd[] | null; boots: Boot[]; upgrade: string | null; rev: number } & Omit<Setup, "rev">) => {
+  host.call("emu.status", {}).then((s: { state: State; serial: number; rotation: number; fps: number; latencyMs: number; avds: Avd[] | null; boots: Boot[]; upgrade: string | null; rev: number; uploads?: Upload[] } & Omit<Setup, "rev">) => {
     applySetup({ env: s.env, installs: s.installs, license: s.license, rev: s.rev });
+    applyUploads(s.uploads, s.rev);
     // 调用和结果之间到了更新的 emu.status 事件时，结果里的状态已过时
     if (!isStaleStatus(s.rev, statusRev)) {
       statusRev = s.rev;
@@ -827,6 +854,8 @@ function App() {
   const gw = (p: Promise<{ ok: boolean }>) =>
     p.then((r) => { if (!r.ok) showNotice({ text: "没有连上网关，操作没有发出", error: true }); });
 
+  const installBlocked = () =>
+    state() === "connected" ? undefined : state() === "rebooting" ? "模拟器正在重启" : "没有连接设备";
   const problemColor = () => (state() === "page-outdated" ? C.warn : C.danger);
   const bootingName = () => Object.values(boots()).find(isBooting);
   const currentAvd = () => (avds() ?? []).find((a) => a.running === "grpc" && a.serial === serial());
@@ -957,6 +986,8 @@ function App() {
                     <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
                     <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
                     <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
+                    <Key icon="install" label="安装 APK" disabled={!!installBlocked()} tip={installBlocked() ?? "选 APK 安装，也可以直接把文件拖到屏幕上"}
+                      onPress={() => act(host.call("emu.pickApk", {}))} />
                     <If when={h5Key()}>
                       <View style={{ height: 1, marginHorizontal: 8, marginVertical: 2, backgroundColor: C.line }} />
                       <Key icon="code" label="H5" pressed={h5Open()} onPress={toggleH5} />
@@ -965,6 +996,20 @@ function App() {
                 </View>
                 <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000" }}>
                   <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
+                  <If when={drag().active}>
+                    <View role="status" style={{
+                      position: "absolute", top: BEZEL - 1, left: BEZEL - 1, right: BEZEL - 1, bottom: BEZEL - 1, pointerEvents: "none",
+                      alignItems: "center", justifyContent: "center", gap: 6, padding: 24, borderRadius: 34, borderWidth: 2,
+                      borderColor: drag().blocked ? C.danger : C.accent, backgroundColor: "rgba(9,9,11,0.82)",
+                    }}>
+                      <Text style={{ color: drag().blocked ? C.danger : C.text, fontSize: 15, fontWeight: "600", textAlign: "center" }}>
+                        {drag().blocked ? `不能安装：${drag().blocked}` : `松开以安装到 ${currentAvd()?.name ?? "这台设备"}`}
+                      </Text>
+                      <If when={!drag().blocked}>
+                        <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18, textAlign: "center" }}>APK 会直接安装，其他文件放进 下载 文件夹</Text>
+                      </If>
+                    </View>
+                  </If>
                 </View>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), right: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96, gap: 12 }}>
                   <KeyGroup label="电源键">
@@ -1037,6 +1082,25 @@ function App() {
                 <View style={{ flexDirection: "row" }}>
                   <Btn label="忽略" onPress={() => adbStuck.set(false)} />
                 </View>
+              </View>
+            </If>
+            <If when={uploads().length > 0}>
+              <View role="status" accessibilityLabel="传文件" style={{ gap: 6, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.line, width: 420, maxWidth: "92%" }}>
+                <Each of={uploads()} key={(u) => u.id}>
+                  {(u) => (
+                    <View style={{ gap: 2 }}>
+                      <Text style={{ color: C.text, fontSize: 13, numberOfLines: 1 }}>{u().name}</Text>
+                      <Text style={{ color: u().state === "failed" ? C.danger : u().state === "done" ? C.ok : C.muted, fontSize: 12, lineHeight: 18, userSelect: "text" }}>
+                        {uploadText(u())}
+                      </Text>
+                    </View>
+                  )}
+                </Each>
+                <If when={uploads().every(uploadEnded)}>
+                  <View style={{ flexDirection: "row" }}>
+                    <Btn label="关闭" onPress={() => host.call("emu.uploadsClear", {})} />
+                  </View>
+                </If>
               </View>
             </If>
             <If when={notice()}>

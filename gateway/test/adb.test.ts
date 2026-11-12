@@ -113,3 +113,29 @@ test("网关退出时结束还在跑的 adb 进程，不留孤儿", async () => 
   await assert.rejects(p);
   assert.ok(Date.now() - t0 < 2000);
 });
+
+test("长任务另走一条队列：安装没结束时，同一台设备的短命令照常跑；长任务之间仍一次一个", async () => {
+  const f = gatedExec();
+  const adb = createAdb({ exec: f.exec });
+  const install = adb.long(5554)(["install", "-r", "-t", "/tmp/a.apk"], 600_000);
+  const push = adb.long(5554)(["push", "/tmp/b.txt", "/sdcard/Download/b.txt"], 600_000);
+  const list = adb.device(5554)(["shell", "cat", "/proc/net/unix"]);
+  await sleep(10);
+  assert.deepEqual(f.calls, ["-s emulator-5554 install -r -t /tmp/a.apk", "-s emulator-5554 shell cat /proc/net/unix"]);
+  f.gates[1].ok("L");
+  assert.equal(await list, "L");
+  f.gates[0].ok("Success");
+  assert.equal(await install, "Success");
+  await sleep(10);
+  assert.equal(f.calls.at(-1), "-s emulator-5554 push /tmp/b.txt /sdcard/Download/b.txt");
+  f.gates[2].ok("");
+  await push;
+});
+
+test("长任务用调用方给的超时", async () => {
+  const seen: Array<number | undefined> = [];
+  const adb = createAdb({ exec: async (_args, timeoutMs) => (seen.push(timeoutMs), "") });
+  await adb.long(5554)(["install", "x.apk"], 600_000);
+  await adb.device(5554)(["shell", "true"]);
+  assert.deepEqual(seen, [600_000, undefined]);
+});

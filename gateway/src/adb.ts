@@ -43,26 +43,35 @@ export function execAdb(bin: string, args: string[], timeoutMs: number, log: (s:
 /**
  * adb 调用入口。带 `-s <设备>` 的命令按设备排队，同一台设备同一时间只有一个 adb 进程在跑；
  * 不带 -s 的（forward --list、devices）只找本机 adb server，不排队。
+ * 装 APK、传文件要几分钟，走 long 这条单独的队列：不挡住 H5 列表这类短命令，长任务之间仍一次一个。
  */
-export function createAdb(opts: { exec?: (args: string[]) => Promise<string>; timeoutMs?: number; log?: (s: string) => void } = {}) {
+export function createAdb(opts: { exec?: (args: string[], timeoutMs?: number) => Promise<string>; timeoutMs?: number; log?: (s: string) => void } = {}) {
   const log = opts.log ?? ((s: string) => console.log(s));
-  const exec = opts.exec ?? ((args: string[]) => execAdb(adbBin(), args, opts.timeoutMs ?? ADB_TIMEOUT_MS, log));
+  const exec = opts.exec ?? ((args: string[], timeoutMs?: number) => execAdb(adbBin(), args, timeoutMs ?? opts.timeoutMs ?? ADB_TIMEOUT_MS, log));
   const tails = new Map<string, Promise<unknown>>();
 
-  function run(args: string[]): Promise<string> {
-    if (args[0] !== "-s" || !args[1]) return exec(args);
-    const key = args[1];
-    const p = (tails.get(key) ?? Promise.resolve()).then(() => exec(args));
+  function queued(key: string, job: () => Promise<string>): Promise<string> {
+    const p = (tails.get(key) ?? Promise.resolve()).then(job);
     const tail = p.catch(() => {});
     tails.set(key, tail);
     void tail.then(() => { if (tails.get(key) === tail) tails.delete(key); });
     return p;
   }
 
+  function run(args: string[]): Promise<string> {
+    if (args[0] !== "-s" || !args[1]) return exec(args);
+    return queued(args[1], () => exec(args));
+  }
+
   return {
     run,
     /** 这台设备上的 adb：参数是 `adb -s emulator-<serial>` 之后的部分。 */
     device: (serial: number) => (args: string[]) => run(["-s", `emulator-${serial}`, ...args]),
+    /** 这台设备上的长任务（install、push），超时由调用方给。 */
+    long: (serial: number) => (args: string[], timeoutMs: number) => {
+      const full = ["-s", `emulator-${serial}`, ...args];
+      return queued(`long:emulator-${serial}`, () => exec(full, timeoutMs));
+    },
   };
 }
 

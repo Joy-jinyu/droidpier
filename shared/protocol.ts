@@ -227,7 +227,9 @@ export type ClientMsg =
   | { t: "acceptLicenses"; id: number }
   | { t: "rejectLicenses"; id: number }
   /** 用户在确认框里确认过才发：经 gRPC 重启模拟器系统，不依赖 adb。 */
-  | { t: "reboot" };
+  | { t: "reboot" }
+  /** 开始传一个文件，之后按 shared/upload.ts 的格式发二进制分片；同一连接同一时间只传一个。 */
+  | { t: "upload"; id: number; name: string; size: number };
 
 /** 服务端发给客户端的消息。 */
 export type ServerMsg =
@@ -265,7 +267,12 @@ export type ServerMsg =
   /** 许可证正文，等用户同意；null 表示不再等（已同意、已拒绝或安装结束）。 */
   | { t: "licenses"; licence: Licence | null }
   /** 回复 catalog。 */
-  | { t: "catalog"; catalog: AvdCatalog };
+  | { t: "catalog"; catalog: AvdCatalog }
+  /** 只发给传文件的连接。uploading 每写完一片发一次；received 是已写进网关临时文件的字节。 */
+  | { t: "upload"; id: number; state: UploadState; received?: number; error?: string };
+
+/** 传文件的阶段：uploading 传到网关，installing 装 APK，pushing 放进下载文件夹。 */
+export type UploadState = "uploading" | "installing" | "pushing" | "done" | "failed";
 
 function isNum(v: unknown): v is number { return typeof v === "number"; }
 function isStr(v: unknown): v is string { return typeof v === "string"; }
@@ -320,6 +327,9 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return o as ClientMsg;
     case "reboot":
       return { t: "reboot" };
+    case "upload":
+      if (!isNum(o.id) || !isStr(o.name) || !Number.isInteger(o.size) || (o.size as number) < 0) return null;
+      return { t: "upload", id: o.id, name: o.name, size: o.size as number };
     case "start":
     case "use":
       if (!isStr(o.name)) return null;

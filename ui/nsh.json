@@ -1,6 +1,7 @@
 {
   "name": "Droidpier",
   "id": "dev.devpier.droidpier",
+  "icon": "./icon.png",
   "capabilities": {
     "host": ["emu.*"]
   },

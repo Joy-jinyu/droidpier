@@ -15,10 +15,11 @@
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | sh
-droidpier
 ```
 
-在 Chrome 或 Edge 里打开终端打印出的链接，Chrome 弹出访问本地网络的权限框时点"允许"。
+这条命令第一次运行时安装，有新版时更新，然后启动 droidpier 并一直运行（按 Ctrl+C 停止）。装好以后直接运行 `droidpier` 也行。参数原样传给 droidpier：`curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7306`；只装不启动：`curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh`。
+
+在 Chrome 或 Edge 里打开 https://droid.devpier.dev/app/，Chrome 弹出访问本地网络的权限框时点"允许"。
 
 ## 部署步骤
 
@@ -54,15 +55,15 @@ droidpier
 
 在一个新的 Chrome 配置里逐项检查：
 
-- [ ] `https://droid.devpier.dev/` 是官网，`/app/` 打开模拟器页面（本机没运行 droidpier 时显示"还没连上本机的 Droidpier"和安装、运行两步）。
+- [ ] `https://droid.devpier.dev/` 是官网，`/app/` 打开模拟器页面（本机没运行 droidpier 时显示"还没连上本机的 Droidpier"和一条安装并启动的命令）。
 - [ ] `curl -sI https://droid.devpier.dev/app/` 的 `content-security-policy` 是 `/app/` 自己那一份（包含 `ws://127.0.0.1:*` 和 `frame-src https://chrome-devtools-frontend.appspot.com`），只有一份。
-- [ ] `curl -fsSL https://droid.devpier.dev/install.sh | sh` 能装好；`shasum -a 256` 和 `.sha256` 一致。
+- [ ] `curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh` 能装好；`shasum -a 256` 和 `.sha256` 一致。
 - [ ] 按其他用户的步骤走一遍（不需要口令或专门的链接）：
-  1. 安装：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。
-  2. 在终端运行 `droidpier`，保持终端开着。它会打开 `https://droid.devpier.dev/app/`；已经开着的页面也会在一两秒内自己连上，不用刷新。
+  1. 在终端运行 `curl -fsSL https://droid.devpier.dev/install.sh | sh`，保持终端开着：第一次会安装，之后再运行只检查更新、直接启动。装好以后直接运行 `droidpier` 也行。
+  2. 打开 `https://droid.devpier.dev/app/`（droidpier 启动时也会自己打开）；已经开着的页面会在一两秒内自己连上，不用刷新。
   3. 第一次用时 Chrome 会弹出"访问本地网络"的权限框，点"允许"后出现画面，可以操作。
   - 端口不是默认的 7300 时（`droidpier --port 7306`），打开的地址带 `#port=7306`，页面会记住这个端口。
-  - 关掉 droidpier：页面显示"还没连上本机的 Droidpier"和两步说明；再运行 droidpier，页面自动重连。
+  - 关掉 droidpier：页面显示"还没连上本机的 Droidpier"和那条命令；再运行这条命令（或 `droidpier`），页面自动重连。
   - 换一个新配置，点"拒绝"：页面显示"无法访问本机"，并说明去 设置 → 隐私和安全 → 网站设置 里改。
   - H5 调试里点"审查"，嵌入的 DevTools 能打开。
   - DevTools 控制台里没有 CSP 报错。

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { toDevice, keyToMsg, textToMsgs, pasteToMsgs, inputToMsgs, wheelToSwipe } from "../input-map.ts";
+import { toDevice, keyToMsg, shortcutToMsg, textToMsgs, pasteToMsgs, inputToMsgs, wheelToSwipe } from "../input-map.ts";
 
 describe("toDevice", () => {
   it("正常换算", () => {
@@ -216,5 +216,39 @@ describe("wheelToSwipe", () => {
     assert.equal(steps[0].x, 40, "起点 x 后移");
     assert.equal(steps[9].x, 0, "终点 x 在左边");
     assert.ok(Math.abs(steps[0].x - steps[9].x) >= 40);
+  });
+});
+
+describe("shortcutToMsg", () => {
+  const cmd = { metaKey: true, ctrlKey: false, altKey: false, shiftKey: false };
+  const press = (key: string) => ({ t: "key", key, eventType: "keypress" });
+
+  it("照 Android Studio 模拟器的键位按设备按键", () => {
+    assert.deepEqual(shortcutToMsg({ key: "s", ...cmd }), { t: "screenshot" });
+    assert.deepEqual(shortcutToMsg({ key: "p", ...cmd }), press("Power"));
+    assert.deepEqual(shortcutToMsg({ key: "o", ...cmd }), press("AppSwitch"));
+    assert.deepEqual(shortcutToMsg({ key: "Backspace", ...cmd }), press("GoBack"));
+    assert.deepEqual(shortcutToMsg({ key: "=", ...cmd }), press("AudioVolumeUp"));
+    assert.deepEqual(shortcutToMsg({ key: "-", ...cmd }), press("AudioVolumeDown"));
+    assert.deepEqual(shortcutToMsg({ key: "ArrowRight", ...cmd }), { t: "rotate" });
+  });
+
+  it("主页是 Shift+Cmd+H，大小写都认", () => {
+    assert.deepEqual(shortcutToMsg({ key: "H", ...cmd, shiftKey: true }), press("GoHome"));
+    assert.deepEqual(shortcutToMsg({ key: "h", ...cmd, shiftKey: true }), press("GoHome"));
+    assert.equal(shortcutToMsg({ key: "h", ...cmd }), null);
+  });
+
+  it("不带 Cmd、多按了 Ctrl / Option / Shift 都不算", () => {
+    assert.equal(shortcutToMsg({ key: "p", ...cmd, metaKey: false }), null);
+    assert.equal(shortcutToMsg({ key: "p", ...cmd, ctrlKey: true }), null);
+    assert.equal(shortcutToMsg({ key: "p", ...cmd, altKey: true }), null);
+    assert.equal(shortcutToMsg({ key: "S", ...cmd, shiftKey: true }), null);
+    // ⌘+（Shift+=）不是模拟器的键位，留给浏览器缩放
+    assert.equal(shortcutToMsg({ key: "+", ...cmd, shiftKey: true }), null);
+  });
+
+  it("浏览器自己的快捷键和协议里没有的向左旋转留给浏览器", () => {
+    for (const key of ["r", "w", "t", "v", "c", "ArrowLeft"]) assert.equal(shortcutToMsg({ key, ...cmd }), null);
   });
 });

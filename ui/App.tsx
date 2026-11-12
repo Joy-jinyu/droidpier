@@ -983,8 +983,8 @@ function App() {
               <View style={{ flexDirection: "row", gap: DEVICE_GAP }}>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), left: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96 }}>
                   <KeyGroup label="工具">
-                    <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
-                    <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
+                    <Key icon="rotate" label="旋转" tip="点过屏幕后按 ⌘→" onPress={() => act(host.call("emu.rotate", {}))} />
+                    <Key icon="camera" label="截图" tip="点过屏幕后按 ⌘S" onPress={() => act(host.call("emu.screenshot", {}))} />
                     <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
                     <Key icon="install" label="安装 APK" disabled={!!installBlocked()} tip={installBlocked() ?? "选 APK 安装，也可以直接把文件拖到屏幕上"}
                       onPress={() => act(host.call("emu.pickApk", {}))} />
@@ -1013,19 +1013,19 @@ function App() {
                 </View>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), right: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96, gap: 12 }}>
                   <KeyGroup label="电源键">
-                    <Key icon="power" label="电源" onPress={() => key("Power")} />
+                    <Key icon="power" label="电源" tip="点过屏幕后按 ⌘P" onPress={() => key("Power")} />
                   </KeyGroup>
                   <KeyGroup label="音量键">
-                    <Key icon="volUp" label="音量+" onPress={() => key("AudioVolumeUp")} />
-                    <Key icon="volDown" label="音量−" onPress={() => key("AudioVolumeDown")} />
+                    <Key icon="volUp" label="音量+" tip="点过屏幕后按 ⌘=" onPress={() => key("AudioVolumeUp")} />
+                    <Key icon="volDown" label="音量−" tip="点过屏幕后按 ⌘-" onPress={() => key("AudioVolumeDown")} />
                   </KeyGroup>
                 </View>
               </View>
             </View>
             <KeyGroup label="系统导航" row>
-              <Key icon="back" label="返回" onPress={() => key("GoBack")} />
-              <Key icon="home" label="主页" onPress={() => key("GoHome")} />
-              <Key icon="recents" label="最近" onPress={() => key("AppSwitch")} />
+              <Key icon="back" label="返回" tip="点过屏幕后按 ⌘⌫" onPress={() => key("GoBack")} />
+              <Key icon="home" label="主页" tip="点过屏幕后按 ⇧⌘H" onPress={() => key("GoHome")} />
+              <Key icon="recents" label="最近" tip="点过屏幕后按 ⌘O" onPress={() => key("AppSwitch")} />
             </KeyGroup>
           </View>
           <View style={{ position: "absolute", top: 8, left: 0, right: 0, alignItems: "center", gap: 8 }}>

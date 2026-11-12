@@ -6,7 +6,7 @@ import { dirname } from "node:path";
 import { listAvds } from "./avd.ts";
 import { findOwnRunning, pidAlive, type Running } from "./discovery.ts";
 import { emulatorBin, emulatorLogPath } from "./platform.ts";
-import { bootLogHint, bootLogReason } from "./boot-log.ts";
+import { bootLogHint, bootLogReason, bootStuckDetail } from "./boot-log.ts";
 import { adb, ADB_TIMEOUT_MS } from "./adb.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 
@@ -150,6 +150,15 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
     const detail = [reason, hint].filter(Boolean).join("。");
     return new Error(`模拟器进程在开机中退出（${what}）${detail ? `：${detail}` : ""}。完整日志：${logPath}`);
   };
+  // 开机超时也说明卡在哪，不然用户只看到“超时”，不知道是模拟器没起来还是 adb 读不到
+  const timeoutError = async (): Promise<Error> => {
+    const what = `开机超时（${BOOT_TIMEOUT_MS / 1000} 秒）`;
+    const log = await d.readLog(logPath);
+    if (log === null) return new Error(what);
+    // serial 为 0：没找到发现文件，还没问过 adb，不能怪 adb
+    const detail = bootStuckDetail(log, job.serial > 0);
+    return new Error(`${what}${detail ? `：${detail}` : ""}。完整日志：${logPath}`);
+  };
   const run = async (): Promise<Running> => {
     const info = (await d.listAvds()).find((a) => a.name === name);
     if (!info) throw new Error(`没有这个 AVD：${name}`);
@@ -193,9 +202,11 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
       }
       await d.sleep(POLL_MS);
     }
+    // 先读日志再关：关机时模拟器还会往日志里写
+    const timeout = await timeoutError();
     if (job.serial) await stopAvd(job.serial, d).catch(() => {});
     child.kill();
-    throw new Error(`开机超时（${BOOT_TIMEOUT_MS / 1000} 秒）`);
+    throw timeout;
   };
 
   const settle = () => {

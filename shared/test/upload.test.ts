@@ -31,10 +31,24 @@ test("控制字符去掉，Android 存储不认的字符换成下划线，首尾
   assert.equal(sanitizeFileName('a:b*c?"<d>|.txt'), "a_b_c___d__.txt");
 });
 
-test("文件名过长时截断，保留扩展名", () => {
+const utf8 = (s: string) => new TextEncoder().encode(s).byteLength;
+
+test("文件名按 UTF-8 字节截到 200 以内，保留扩展名", () => {
   const name = sanitizeFileName(`${"很".repeat(300)}.apk`)!;
-  assert.ok(name.length <= 120, String(name.length));
+  assert.ok(utf8(name) <= 200, String(utf8(name)));
+  assert.ok(utf8(name) > 190, String(utf8(name)));
   assert.ok(name.endsWith(".apk"));
+  assert.equal(sanitizeFileName(`${"a".repeat(196)}.apk`), `${"a".repeat(196)}.apk`);
+  assert.equal(utf8(sanitizeFileName(`${"a".repeat(197)}.apk`)!), 200);
+});
+
+test("截断不拆开 emoji 的代理对", () => {
+  for (let pad = 0; pad < 4; pad++) {
+    const name = sanitizeFileName(`${"a".repeat(pad)}${"😀".repeat(80)}.txt`)!;
+    assert.ok(utf8(name) <= 200);
+    assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(name), "落单的代理项");
+    assert.ok(name.endsWith(".txt"));
+  }
 });
 
 test("fileKind：.apk（不分大小写）是 apk；.xapk/.apks/.aab/.apkm 不支持；其他是普通文件", () => {
@@ -97,10 +111,17 @@ test("checkChunk：id 不对、超过总大小、分片太大、收下未写的�
   const t = { id: 3, size: 1000, arrived: 0, written: 0 };
   assert.equal(checkChunk(t, 3, 100), null);
   assert.match(checkChunk(t, 4, 100)!, /传输/);
+  assert.match(checkChunk(t, 3, 0)!, /空/);
   assert.match(checkChunk({ ...t, arrived: 950 }, 3, 100)!, /大小/);
   assert.match(checkChunk({ ...t, size: 10 * UPLOAD_CHUNK_BYTES }, 3, UPLOAD_CHUNK_BYTES + 1)!, /分片/);
   const big = { id: 3, size: 100 * UPLOAD_CHUNK_BYTES, arrived: 2 * UPLOAD_WINDOW_BYTES, written: 0 };
   assert.match(checkChunk(big, 3, UPLOAD_CHUNK_BYTES)!, /太快/);
+});
+
+test("parseClientMsg：uploadCancel 要有数字 id", () => {
+  assert.deepEqual(parseClientMsg(JSON.stringify({ t: "uploadCancel", id: 2 })), { t: "uploadCancel", id: 2 });
+  assert.equal(parseClientMsg(JSON.stringify({ t: "uploadCancel" })), null);
+  assert.equal(parseClientMsg(JSON.stringify({ t: "uploadCancel", id: "2" })), null);
 });
 
 test("parseClientMsg：upload 要有数字 id、字符串 name、非负整数 size", () => {

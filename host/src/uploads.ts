@@ -39,6 +39,14 @@ export function createUploads(opts: {
     if (active?.timer) clearTimeout(active.timer);
     active = null;
   };
+  // 页面这边放弃了正在传的文件：网关那边也要删临时文件、让出位置
+  const giveUp = (a: Active, error: string) => {
+    fail(a.item, error);
+    finishActive();
+    opts.send({ t: "uploadCancel", id: a.item.id });
+    changed();
+    pump();
+  };
 
   const fill = async () => {
     const a = active;
@@ -51,14 +59,12 @@ export function createUploads(opts: {
         data = new Uint8Array(await a.file.slice(start, end).arrayBuffer());
       } catch (e) {
         a.reading = false;
-        if (active !== a) return;
-        fail(a.item, `读文件失败：${(e as Error).message}`);
-        finishActive();
-        changed();
-        return pump();
+        if (active === a) giveUp(a, `读文件失败：${(e as Error).message}`);
+        return;
       }
       a.reading = false;
       if (active !== a || a.item.state !== "uploading") return;
+      if (data.byteLength !== end - start) return giveUp(a, "文件在传的过程中变了，请重新拖入");
       if (!opts.sendBinary(encodeUploadChunk(a.item.id, data))) return;
       a.sent = end;
     }
@@ -78,10 +84,7 @@ export function createUploads(opts: {
     const a: Active = { item, file, sent: 0, reading: false, timer: null };
     a.timer = setTimeout(() => {
       if (active !== a || a.timer === null) return;
-      fail(item, "网关没有回应：可能要升级网关（重新运行安装命令）");
-      finishActive();
-      changed();
-      pump();
+      giveUp(a, "网关没有回应：可能要升级网关（重新运行安装命令）");
     }, opts.replyTimeoutMs);
     active = a;
     changed();

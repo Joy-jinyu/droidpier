@@ -21,6 +21,8 @@ import { exitHandler } from "./exit.ts";
 import { allowedOrigins, isOrigin, PUBLIC_ORIGIN } from "./auth.ts";
 import { buildPageUrl, DEFAULT_PORT } from "./page-url.ts";
 import { checkPortFirst, explainBusyPort } from "./already-running.ts";
+import { cleanStaleUploads } from "./upload-temp.ts";
+import { tmpdir } from "node:os";
 
 // scripts/build-binary.ts 打包时把 DROIDPIER_VERSION 替换成构建时间；直接用源码跑时没有
 declare const DROIDPIER_VERSION: string | undefined;
@@ -93,6 +95,7 @@ async function discover(avdName?: string): Promise<EmulatorSession | null> {
 
 const getSession = cachedSession(discover);
 
+void cleanStaleUploads(tmpdir(), Date.now());
 const env = await checkEnv(realEnvDeps());
 const installer = createInstaller(realInstallerDeps({ sdkRoot: sdkRoot(), avdHome: avdHome(), manifestUrl: cmdlineToolsManifestUrl(), findJava: () => findJavaHome() }));
 const catalogDeps = realCatalogDeps({

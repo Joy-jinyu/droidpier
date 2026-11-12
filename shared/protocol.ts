@@ -229,7 +229,9 @@ export type ClientMsg =
   /** 用户在确认框里确认过才发：经 gRPC 重启模拟器系统，不依赖 adb。 */
   | { t: "reboot" }
   /** 开始传一个文件，之后按 shared/upload.ts 的格式发二进制分片；同一连接同一时间只传一个。 */
-  | { t: "upload"; id: number; name: string; size: number };
+  | { t: "upload"; id: number; name: string; size: number }
+  /** 页面放弃了这个文件（读文件失败、等不到确认、文件变了）：网关删掉临时文件、让出位置。 */
+  | { t: "uploadCancel"; id: number };
 
 /** 服务端发给客户端的消息。 */
 export type ServerMsg =
@@ -330,6 +332,9 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case "upload":
       if (!isNum(o.id) || !isStr(o.name) || !Number.isInteger(o.size) || (o.size as number) < 0) return null;
       return { t: "upload", id: o.id, name: o.name, size: o.size as number };
+    case "uploadCancel":
+      if (!isNum(o.id)) return null;
+      return { t: "uploadCancel", id: o.id };
     case "start":
     case "use":
       if (!isStr(o.name)) return null;

@@ -113,3 +113,34 @@ test("clear 只清掉结束了的", () => {
   u.clear();
   assert.deepEqual(last().map((i) => i.name), ["a.apk"]);
 });
+
+test("等不到确认而放弃时，告诉网关取消，接着传下一个", async () => {
+  const { h, u, last } = harness({ replyTimeoutMs: 20 });
+  u.add([file("a.apk", 1), file("b.apk", 1)]);
+  await sleep(40);
+  assert.equal(last()[0].state, "failed");
+  assert.deepEqual(h.msgs.slice(1, 3), [{ t: "uploadCancel", id: 1 }, { t: "upload", id: 2, name: "b.apk", size: 1 }]);
+});
+
+test("读文件失败：标失败并告诉网关取消", async () => {
+  const { h, u, last } = harness();
+  const bad = { name: "a.apk", size: 10, slice: () => ({ arrayBuffer: () => Promise.reject(new Error("权限没了")) }) } as unknown as File;
+  u.add([bad]);
+  u.onMsg({ t: "upload", id: 1, state: "uploading", received: 0 });
+  await sleep(10);
+  assert.equal(last()[0].state, "failed");
+  assert.match(last()[0].error!, /读文件失败/);
+  assert.deepEqual(h.msgs.at(-1), { t: "uploadCancel", id: 1 });
+});
+
+test("文件在传的过程中变小了：标失败并取消，不发残缺的分片", async () => {
+  const { h, u, last } = harness();
+  const shrunk = { name: "a.apk", size: 10, slice: () => new Blob([new Uint8Array(4)]) } as unknown as File;
+  u.add([shrunk]);
+  u.onMsg({ t: "upload", id: 1, state: "uploading", received: 0 });
+  await sleep(10);
+  assert.equal(h.chunks.length, 0);
+  assert.equal(last()[0].state, "failed");
+  assert.match(last()[0].error!, /变/);
+  assert.deepEqual(h.msgs.at(-1), { t: "uploadCancel", id: 1 });
+});

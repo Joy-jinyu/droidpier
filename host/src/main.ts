@@ -438,7 +438,11 @@ export async function createHost(player: Player) {
   };
   const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
   let dragDepth = 0;
-  const dragEvent = (active: boolean) => player.hostEvent("emu.drag", { active, blocked: dropBlocked() });
+  let shownBlocked: string | null = null;
+  const dragEvent = (active: boolean) => {
+    shownBlocked = dropBlocked();
+    player.hostEvent("emu.drag", { active, blocked: shownBlocked });
+  };
   box.addEventListener("dragenter", (e) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -448,6 +452,8 @@ export async function createHost(player: Player) {
     if (!hasFiles(e)) return;
     e.preventDefault();
     e.stopPropagation();
+    // 拖着的过程中设备断开或开始重启：遮罩跟着变
+    if (dropBlocked() !== shownBlocked) dragEvent(true);
     e.dataTransfer!.dropEffect = dropBlocked() ? "none" : "copy";
   });
   box.addEventListener("dragleave", (e) => {

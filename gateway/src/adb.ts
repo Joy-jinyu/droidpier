@@ -2,7 +2,7 @@ import { execFile, type ChildProcess } from "node:child_process";
 import { ADB_UNRESPONSIVE } from "../../shared/protocol.ts";
 import { adbBin } from "./platform.ts";
 
-/** 一次 adb 调用的超时。 */
+/** 短命令（排在设备队列里的）一次 adb 调用的超时；long 队列的超时由调用方给。 */
 export const ADB_TIMEOUT_MS = 5000;
 
 /** adb 调用超时：设备里的 adbd 多半卡住了。 */

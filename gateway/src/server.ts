@@ -14,6 +14,7 @@ import type { Installer } from "./installer.ts";
 import { AdbUnresponsive } from "./adb.ts";
 import { gbText, spaceCheck } from "../../shared/disk-space.ts";
 import { avdNameError, createItems, ramMbFor } from "../../shared/avd-spec.ts";
+import { UPLOAD_DIR_PREFIX } from "./upload-temp.ts";
 import { BIN_UPLOAD, checkChunk, decodeUploadChunk, fileKind, installFailure, PUSH_DIR, sanitizeFileName, UPLOAD_MAX_BYTES } from "../../shared/upload.ts";
 import {
   BIN_SCREENSHOT,
@@ -111,6 +112,8 @@ export type FileOps = {
   adb(serial: number, args: string[]): Promise<string>;
   /** 临时文件建在这下面，默认 os.tmpdir()。 */
   tmpRoot?: string;
+  /** 收分片阶段多久没有新分片就中止，默认 30 秒。 */
+  idleMs?: number;
 };
 
 /** 网页模拟器所在路径，staticDir 的内容在这下面提供。 */
@@ -211,7 +214,8 @@ export async function startServer(opts: {
     }
   });
 
-  const wss = new WebSocketServer({ noServer: true });
+  // 单条消息上限：文件分片 256 KiB，其他都是小 JSON；粘贴超过 2 MiB 的文字会被断开（1009）
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
   const devtoolsWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
   // 按路径分流：/devtools/<socket>/<pageId>/<票据> 走 DevTools 代理，其余走模拟器协议
   // 两条路都先核 Origin（4003），模拟器协议只靠这一道；DevTools 前端还要核票据（4001）
@@ -593,12 +597,14 @@ export async function startServer(opts: {
       }
     };
 
-    // 传文件：同一连接同一时间只有一个；写文件按到达顺序串在 chain 上，chain 自己不会失败
+    // 传文件：upload 是正在收分片的那个，同一连接同一时间只有一个；收齐后交给 adb（长任务队列里排队），位置马上让出
+    // 写文件按到达顺序串在 chain 上，chain 自己不会失败
     type Upload = {
-      id: number; name: string; kind: "apk" | "file"; size: number; serial: number;
+      id: number; name: string; kind: "apk" | "file"; size: number; session: EmulatorSession;
       arrived: number; written: number; dir: string | null; fh: FileHandle | null; chain: Promise<void>;
       /** 不再收分片：收完了、失败了或连接断了。 */
       ended: boolean;
+      idle: ReturnType<typeof setTimeout> | null;
     };
     let upload: Upload | null = null;
     let wsClosed = false;
@@ -610,19 +616,28 @@ export async function startServer(opts: {
       u.fh = null;
       if (u.dir) await rm(u.dir, { recursive: true, force: true }).catch((e: Error) => log(`删除临时文件失败：${e.message}`));
     };
+    // 收分片阶段结束：停掉空闲计时、让出位置
+    const endReceiving = (u: Upload) => {
+      u.ended = true;
+      if (u.idle) clearTimeout(u.idle);
+      u.idle = null;
+      if (upload === u) upload = null;
+    };
     const abortUpload = (u: Upload, why: string) => {
       if (u.ended) return;
-      u.ended = true;
-      if (upload === u) upload = null;
+      endReceiving(u);
       log(`传文件 ${u.name} 中止：${why}`);
       uploadMsg(u.id, "failed", { error: why });
       void dropTemp(u);
+    };
+    const touchIdle = (u: Upload) => {
+      if (u.idle) clearTimeout(u.idle);
+      u.idle = setTimeout(() => abortUpload(u, "太久没有收到数据，已中止"), opts.files?.idleMs ?? 30_000);
     };
     const startUpload = (m: { id: number; name: string; size: number }) => {
       const fail = (error: string) => uploadMsg(m.id, "failed", { error });
       const files = opts.files;
       if (!files) return fail("这个网关不支持传文件");
-      if (upload) return fail("上一个文件还没传完，等它结束再试");
       const s = conn.session;
       if (!s) return fail("没有连接设备");
       if (isRebooting(s)) return fail(REBOOTING);
@@ -631,15 +646,18 @@ export async function startServer(opts: {
       const k = fileKind(name);
       if (k.kind === "unsupported") return fail(`暂不支持 ${k.ext}，请提供 .apk`);
       if (m.size > UPLOAD_MAX_BYTES) return fail("文件太大：最大 2 GB");
+      // 页面一次只传一个：还在收的旧传输是页面已经不要了的
+      if (upload) abortUpload(upload, "页面开始传下一个文件，这个已作废");
       const u: Upload = {
-        id: m.id, name, kind: k.kind, size: m.size, serial: s.serial,
-        arrived: 0, written: 0, dir: null, fh: null, chain: Promise.resolve(), ended: false,
+        id: m.id, name, kind: k.kind, size: m.size, session: s,
+        arrived: 0, written: 0, dir: null, fh: null, chain: Promise.resolve(), ended: false, idle: null,
       };
       upload = u;
+      touchIdle(u);
       log(`页面传来 ${name}（${m.size} 字节），${k.kind === "apk" ? "安装到" : "放进"} emulator-${s.serial}`);
       u.chain = (async () => {
         try {
-          u.dir = await mkdtemp(join(files.tmpRoot ?? tmpdir(), "droidpier-upload-"));
+          u.dir = await mkdtemp(join(files.tmpRoot ?? tmpdir(), UPLOAD_DIR_PREFIX));
           u.fh = await open(join(u.dir, name), "wx");
         } catch (e) {
           return abortUpload(u, `建临时文件失败：${(e as Error).message}`);
@@ -649,6 +667,10 @@ export async function startServer(opts: {
         if (u.size === 0) void finishUpload(u, files);
       })();
     };
+    const cancelUpload = (id: number) => {
+      // 已经在装的不打断：adb 结束后照常回报并删临时文件
+      if (upload?.id === id) abortUpload(upload, "页面取消了");
+    };
     const onChunk = (buf: Buffer) => {
       const u = upload;
       const c = decodeUploadChunk(buf);
@@ -656,6 +678,7 @@ export async function startServer(opts: {
       if (!u || u.ended || !c) return;
       const why = checkChunk(u, c.id, c.data.byteLength);
       if (why) return abortUpload(u, why);
+      touchIdle(u);
       u.arrived += c.data.byteLength;
       const data = c.data;
       u.chain = u.chain.then(async () => {
@@ -671,20 +694,23 @@ export async function startServer(opts: {
       });
     };
     const finishUpload = async (u: Upload, files: FileOps) => {
-      u.ended = true;
+      endReceiving(u);
       await u.fh?.close().catch(() => {});
       u.fh = null;
       const path = join(u.dir!, u.name);
+      const serial = u.session.serial;
       try {
         const s = conn.session;
         if (wsClosed) return;
-        if (!s || s.serial !== u.serial) return uploadMsg(u.id, "failed", { error: "设备已断开" });
+        if (!s) return uploadMsg(u.id, "failed", { error: "设备已断开" });
+        // 同一个 emulator-<serial> 可能已换成另一台 AVD，按会话认人
+        if (s !== u.session) return uploadMsg(u.id, "failed", { error: "设备已切换，没有安装" });
         if (isRebooting(s)) return uploadMsg(u.id, "failed", { error: REBOOTING });
         uploadMsg(u.id, u.kind === "apk" ? "installing" : "pushing");
         try {
           const out = u.kind === "apk"
-            ? await files.adb(u.serial, ["install", "-r", "-t", path])
-            : await files.adb(u.serial, ["push", path, `${PUSH_DIR}/${u.name}`]);
+            ? await files.adb(serial, ["install", "-r", "-t", path])
+            : await files.adb(serial, ["push", path, `${PUSH_DIR}/${u.name}`]);
           // 有的 adb 版本装失败也退出 0，只在输出里写 Failure
           if (u.kind === "apk" && /Failure \[/.test(out)) throw new Error(out);
           log(`${u.name} ${u.kind === "apk" ? "已安装" : `已放到 ${PUSH_DIR}`}`);
@@ -695,7 +721,6 @@ export async function startServer(opts: {
           uploadMsg(u.id, "failed", { error });
         }
       } finally {
-        if (upload === u) upload = null;
         await dropTemp(u);
       }
     };
@@ -866,6 +891,9 @@ export async function startServer(opts: {
           break;
         case "upload":
           startUpload(m);
+          break;
+        case "uploadCancel":
+          cancelUpload(m.id);
           break;
         case "screenshot": {
           if (!conn.session) {

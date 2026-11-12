@@ -1730,15 +1730,88 @@ test("没有连接设备：拒绝", async (t) => {
   assert.deepEqual(u.last(11), { t: "upload", id: 11, state: "failed", error: "没有连接设备" });
 });
 
-test("同一连接上一个还没传完：第二个拒绝，第一个照常完成", async (t) => {
+test("上一个还在收分片时来了新的：上一个作废、删临时文件，新的照常完成", async (t) => {
   const u = await uploadSetup(t);
   u.c.ws.send(JSON.stringify({ t: "upload", id: 12, name: "a.apk", size: 3 }));
+  await until(() => u.ups(12).length > 0);
   u.c.ws.send(JSON.stringify({ t: "upload", id: 13, name: "b.apk", size: 3 }));
-  await until(() => u.ups(12).length > 0 && u.ups(13).length > 0);
-  assert.equal(u.last(13).state, "failed");
-  assert.match(u.last(13).error, /上一个/);
-  u.c.ws.send(encodeUploadChunk(12, Buffer.from("abc")));
-  await until(() => u.last(12)?.state === "done");
+  await until(() => u.last(12)?.state === "failed" && u.ups(13).length > 0);
+  u.c.ws.send(encodeUploadChunk(13, Buffer.from("abc")));
+  await until(() => u.last(13)?.state === "done");
+  assert.deepEqual(u.files.calls.map((c) => c.args[3].split("/").pop()), ["b.apk"]);
+  await sleep(50);
+  assert.deepEqual(await u.tempEntries(), []);
+});
+
+test("页面取消正在收的文件：删临时文件，让出位置，下一个能传", async (t) => {
+  const u = await uploadSetup(t);
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 20, name: "a.apk", size: 10 }));
+  await until(() => u.ups(20).length > 0);
+  u.c.ws.send(encodeUploadChunk(20, Buffer.from("abc")));
+  await until(() => u.last(20)?.received === 3);
+  u.c.ws.send(JSON.stringify({ t: "uploadCancel", id: 20 }));
+  await until(() => u.last(20)?.state === "failed");
+  await sleep(50);
+  assert.deepEqual(await u.tempEntries(), []);
+  await sendFile(u.c, 21, "b.txt", Buffer.from("hi"), u.ups);
+  await until(() => u.last(21)?.state === "done");
+  assert.equal(u.files.calls.length, 1);
+});
+
+test("取消时 adb 已经在装：等它结束再删临时文件，结果照常回报；期间能开始传下一个", async (t) => {
+  const u = await uploadSetup(t);
+  u.files.gate = true;
+  await sendFile(u.c, 22, "a.apk", Buffer.from("x"), u.ups);
+  await until(() => u.files.calls.length === 1);
+  u.c.ws.send(JSON.stringify({ t: "uploadCancel", id: 22 }));
+  u.c.ws.send(JSON.stringify({ t: "upload", id: 23, name: "b.txt", size: 1 }));
+  await until(() => u.ups(23).length > 0);
+  assert.equal(u.ups(23)[0].state, "uploading");
+  assert.ok((await u.tempEntries()).length >= 1);
+  u.files.release();
+  await until(() => u.last(22)?.state === "done");
+});
+
+test("收分片阶段太久没有新分片：中止并删临时文件", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "emu-upload-"));
+  const files = fakeFiles(root);
+  const s = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { files: { ...files.ops, idleMs: 60 } });
+  const c = await s.connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  c.ws.send(JSON.stringify({ t: "upload", id: 24, name: "a.apk", size: 10 }));
+  await until(() => c.msgs.some((m) => m.t === "upload" && m.state === "failed"), 2000);
+  assert.match(c.msgs.find((m) => m.t === "upload" && m.state === "failed").error, /太久/);
+  await sleep(50);
+  assert.deepEqual(await readdir(root), []);
+});
+
+test("收齐时设备已换成另一台（同一个 serial）：不安装", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "emu-upload-"));
+  const files = fakeFiles(root);
+  const first = new FakeSession();
+  let cur: FakeSession | null = first;
+  const s = await setup(t, first, async () => cur, undefined, undefined, undefined, { files: files.ops });
+  const c = await s.connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  c.ws.send(JSON.stringify({ t: "upload", id: 25, name: "a.apk", size: 3 }));
+  await until(() => c.msgs.some((m) => m.t === "upload" && m.id === 25));
+  const other = new FakeSession();
+  other.avdName = "Other_AVD";
+  cur = other;
+  first.fireClosed();
+  await until(() => c.msgs.filter((m) => m.t === "ready").length === 2);
+  c.ws.send(encodeUploadChunk(25, Buffer.from("abc")));
+  await until(() => c.msgs.some((m) => m.t === "upload" && m.id === 25 && m.state === "failed"));
+  assert.equal(c.msgs.find((m) => m.t === "upload" && m.id === 25 && m.state === "failed").error, "设备已切换，没有安装");
+  assert.equal(files.calls.length, 0);
+});
+
+test("超过 2 MiB 的单条消息：网关关闭连接（1009）", async (t) => {
+  const u = await uploadSetup(t);
+  u.c.ws.send(Buffer.alloc(3 * 1024 * 1024));
+  assert.equal(await u.c.closed, 1009);
 });
 
 test("分片超过声明的大小：中止并删掉临时文件", async (t) => {

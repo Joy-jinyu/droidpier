@@ -8,7 +8,8 @@ export const UPLOAD_MAX_BYTES = 2 * 1024 ** 3;
 /** 非 APK 文件放到这里（设备里的「下载」文件夹）。 */
 export const PUSH_DIR = "/sdcard/Download";
 
-const NAME_MAX = 120;
+// Android 文件系统单个文件名上限 255 字节，留些余量
+const NAME_MAX_BYTES = 200;
 const UNSUPPORTED = [".xapk", ".apks", ".aab", ".apkm"];
 
 /** 页面给的文件名只留最后一段，去掉控制字符、换掉 Android 存储不认的字符、限制长度；用不了时返回 null。 */
@@ -16,12 +17,27 @@ export function sanitizeFileName(raw: string): string | null {
   const base = raw.split(/[\\/]/).pop() ?? "";
   let name = base.replace(/[\u0000-\u001f\u007f]/g, "").replace(/[:*?"<>|]/g, "_").trim();
   if (!name || /^\.+$/.test(name)) return null;
-  if (name.length > NAME_MAX) {
+  if (utf8Bytes(name) > NAME_MAX_BYTES) {
     const dot = name.lastIndexOf(".");
     const ext = dot > 0 && name.length - dot <= 16 ? name.slice(dot) : "";
-    name = name.slice(0, NAME_MAX - ext.length) + ext;
+    name = cutToBytes(name.slice(0, name.length - ext.length), NAME_MAX_BYTES - utf8Bytes(ext)) + ext;
   }
   return name;
+}
+
+const utf8Bytes = (s: string) => new TextEncoder().encode(s).byteLength;
+
+// 按码点截，不会拆开代理对
+function cutToBytes(s: string, max: number): string {
+  let out = "";
+  let bytes = 0;
+  for (const ch of s) {
+    const b = utf8Bytes(ch);
+    if (bytes + b > max) break;
+    out += ch;
+    bytes += b;
+  }
+  return out;
 }
 
 export type FileKind = { kind: "apk" } | { kind: "file" } | { kind: "unsupported"; ext: string };
@@ -87,6 +103,7 @@ export function decodeUploadChunk(buf: Uint8Array): { id: number; data: Uint8Arr
  */
 export function checkChunk(t: { id: number; size: number; arrived: number; written: number }, id: number, len: number): string | null {
   if (id !== t.id) return "传输编号不对";
+  if (len === 0) return "空分片";
   if (len > UPLOAD_CHUNK_BYTES) return "分片太大";
   if (t.arrived + len > t.size) return "收到的数据超过了文件大小";
   if (t.arrived - t.written + len > 2 * UPLOAD_WINDOW_BYTES) return "页面发得太快，没有等网关确认";

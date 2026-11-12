@@ -851,6 +851,27 @@ test("screenshot 请求：先收到文本 {t:'screenshot'}，再收到 binKind �
   assert.ok(!c2.binMsgs.some((b) => binKind(b) === BIN_SCREENSHOT), "c2 不应收到截图二进制");
 });
 
+test("截图还没回来时模拟器退出：网关不崩，截图仍按发起时的设备命名", async (t) => {
+  // 模拟器退出后不再有会话可接，免得轮询把同一台又接回来
+  let gone = false;
+  const s = new FakeSession();
+  const { connect, session } = await setup(t, s, async () => (gone ? null : s));
+  let release!: () => void;
+  session!.screenshot = () => new Promise<Buffer>((r) => { release = () => r(session!.screenshotData); });
+  const c = await connect();
+  hello(c);
+  await until(() => session!.subs.length === 1);
+  c.ws.send(JSON.stringify({ t: "screenshot" }));
+  await until(() => release !== undefined);
+  gone = true;
+  session!.fireClosed();
+  await until(() => c.msgs.some((m) => m.t === "status" && m.state === "emulator-closed"));
+  release();
+  await until(() => c.msgs.some((m) => m.t === "screenshot"));
+  assert.match(c.msgs.find((m) => m.t === "screenshot").name, /^screenshot-Pixel_5_API_34-\d{8}-\d{6}\.png$/);
+  await until(() => c.binMsgs.some((b) => binKind(b) === BIN_SCREENSHOT));
+});
+
 test("screenshotName 格式：screenshot-<device>-<yyyyMMdd-HHmmss>.png", () => {
   const d = new Date(2026, 10, 11, 18, 3, 16); // 2026-11-11 18:03:16 本地时间
   assert.equal(screenshotName("Pixel_5_API_34", d), "screenshot-Pixel_5_API_34-20261111-180316.png");

@@ -87,7 +87,7 @@ const PROBLEM: Partial<Record<State, string>> = {
   "lna-denied": "Chrome 阻止了访问本机：请到 设置 → 隐私和安全 → 网站设置 中允许本站访问本地网络，然后刷新",
   "lna-prompt": "Chrome 正在询问是否允许本站访问本机：请在地址栏旁的权限框里点「允许」",
   "bad-origin": "这个页面地址不在网关允许的来源里，请打开 https://droid.devpier.dev/app/",
-  // 页面只看得到正在运行的 droidpier，看不出装没装，所以两步都列出来
+  // 页面看不出装没装 droidpier；同一条命令没装时先装、装了直接启动
   "no-gateway": "还没连上本机的 Droidpier",
 };
 
@@ -989,15 +989,9 @@ function App() {
                   <Text style={{ color: problemColor(), fontSize: 13, fontWeight: "bold", lineHeight: 20 }}>{text()}</Text>
                   <If when={state() === "no-gateway" && upgrade()}>
                     {(cmd) => (
-                      <View style={{ gap: 10 }}>
-                        <View style={{ gap: 6 }}>
-                          <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>① 第一次用：在终端运行下面的命令安装</Text>
-                          <CopyCmd cmd={cmd()} />
-                        </View>
-                        <View style={{ gap: 6 }}>
-                          <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>② 然后在终端运行 droidpier（保持终端开着），这个页面会自动连上</Text>
-                          <CopyCmd cmd="droidpier" />
-                        </View>
+                      <View style={{ gap: 6 }}>
+                        <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>在终端运行下面的命令（第一次会自动安装，之后直接启动；保持终端开着），这个页面会自动连上</Text>
+                        <CopyCmd cmd={cmd()} />
                       </View>
                     )}
                   </If>

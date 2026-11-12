@@ -31,6 +31,8 @@ const r = await Bun.build({
   entrypoints: [join(root, "gateway/src/main.ts")],
   compile: { target: "bun-darwin-arm64", outfile: out, assets: [stage] },
   minify: true,
+  // 网关版本 = 构建时间，/healthz 报出去，另一个 droidpier 启动时按它比新旧（gateway/src/already-running.ts）
+  define: { DROIDPIER_VERSION: JSON.stringify(new Date().toISOString()) },
 });
 if (!r.success) {
   for (const l of r.logs) console.error(l);

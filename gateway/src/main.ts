@@ -20,6 +20,11 @@ import { waitForReboot } from "./reboot.ts";
 import { exitHandler } from "./exit.ts";
 import { allowedOrigins, isOrigin, PUBLIC_ORIGIN } from "./auth.ts";
 import { buildPageUrl, DEFAULT_PORT } from "./page-url.ts";
+import { explainBusyPort } from "./already-running.ts";
+
+// scripts/build-binary.ts 打包时把 DROIDPIER_VERSION 替换成构建时间；直接用源码跑时没有
+declare const DROIDPIER_VERSION: string | undefined;
+const VERSION = typeof DROIDPIER_VERSION === "string" ? DROIDPIER_VERSION : "";
 
 // `nsh package ui --target web` 在仓库根目录运行时，产物落在根目录的 .nsh/out，不在 ui/.nsh/out（实测）
 // 打成单个可执行文件后，scripts/build-binary.ts 用 --asset 把这个目录嵌在 import.meta.dir/Droidpier 下，node:fs 照常能读
@@ -91,6 +96,7 @@ const catalogDeps = realCatalogDeps({
 const first = await getSession();
 const srv = await startServer({
   port,
+  version: VERSION,
   allowedOrigins: allowedOrigins(PUBLIC_ORIGIN, port, extraOrigins),
   staticDir: STATIC_DIR,
   getSession,
@@ -120,6 +126,15 @@ const srv = await startServer({
     },
     connectCdp,
   },
+}).catch(async (e: NodeJS.ErrnoException) => {
+  if (e.code !== "EADDRINUSE") throw e;
+  // 再运行一次安装命令时常见：同一个端口上已经有一个 droidpier
+  last?.close();
+  const pageUrl = buildPageUrl(process.argv, port);
+  const r = await explainBusyPort({ port, pageUrl, ownVersion: VERSION });
+  for (const l of r.lines) (r.code ? console.error : console.log)(l);
+  if (r.code === 0 && !noOpen) openBrowser(pageUrl, (err) => console.log(`打开浏览器失败：${err.message}`));
+  process.exit(r.code);
 });
 const pageUrl = buildPageUrl(process.argv, srv.port);
 console.log(`droidpier: ${pageUrl}  (${first ? `emulator-${serial}` : "no emulator"})`);

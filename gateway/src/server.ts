@@ -123,6 +123,8 @@ export async function startServer(opts: {
   /** 开机进度广播和无会话时重新发现的间隔，默认 1000ms。 */
   pollMs?: number;
   log?: (s: string) => void;
+  /** /healthz 报的网关版本；另一个 droidpier 启动时靠它判断谁更新（gateway/src/already-running.ts）。 */
+  version?: string;
 }): Promise<{ port: number; close(): Promise<void> }> {
   const log = opts.log ?? ((s: string) => console.log(s));
   const root = resolve(opts.staticDir);
@@ -166,6 +168,10 @@ export async function startServer(opts: {
       rel = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
     } catch {
       res.writeHead(400).end();
+      return;
+    }
+    if (rel === "/healthz") {
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ app: "droidpier", version: opts.version ?? "" }));
       return;
     }
     if (rel === "/" || rel === APP_PATH.slice(0, -1)) {
@@ -783,6 +789,11 @@ export async function startServer(opts: {
   await new Promise<void>((res, rej) => {
     http.once("error", rej);
     http.listen(opts.port, "127.0.0.1", () => res());
+  }).catch((e) => {
+    // 端口被占等 listen 失败：停掉定时器，调用方才能干净地退出或换端口
+    clearInterval(ticker);
+    clearInterval(debugTimer);
+    throw e;
   });
   const addr = http.address();
   gatewayPort = typeof addr === "object" && addr ? addr.port : opts.port;

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>emu bench</title>
+<style>
+  body { margin: 0; background: #111; color: #ddd; font: 13px/1.4 -apple-system, sans-serif; display: flex; gap: 16px; padding: 12px; }
+  canvas { width: 540px; height: 1170px; background: #000; cursor: pointer; touch-action: none; }
+  #side { display: flex; flex-direction: column; gap: 8px; min-width: 260px; }
+  pre { margin: 0; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="side">
+  <label>模式
+    <select id="mode">
+      <option>rgba</option><option>rgba-mmap</option><option>jpeg</option><option>png</option>
+    </select>
+  </label>
+  <pre id="stats"></pre>
+</div>
+<script>
+// 第 0 阶段测速页（试验代码）
+// 按画布实际像素取帧（CSS 540x1170 × devicePixelRatio），否则 Retina 上会糊
+const DPR = Math.round(window.devicePixelRatio || 1);
+const W = 540 * DPR, H = 1170 * DPR, HEAD = 16;
+const cv = document.getElementById("c"); cv.width = W; cv.height = H;
+const gl = cv.getContext("webgl2", { antialias: false });
+const vs = `#version 300 es
+in vec2 p; out vec2 uv; uniform float flip;
+void main(){ uv = vec2((p.x+1.)/2., flip > .5 ? (1.-p.y)/2. : (p.y+1.)/2.); gl_Position = vec4(p,0,1); }`;
+const fs = `#version 300 es
+precision mediump float; in vec2 uv; uniform sampler2D t; out vec4 o;
+void main(){ o = vec4(texture(t, uv).rgb, 1.); }`;
+function sh(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
+const prog = gl.createProgram();
+gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(prog); gl.useProgram(prog);
+const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const loc = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+const flipLoc = gl.getUniformLocation(prog, "flip");
+const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, W, H);
+
+// 实测（模拟器 32.1.14）：RGBA 帧是自上而下的行序，与 proto 注释“bottom up”相反；纹理首行在 t=0（底部），所以统一翻转
+const FLIP = { rgba: 1, "rgba-mmap": 1, jpeg: 1, png: 1 };
+
+const st = { mode: "rgba", recv: 0, drawn: 0, fps: 0, rfps: 0, lastSeq: -1, lat: [], pending: null, bytes: 0, gwToDraw: 0 };
+window.bench = st;
+let ws, latest = null, newFrame = false;
+
+function sig() {
+  const px = new Uint8Array(4), out = [];
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    gl.readPixels(Math.floor((i + .5) * W / 8), Math.floor((j + .5) * H / 8), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    out.push(px[0], px[1], px[2]);
+  }
+  return out.join(",");
+}
+
+function connect() {
+  if (ws) ws.close();
+  st.mode = document.getElementById("mode").value;
+  ws = new WebSocket(`ws://${location.host}/?mode=${st.mode}&w=${W}&h=${H}`);
+  ws.binaryType = "arraybuffer";
+  ws.onmessage = async (e) => {
+    const dv = new DataView(e.data);
+    const seq = dv.getUint32(0, true);
+    st.recv++; st.bytes += e.data.byteLength;
+    const body = new Uint8Array(e.data, HEAD);
+    if (st.mode === "jpeg" || st.mode === "png") {
+      const bmp = await createImageBitmap(new Blob([body], { type: st.mode === "jpeg" ? "image/jpeg" : "image/png" }));
+      if (latest?.bmp) latest.bmp.close();
+      latest = { seq, bmp };
+    } else {
+      latest = { seq, px: body };
+    }
+    newFrame = true;
+  };
+}
+
+function frame() {
+  if (newFrame && latest) {
+    newFrame = false;
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (latest.bmp) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, latest.bmp);
+    else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, latest.px);
+    gl.uniform1f(flipLoc, FLIP[st.mode]);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    st.drawn++; st.drawnTotal = (st.drawnTotal || 0) + 1; st.onDraw?.(performance.now()); st.lastSeq = latest.seq;
+    const p = st.pending;
+    if (p && latest.seq !== p.seq && sig() !== p.sig) {
+      st.lat.push(Math.round(performance.now() - p.t0));
+      st.pending = null;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+setInterval(() => {
+  st.fps = st.drawn; st.rfps = st.recv;
+  const l = [...st.lat].slice(-10).sort((a, b) => a - b);
+  const med = l.length ? l[Math.floor(l.length / 2)] : "-";
+  document.getElementById("stats").textContent =
+    `mode ${st.mode}\n画面帧率 ${st.fps} fps（收到 ${st.rfps}/s）\n平均每帧 ${st.recv ? Math.round(st.bytes / st.recv / 1024) : 0} KB\n点击延迟（最近 10 次中位数）${med} ms\n全部延迟 ${st.lat.join(", ")}`;
+  st.drawn = 0; st.recv = 0; st.bytes = 0;
+}, 1000);
+
+let down = false;
+const pos = (e) => { const r = cv.getBoundingClientRect(); return { x: Math.round((e.clientX - r.left) * 1080 / r.width), y: Math.round((e.clientY - r.top) * 2340 / r.height) }; };
+const send = (o) => ws?.readyState === 1 && ws.send(JSON.stringify(o));
+cv.addEventListener("pointerdown", (e) => {
+  down = true; try { cv.setPointerCapture(e.pointerId); } catch {}
+  st.pending = { t0: performance.now(), seq: st.lastSeq, sig: sig() };
+  send({ t: "touch", ...pos(e), down: true });
+});
+cv.addEventListener("pointermove", (e) => { if (down) send({ t: "touch", ...pos(e), down: true }); });
+cv.addEventListener("pointerup", (e) => { down = false; send({ t: "touch", ...pos(e), down: false }); });
+document.getElementById("mode").onchange = () => { st.lat = []; connect(); };
+connect();
+
+// 自动测速：同一套拖动+点击，返回 { mode, dragFps, tapMedianMs, taps }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function ev(type, dx, dy) {
+  const r = cv.getBoundingClientRect();
+  cv.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, clientX: r.left + dx * r.width / 1080, clientY: r.top + dy * r.height / 2340 }));
+}
+// 统一口径（见 spike/measure.ts）：连续 16 次上下滑动、不停顿；按“每秒绘制帧数”分桶，调用方取中位数
+window.useMode = async (mode) => {
+  if (st.mode !== mode || ws?.readyState !== 1) { document.getElementById("mode").value = mode; connect(); }
+  await sleep(1500);
+};
+window.runDrag = async () => {
+  const ts = [];
+  st.onDraw = (t) => ts.push(t);
+  for (let k = 0; k < 16; k++) {
+    const [a, b] = k % 2 ? [500, 1900] : [1900, 500];
+    ev("pointerdown", 540, a);
+    for (let i = 1; i <= 20; i++) { await sleep(16); ev("pointermove", 540, a + (b - a) * i / 20); }
+    ev("pointerup", 540, b);
+  }
+  await sleep(600);
+  st.onDraw = null;
+  const perSec = [];
+  for (const t of ts) { const i = Math.floor((t - ts[0]) / 1000); perSec[i] = (perSec[i] || 0) + 1; }
+  return { perSec: Array.from(perSec, (n) => n || 0) };
+};
+window.runTaps = async (n = 30, tapX = 163, tapY = 1212) => {
+  st.lat = []; st.pending = null;
+  for (let k = 0; k < n; k++) {
+    ev("pointerdown", tapX, tapY); await sleep(60); ev("pointerup", tapX, tapY);
+    await sleep(1200); send({ t: "key", key: "GoHome" }); await sleep(1200);
+  }
+  return { taps: st.lat.slice() };
+};
+</script>
+</body>
+</html>

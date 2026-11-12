@@ -1,0 +1,52 @@
+// 把网关打成单个 darwin-arm64 可执行文件，nsh 页面产物整个目录嵌进去；再打一份 .tar.xz 给下载用
+// 用法：bun scripts/build-binary.ts（先跑 build:ui 生成 .nsh/out/Droidpier）
+import { cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { basename, join } from "node:path";
+
+const root = join(import.meta.dir, "..");
+const ui = join(root, ".nsh/out/Droidpier");
+const dist = join(root, "dist");
+const stage = join(dist, "stage", basename(ui));
+const name = "droidpier-darwin-arm64";
+const out = join(dist, name);
+// Cloudflare Pages 单个文件上限 25 MiB
+const PAGES_LIMIT = 25 * 2 ** 20;
+
+await stat(join(ui, "index.html")).catch(() => {
+  throw new Error(`没有页面产物：${ui}，先跑 build:ui`);
+});
+// .br / .gz 是给带压缩协商的静态服务器用的，网关只发原文件，不嵌进去
+await rm(join(dist, "stage"), { recursive: true, force: true });
+await mkdir(stage, { recursive: true });
+await cp(ui, stage, { recursive: true, filter: (src) => !/\.(br|gz)$/.test(src) });
+
+// --asset 嵌入的目录在运行时位于 import.meta.dir/<目录名>，main.ts 按这个路径找页面
+const r = await Bun.build({
+  entrypoints: [join(root, "gateway/src/main.ts")],
+  compile: { target: "bun-darwin-arm64", outfile: out, assets: [stage] },
+  minify: true,
+});
+if (!r.success) {
+  for (const l of r.logs) console.error(l);
+  process.exit(1);
+}
+await rm(join(dist, "stage"), { recursive: true, force: true });
+
+// 可执行文件约 65 MiB，超过 Pages 上限。gzip -9 压完仍超 25 MiB；xz -9 约 18 MiB，
+// 且 macOS 自带的 /usr/bin/tar（libarchive + liblzma）能直接解，install.sh 不用额外装工具（2026-11-12 实测）
+const xz = `${out}.tar.xz`;
+execFileSync("/usr/bin/tar", ["-cJf", xz, "--options", "xz:compression-level=9", "-C", dist, name]);
+const bin = await stat(out);
+const packed = await Bun.file(xz).bytes();
+const sha = createHash("sha256").update(packed).digest("hex");
+await writeFile(`${xz}.sha256`, `${sha}  ${name}.tar.xz\n`);
+
+const mib = (n: number) => `${(n / 2 ** 20).toFixed(1)} MiB`;
+console.log(`${out}：${mib(bin.size)}`);
+console.log(`${xz}：${mib(packed.length)}  sha256 ${sha}`);
+if (packed.length > PAGES_LIMIT) {
+  console.error(`压缩后仍超过 Cloudflare Pages 单文件上限 ${mib(PAGES_LIMIT)}`);
+  process.exit(1);
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Droidpier",
+  "id": "dev.devpier.droidpier",
+  "capabilities": {
+    "host": ["emu.*"]
+  },
+  "web": {
+    "host": "./host.js",
+    "connect": ["127.0.0.1", "localhost"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "droidpier",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test gateway/test/*.test.ts shared/test/*.test.ts",
+    "start": "node gateway/src/main.ts",
+    "test:it": "EMU_IT=1 node --test gateway/test/emulator.it.test.ts",
+    "build:host": "bun build host/src/main.ts --outfile ui/host.js --format esm --target browser",
+    "build:ui": "bun run build:host && NSH=\"${NSH:-nsh}\" && { command -v \"$NSH\" >/dev/null || { echo \"build:ui \u9700\u8981 nsh\uff1a\u628a NSH \u8bbe\u6210 nsh \u53ef\u6267\u884c\u6587\u4ef6\u7684\u8def\u5f84\uff0c\u6216\u628a nsh \u653e\u8fdb PATH\" >&2; exit 1; }; } && LLVM=\"${LLVM_BIN:-/opt/homebrew/opt/llvm/bin}\" && CC_wasm32_unknown_unknown=\"${CC_wasm32_unknown_unknown:-$LLVM/clang}\" AR_wasm32_unknown_unknown=\"${AR_wasm32_unknown_unknown:-$LLVM/llvm-ar}\" \"$NSH\" package ui --target web",
+    "build:bin": "bun run build:ui && bun scripts/build-binary.ts"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.8.1",
+    "sharp": "^0.35.5",
+    "ws": "^8.22.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2"
+  }
+}

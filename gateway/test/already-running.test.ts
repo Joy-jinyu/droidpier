@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { busyPortReport, explainBusyPort } from "../src/already-running.ts";
+import { busyPortReport, checkPortFirst, explainBusyPort } from "../src/already-running.ts";
 import { startServer } from "../src/server.ts";
 
 const URL_ = "https://droid.devpier.dev/app/";
@@ -82,4 +84,45 @@ test("explainBusyPort：占着端口的程序不回应时在超时后判定为�
   const port = await listen(t, () => {});
   const r = await explainBusyPort({ port, pageUrl: URL_, ownVersion: "x", timeoutMs: 200 });
   assert.equal(r.code, 1);
+});
+
+test("checkPortFirst：端口空着时返回 null，并且把端口放回去", async () => {
+  const free = await new Promise<number>((r) => {
+    const s = createServer().listen(0, "127.0.0.1", () => {
+      const p = (s.address() as { port: number }).port;
+      s.close(() => r(p));
+    });
+  });
+  assert.equal(await checkPortFirst({ port: free, pageUrl: URL_, ownVersion: "x" }), null);
+  // 检查完端口要能马上再绑
+  const again = createServer();
+  await new Promise<void>((r) => again.listen(free, "127.0.0.1", r));
+  await new Promise((r) => again.close(r));
+});
+
+test("checkPortFirst：端口被占时直接给出判断", async (t) => {
+  const port = await listen(t, (_req, res) => res.end("nope"));
+  const r = await checkPortFirst({ port, pageUrl: URL_, ownVersion: "x" });
+  assert.equal(r?.code, 1);
+});
+
+test("网关入口：端口上已有 droidpier 时先退出，不做环境检查和模拟器发现", async (t) => {
+  const port = await listen(t, (req, res) => {
+    if (req.url === "/healthz") res.end(JSON.stringify({ app: "droidpier", version: "" }));
+    else res.writeHead(404).end();
+  });
+  // 空的 HOME / SDK：旧顺序会先做发现，打印"没有找到带 gRPC 的运行中模拟器"
+  const home = await mkdtemp(join(tmpdir(), "emu-busy-home-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const main = fileURLToPath(new URL("../src/main.ts", import.meta.url));
+  const r = await new Promise<{ code: number; out: string }>((res) =>
+    execFile(process.execPath, [main, "--port", String(port), "--no-open", "--local"], {
+      env: { PATH: process.env.PATH, HOME: home, ANDROID_HOME: join(home, "sdk"), ANDROID_AVD_HOME: join(home, "avd") },
+      encoding: "utf8",
+      timeout: 20_000,
+    }, (e, stdout, stderr) => res({ code: e ? (typeof e.code === "number" ? e.code : 1) : 0, out: stdout + stderr })),
+  );
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, new RegExp(`droidpier 已经在运行（端口 ${port}）`));
+  assert.doesNotMatch(r.out, /模拟器|emulator-/);
 });

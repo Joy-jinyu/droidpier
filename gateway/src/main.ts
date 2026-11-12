@@ -20,7 +20,7 @@ import { waitForReboot } from "./reboot.ts";
 import { exitHandler } from "./exit.ts";
 import { allowedOrigins, isOrigin, PUBLIC_ORIGIN } from "./auth.ts";
 import { buildPageUrl, DEFAULT_PORT } from "./page-url.ts";
-import { explainBusyPort } from "./already-running.ts";
+import { checkPortFirst, explainBusyPort } from "./already-running.ts";
 
 // scripts/build-binary.ts 打包时把 DROIDPIER_VERSION 替换成构建时间；直接用源码跑时没有
 declare const DROIDPIER_VERSION: string | undefined;
@@ -47,6 +47,20 @@ for (const o of extraOrigins) {
     console.error(`--allow-origin 不合法：${o}（要写成 http://主机:端口）`);
     process.exit(1);
   }
+}
+
+/** 端口被占时打印判断、需要时打开页面，然后退出。 */
+function exitBusy(r: { code: 0 | 1; lines: string[] }, pageUrl: string): never {
+  for (const l of r.lines) (r.code ? console.error : console.log)(l);
+  if (r.code === 0 && !noOpen) openBrowser(pageUrl, (err) => console.log(`打开浏览器失败：${err.message}`));
+  process.exit(r.code);
+}
+
+// 再运行一次安装命令时常见：同一个端口上已经有一个 droidpier。先查端口，免得连上模拟器再退出
+{
+  const pageUrl = buildPageUrl(process.argv, port);
+  const r = await checkPortFirst({ port, pageUrl, ownVersion: VERSION });
+  if (r) exitBusy(r, pageUrl);
 }
 
 let lastNote = "";
@@ -128,13 +142,10 @@ const srv = await startServer({
   },
 }).catch(async (e: NodeJS.ErrnoException) => {
   if (e.code !== "EADDRINUSE") throw e;
-  // 再运行一次安装命令时常见：同一个端口上已经有一个 droidpier
+  // 启动前查过端口还是被抢了（两次几乎同时运行）
   last?.close();
   const pageUrl = buildPageUrl(process.argv, port);
-  const r = await explainBusyPort({ port, pageUrl, ownVersion: VERSION });
-  for (const l of r.lines) (r.code ? console.error : console.log)(l);
-  if (r.code === 0 && !noOpen) openBrowser(pageUrl, (err) => console.log(`打开浏览器失败：${err.message}`));
-  process.exit(r.code);
+  exitBusy(await explainBusyPort({ port, pageUrl, ownVersion: VERSION }), pageUrl);
 });
 const pageUrl = buildPageUrl(process.argv, srv.port);
 console.log(`droidpier: ${pageUrl}  (${first ? `emulator-${serial}` : "no emulator"})`);

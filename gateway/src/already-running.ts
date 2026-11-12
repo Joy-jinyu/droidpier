@@ -1,4 +1,5 @@
 // 端口已被占用时：看看占着的是不是另一个 droidpier，给出该怎么做
+import { createServer } from "node:net";
 import { INSTALL_CMD } from "../../shared/protocol.ts";
 
 /** 占着端口的程序。version 为 null 表示认得出是 droidpier 但它没报版本（加 /healthz 之前的版本）。 */
@@ -48,4 +49,18 @@ export async function probePort(port: number, timeoutMs = 1500): Promise<PortHol
 /** listen 报 EADDRINUSE 后调用：探测占用者，返回要打印的话和退出码。 */
 export async function explainBusyPort(o: { port: number; pageUrl: string; ownVersion: string; timeoutMs?: number }) {
   return busyPortReport({ ...o, running: await probePort(o.port, o.timeoutMs) });
+}
+
+/** 试着绑一下端口（和网关一样只绑 127.0.0.1），绑得上就马上放掉。 */
+function portFree(port: number): Promise<boolean> {
+  return new Promise((res) => {
+    const s = createServer();
+    s.once("error", () => res(false));
+    s.listen(port, "127.0.0.1", () => s.close(() => res(true)));
+  });
+}
+
+/** 网关启动前先看端口：空着返回 null；被占就探测占用者，返回要打印的话和退出码。 */
+export async function checkPortFirst(o: { port: number; pageUrl: string; ownVersion: string; timeoutMs?: number }) {
+  return (await portFree(o.port)) ? null : explainBusyPort(o);
 }

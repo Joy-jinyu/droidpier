@@ -749,17 +749,22 @@ function App() {
     }
     if (!pageHidden() && dev) refresh();
   });
-  const tick = () => setTimeout(() => {
-    if (!pageHidden()) refresh();
-    tick();
-  }, h5PollMs(okStreak, inspected() !== null));
+  let pollTimer: ReturnType<typeof setTimeout> | undefined;
+  const tick = () => {
+    pollTimer = setTimeout(() => {
+      if (!pageHidden()) refresh();
+      tick();
+    }, h5PollMs(okStreak, inspected() !== null));
+  };
   tick();
+  cleanup(() => clearTimeout(pollTimer));
   const h5Key = () => h5KeyShown({ connected: device() !== 0, adbStuck: listAdbStuck(), consoleOpen: h5Open(), list: pages() });
   // 设备断开时控制台没有东西可看，和点关闭一样收起
   effect(() => {
     if (h5Open() && !device()) {
       closeDevtools();
       h5Open.set(false);
+      showNotice({ text: "页面已关闭，控制台已收起" });
     }
   });
 

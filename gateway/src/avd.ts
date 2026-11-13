@@ -2,7 +2,7 @@ import { readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:f
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { androidUserHome, avdHome as defaultAvdHome, emulatorBin, adbBin, discoveryDir as defaultDiscoveryDir } from "./platform.ts";
+import { androidUserHome, avdHome as defaultAvdHome, emulatorBin, emulatorEnv, adbBin, discoveryDir as defaultDiscoveryDir } from "./platform.ts";
 import { discoveryAvdName, pidAlive } from "./discovery.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 import { avdNameError, displayNameError } from "../../shared/avd-spec.ts";
@@ -54,6 +54,9 @@ export function parseAvdConfig(text: string): Pick<AvdInfo, "displayName" | "wid
 
 /** 不经过 shell 跑命令：SDK 路径可能带空格（比如装在名字带空格的外置盘上）。 */
 type ExecFn = (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
+
+/** 真的跑命令：emulator 带上网关算出的 ANDROID_AVD_HOME（emulatorEnv）。 */
+const realExec: ExecFn = (file, args) => execFileP(file, args, { env: emulatorEnv() });
 
 type Deps = {
   exec: ExecFn;
@@ -123,7 +126,7 @@ async function avdIds(execFn: ExecFn): Promise<string[]> {
 
 /** 列出所有 AVD 及其运行状态。支持注入依赖方便测试。 */
 export async function listAvds(deps?: Partial<Deps>): Promise<AvdInfo[]> {
-  const execFn: ExecFn = deps?.exec ?? ((file, args) => execFileP(file, args));
+  const execFn: ExecFn = deps?.exec ?? realExec;
   const discDir = deps?.discoveryDir ?? defaultDiscoveryDir();
   const home = deps?.avdHome ?? defaultAvdHome();
 
@@ -228,7 +231,7 @@ export async function renameAvd(name: string, displayName: string, deps?: Partia
   const error = displayNameError(displayName);
   if (error) throw new Error(error);
   // 只跑 -list-avds，不跑 listAvds：它还要问 adb，adb 卡住时改名不能跟着卡
-  if (!(await avdIds(deps?.exec ?? ((file, args) => execFileP(file, args)))).includes(name)) throw new Error(`没有这个设备：${name}`);
+  if (!(await avdIds(deps?.exec ?? realExec)).includes(name)) throw new Error(`没有这个设备：${name}`);
   const found = await resolveConfigIni(deps?.avdHome ?? defaultAvdHome(), name);
   if (!found) throw new Error(`找不到 ${name} 的 config.ini`);
   // config.ini 是符号链接时改它指向的文件，换过去也不能把链接换成普通文件
@@ -321,7 +324,7 @@ export async function deleteAvd(name: string, deps?: Partial<DeleteDeps>): Promi
   const home = deps?.avdHome ?? defaultAvdHome();
   const userHome = deps?.userHome ?? androidUserHome();
   const alive = deps?.alive ?? pidAlive;
-  if (!(await avdIds(deps?.exec ?? ((file, args) => execFileP(file, args)))).includes(name)) throw new Error(`没有这个设备：${name}`);
+  if (!(await avdIds(deps?.exec ?? realExec)).includes(name)) throw new Error(`没有这个设备：${name}`);
   const iniFile = join(home, `${name}.ini`);
   const ini = await readFile(iniFile, "utf8").catch(() => null);
   if (ini === null) throw new Error(`找不到 ${iniFile}`);

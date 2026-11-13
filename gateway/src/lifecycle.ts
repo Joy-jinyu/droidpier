@@ -5,7 +5,7 @@ import net from "node:net";
 import { dirname } from "node:path";
 import { listAvds, repairAvdTarget } from "./avd.ts";
 import { findOwnRunning, pidAlive, type Running } from "./discovery.ts";
-import { emulatorBin, emulatorLogPath } from "./platform.ts";
+import { emulatorBin, emulatorEnv, emulatorLogPath } from "./platform.ts";
 import { bootLogHint, bootLogReason, bootStuckDetail } from "./boot-log.ts";
 import { adb, ADB_TIMEOUT_MS } from "./adb.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
@@ -92,7 +92,7 @@ const defaults: LifecycleDeps = {
     const log = openLog(logPath);
     let c: ChildProcess;
     try {
-      c = spawnCp(cmd, args, { detached: true, stdio: ["ignore", log, log] });
+      c = spawnCp(cmd, args, { detached: true, stdio: ["ignore", log, log], env: emulatorEnv() });
     } finally {
       if (log !== "ignore") closeSync(log);
     }

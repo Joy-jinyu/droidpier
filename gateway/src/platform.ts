@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readdirSync } from "node:fs";
 import { stat, statfs } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
@@ -95,9 +96,26 @@ export function explicitAvdHome(): string | undefined {
   return process.env.ANDROID_AVD_HOME || undefined;
 }
 
-/** AVD 主目录，和模拟器找 AVD 的顺序一样：ANDROID_AVD_HOME（非空），其次 <Android 用户目录>/avd。 */
+/**
+ * AVD 主目录，照 developer.android.com/tools/variables 的顺序：ANDROID_AVD_HOME（非空）；其次 $ANDROID_USER_HOME/avd，
+ * 但只在它里面已经有 .ini 时（AVD 还留在老地方的用户不会因为设了 ANDROID_USER_HOME 就“没有设备”）；最后 ~/.android/avd。
+ * 各版本模拟器自己的找法不一样（32.1 完全不认 ANDROID_USER_HOME），所以网关拉起模拟器时用 emulatorEnv 把这个结果显式传过去。
+ */
 export function avdHome(): string {
-  return explicitAvdHome() ?? join(androidUserHome(), "avd");
+  const explicit = explicitAvdHome();
+  if (explicit) return explicit;
+  if (process.env.ANDROID_USER_HOME) {
+    const dir = join(process.env.ANDROID_USER_HOME, "avd");
+    try {
+      if (readdirSync(dir).some((n) => n.endsWith(".ini"))) return dir;
+    } catch {}
+  }
+  return join(homedir(), ".android/avd");
+}
+
+/** 网关拉起 emulator（-list-avds、-avd）用的环境：带上 ANDROID_AVD_HOME=avdHome()，模拟器和网关看同一个目录。 */
+export function emulatorEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, ANDROID_AVD_HOME: avdHome() };
 }
 
 /** Android 用户目录：ANDROID_USER_HOME（非空），其次 ~/.android。AVD .ini 里的 path.rel 相对它。 */

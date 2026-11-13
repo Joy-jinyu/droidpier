@@ -181,6 +181,29 @@ test("创建 AVD：用选的名字、机型和镜像，config.ini 的 hw.ramSize
   assert.match(ini, /hw\.lcd\.height=1920/);
 });
 
+test("创建 AVD：avdmanager 把带小版本的镜像写成 target=android-0 时，按镜像改回 android-36.1", async () => {
+  let avdHome = "";
+  const f = await fakes({
+    onSpawn: async (p) => {
+      const dir = join(avdHome, "Pixel_5_API_36.1.avd");
+      await mkdir(dir, { recursive: true });
+      // 命令行工具 19.0 对 android-36.1 镜像实际写出的 .ini（2026-11-13 实测）
+      await writeFile(join(avdHome, "Pixel_5_API_36.1.ini"), `avd.ini.encoding=UTF-8\npath=${dir}\npath.rel=avd/Pixel_5_API_36.1.avd\ntarget=android-0\n`);
+      await writeFile(join(dir, "config.ini"), "image.sysdir.1=system-images/android-36.1/google_apis_playstore/arm64-v8a/\nhw.ramSize=2048\n");
+      p.finish(0);
+    },
+  });
+  avdHome = f.avdHome;
+  const spec = { name: "Pixel_5_API_36.1", device: "pixel_5", image: "system-images;android-36.1;google_apis_playstore;arm64-v8a", ramMb: 4096 };
+  const ps: Progress[] = [];
+  await createInstaller(f.deps).run(["avd"], (p) => ps.push(p), undefined, spec);
+  assert.equal(lastOf(ps, "avd")?.phase, "done");
+  const ini = await readFile(join(f.avdHome, "Pixel_5_API_36.1.ini"), "utf8");
+  assert.match(ini, /^target=android-36\.1$/m);
+  assert.doesNotMatch(ini, /android-0/);
+  assert.match(ini, /^path\.rel=avd\/Pixel_5_API_36\.1\.avd$/m);
+});
+
 test("没有 spec 时不创建 AVD", async () => {
   const f = await fakes();
   const ps: Progress[] = [];

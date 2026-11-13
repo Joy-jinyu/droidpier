@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { startAvd, stopAvd, type LifecycleDeps } from "../src/lifecycle.ts";
+import { repairAvdTarget } from "../src/avd.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 import type { Running } from "../src/discovery.ts";
 
@@ -29,6 +34,10 @@ function fakes(
     killLog?: string;
     /** 模拟器起来了但一直找不到它的发现文件 */
     undiscovered?: boolean;
+    /** 启动前修 target 时抛错 */
+    repairFails?: boolean;
+    /** 启动前修 target 用真的 repairAvdTarget，AVD 目录在这里；不给时不修 */
+    avdHome?: string;
   } = {},
 ) {
   let now = 0;
@@ -36,6 +45,8 @@ function fakes(
   const execs: string[] = [];
   const booted = new Map<string, Running>();
   const logs = new Map<string, string>();
+  // 每次拉起模拟器时它看到的 <name>.ini（给了 avdHome 才记）
+  const iniAtSpawn: string[] = [];
   const deps: LifecycleDeps = {
     now: () => now,
     sleep: async (ms) => {
@@ -45,10 +56,15 @@ function fakes(
     logPath: (name) => `/logs/${name}.log`,
     readLog: async (path) => (opts.noLog ? null : (logs.get(path) ?? null)),
     portFree: async (p) => !(opts.busy ?? []).includes(p),
+    repairTarget: async (name) => {
+      if (opts.repairFails) throw new Error("读不到 .ini");
+      if (opts.avdHome) await repairAvdTarget(name, { avdHome: opts.avdHome });
+    },
     listAvds: async () => opts.avds ?? [{ name: "A", running: "no" }, { name: "B", running: "no" }],
     findRunning: async (name) => (opts.preRunning?.avdName === name ? opts.preRunning : opts.undiscovered ? null : (booted.get(name) ?? null)),
     alive: () => opts.deadAtMs === undefined || now < opts.deadAtMs,
     spawn: (cmd, args, logPath) => {
+      if (opts.avdHome) iniAtSpawn.push(readFileSync(join(opts.avdHome, `${args[args.indexOf("-avd") + 1]}.ini`), "utf8"));
       logs.set(logPath, opts.log ?? "");
       const cbs: Array<(code: number | null) => void> = [];
       const s: Spawned = { cmd, args, killed: false, unref: false, exit: (code) => cbs.splice(0).forEach((cb) => cb(code)) };
@@ -69,8 +85,43 @@ function fakes(
       return Promise.resolve("");
     },
   };
-  return { deps, spawned, execs, now: () => now };
+  return { deps, spawned, execs, iniAtSpawn, now: () => now };
 }
+
+/** 一台 target 写坏的 AVD A：<home>/A.ini 是 target=android-0，镜像是 android-36.1。 */
+async function brokenAvdHome(t: import("node:test").TestContext): Promise<string> {
+  const home = await mkdtemp(join(tmpdir(), "emu-lifecycle-test-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await mkdir(join(home, "A.avd"));
+  await writeFile(join(home, "A.avd/config.ini"), "image.sysdir.1=system-images/android-36.1/google_apis_playstore/arm64-v8a/\n");
+  await writeFile(join(home, "A.ini"), `path=${join(home, "A.avd")}\ntarget=android-0\n`);
+  return home;
+}
+
+test("target 写坏的 AVD：模拟器拉起时看到的已经是修正后的 .ini", async (t) => {
+  const avdHome = await brokenAvdHome(t);
+  const f = fakes({ avdHome });
+  const job = startAvd("A", f.deps);
+  await job.done;
+  assert.equal(job.progress, "ready");
+  assert.equal(f.iniAtSpawn.length, 1);
+  assert.match(f.iniAtSpawn[0], /^target=android-36\.1$/m);
+});
+
+test("修正 target 失败不挡启动", async () => {
+  const f = fakes({ repairFails: true });
+  const job = startAvd("A", f.deps);
+  await job.done;
+  assert.equal(job.progress, "ready");
+});
+
+test("已经在运行的 AVD 直接接管，不去改它的 .ini", async (t) => {
+  const avdHome = await brokenAvdHome(t);
+  const pre = { pid: 1, serial: 5554, grpcPort: 8554, avdName: "A" };
+  const f = fakes({ avds: [{ name: "A", running: "grpc" }], preRunning: pre, avdHome });
+  await startAvd("A", f.deps).done;
+  assert.match(await readFile(join(avdHome, "A.ini"), "utf8"), /^target=android-0$/m);
+});
 
 test("重复 start 返回同一个进行中的任务", async () => {
   const f = fakes();

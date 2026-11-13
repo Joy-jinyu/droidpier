@@ -3,7 +3,7 @@ import { closeSync, mkdirSync, openSync } from "node:fs";
 import { open } from "node:fs/promises";
 import net from "node:net";
 import { dirname } from "node:path";
-import { listAvds } from "./avd.ts";
+import { listAvds, repairAvdTarget } from "./avd.ts";
 import { findOwnRunning, pidAlive, type Running } from "./discovery.ts";
 import { emulatorBin, emulatorLogPath } from "./platform.ts";
 import { bootLogHint, bootLogReason, bootStuckDetail } from "./boot-log.ts";
@@ -28,6 +28,8 @@ export type LifecycleDeps = {
   /** 跑 adb，返回 stdout。 */
   adb: (args: string[]) => Promise<string>;
   listAvds: () => Promise<AvdInfo[]>;
+  /** 拉起模拟器前修正 AVD 写坏的 target（见 repairAvdTarget）。 */
+  repairTarget: (name: string) => Promise<unknown>;
   findRunning: (name: string) => Promise<Running | null>;
   alive: (pid: number) => boolean;
   portFree: (port: number) => Promise<boolean>;
@@ -108,6 +110,7 @@ const defaults: LifecycleDeps = {
   logPath: emulatorLogPath,
   readLog: readTail,
   listAvds: () => listAvds(),
+  repairTarget: (name) => repairAvdTarget(name),
   findRunning: (name) => findOwnRunning(name),
   alive: pidAlive,
   portFree,
@@ -167,6 +170,9 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
       const r = await d.findRunning(name);
       if (r) return r;
     }
+
+    // 修不了也照样启动：最坏是开得慢，不该因此起不来
+    await d.repairTarget(name).catch((e) => console.warn(`修正 ${name} 的 target 失败：${e instanceof Error ? e.message : String(e)}`));
 
     let port = GRPC_BASE_PORT;
     for (;; port += 2) {

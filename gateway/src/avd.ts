@@ -180,6 +180,37 @@ export async function listAvds(deps?: Partial<Deps>): Promise<AvdInfo[]> {
   return avds;
 }
 
+/**
+ * 修正 <avdHome>/<name>.ini 里写坏的 target=android-0，返回改成的值；不用改或改不了时返回 null。
+ * 命令行工具 19.0 给 android-36.1 这种带小版本的镜像建 AVD 时会写 android-0，模拟器读到它就不开 hvf，
+ * 退回软件模拟，开机超时（2026-11-13 实测 emulator 37.1.11、macOS 27.0.1）。正确的值从 config.ini 的镜像目录取。
+ */
+export async function repairAvdTarget(name: string, deps?: Partial<Pick<Deps, "avdHome">>): Promise<string | null> {
+  const home = deps?.avdHome ?? defaultAvdHome();
+  const iniPath = join(home, `${name}.ini`);
+  const ini = await readFile(iniPath, "utf8").catch(() => null);
+  // 允许 = 两边有空格、CRLF 换行；\r 原样留着，不改动文件的换行风格
+  const broken = /^target[ \t]*=[ \t]*android-0[ \t]*(\r?)$/m;
+  if (ini === null || !broken.test(ini)) return null;
+  const configPath = await resolveConfigIni(home, name);
+  const config = configPath ? await readFile(configPath, "utf8").catch(() => "") : "";
+  const sysdir = config.split("\n").find((l) => l.slice(0, l.indexOf("=")).trim() === "image.sysdir.1");
+  const target = sysdir && /(?:^|[\\/])(android-\d+(?:\.\d+)?)[\\/]/.exec(sysdir.slice(sysdir.indexOf("=") + 1).trim())?.[1];
+  if (!target) return null;
+  // 和 renameAvd 一样先写临时文件再换过去：写到一半出错不会留下半个 .ini，让设备从列表里消失
+  const path = await realpath(iniPath);
+  const { mode } = await stat(path);
+  const tmp = `${path}.droidpier-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    await writeFile(tmp, ini.replace(broken, `target=${target}$1`), { mode });
+    await rename(tmp, path);
+  } catch (e) {
+    await rm(tmp, { force: true });
+    throw e;
+  }
+  return target;
+}
+
 /** 把 text（ini）里 key 的每一行都换成 key=value（重复的行也换，读的一方取哪行都对）；没有这一行就加在末尾。 */
 function setIniValue(text: string, key: string, value: string): string {
   const isKey = (l: string) => l.includes("=") && l.slice(0, l.indexOf("=")).trim() === key;

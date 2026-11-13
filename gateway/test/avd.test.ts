@@ -4,7 +4,7 @@ import { chmod, lstat, readdir, readFile, rename, rm, symlink } from "node:fs/pr
 import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { parseAvdConfig, listAvds, renameAvd } from "../src/avd.ts";
+import { parseAvdConfig, listAvds, renameAvd, repairAvdTarget } from "../src/avd.ts";
 import { parseDiscovery } from "../src/discovery.ts";
 
 const fixturesDir = join(import.meta.dirname, "fixtures/avd");
@@ -211,4 +211,51 @@ test("listAvds SDK 路径带空格（比如装在名字带空格的外置盘上�
   const avds = await listAvds({ discoveryDir: discDir, avdHome });
 
   assert.deepEqual(avds.map((a) => [a.name, a.running, a.serial]), [["Pixel_5_API_34", "no-grpc", 5554]]);
+});
+
+/** 一台 target 写坏的 AVD：<avdHome>/<id>.ini 的 target 行是 target，config.ini 的镜像目录是 sysdir。 */
+async function brokenTarget(t: import("node:test").TestContext, target: string, sysdir: string) {
+  const { deps } = await oneAvd(t, `abi.type = arm64-v8a\nimage.sysdir.1 = ${sysdir}\n`);
+  const iniPath = join(deps.avdHome, "Resizable_Experimental.ini");
+  await writeFile(iniPath, `avd.ini.encoding=UTF-8\npath=${join(deps.avdHome, "Resizable_Experimental.avd")}\npath.rel=avd/Resizable_Experimental.avd\n${target}\n`);
+  return { deps, iniPath };
+}
+
+test("repairAvdTarget 把 target=android-0 按 config.ini 的镜像目录改成 android-36.1，其他行不动", async (t) => {
+  const { deps, iniPath } = await brokenTarget(t, "target=android-0", "system-images/android-36.1/google_apis_playstore/arm64-v8a/");
+  assert.equal(await repairAvdTarget("Resizable_Experimental", deps), "android-36.1");
+  const ini = await readFile(iniPath, "utf8");
+  assert.match(ini, /^target=android-36\.1$/m);
+  assert.doesNotMatch(ini, /android-0/);
+  assert.match(ini, /^path\.rel=avd\/Resizable_Experimental\.avd$/m);
+});
+
+test("repairAvdTarget 对正常的 target 和认不出的镜像目录什么都不改", async (t) => {
+  const ok = await brokenTarget(t, "target=android-35", "system-images/android-36.1/google_apis/arm64-v8a/");
+  const before = await readFile(ok.iniPath, "utf8");
+  assert.equal(await repairAvdTarget("Resizable_Experimental", ok.deps), null);
+  assert.equal(await readFile(ok.iniPath, "utf8"), before);
+
+  const odd = await brokenTarget(t, "target=android-0", "somewhere/else/");
+  const oddBefore = await readFile(odd.iniPath, "utf8");
+  assert.equal(await repairAvdTarget("Resizable_Experimental", odd.deps), null);
+  assert.equal(await readFile(odd.iniPath, "utf8"), oddBefore);
+});
+
+test("repairAvdTarget 没有这台 AVD 的 .ini 时返回 null，不抛错", async (t) => {
+  const { deps } = await oneAvd(t, "");
+  assert.equal(await repairAvdTarget("Nope", deps), null);
+});
+
+test("repairAvdTarget 认 = 两边的空格和 CRLF 换行，只改 target 那一行，换行风格不变", async (t) => {
+  const { deps, iniPath } = await brokenTarget(t, "target = android-0", "system-images/android-36.1/google_apis/arm64-v8a/");
+  await writeFile(iniPath, "avd.ini.encoding=UTF-8\r\ntarget = android-0\r\n\r\npath.rel=avd/Resizable_Experimental.avd\r\n");
+  assert.equal(await repairAvdTarget("Resizable_Experimental", deps), "android-36.1");
+  assert.equal(await readFile(iniPath, "utf8"), "avd.ini.encoding=UTF-8\r\ntarget=android-36.1\r\n\r\npath.rel=avd/Resizable_Experimental.avd\r\n");
+});
+
+test("repairAvdTarget 也认反斜杠分隔的镜像目录", async (t) => {
+  const { deps, iniPath } = await brokenTarget(t, "target=android-0", "system-images\\android-36.1\\google_apis\\arm64-v8a\\");
+  assert.equal(await repairAvdTarget("Resizable_Experimental", deps), "android-36.1");
+  assert.match(await readFile(iniPath, "utf8"), /^target=android-36\.1$/m);
 });

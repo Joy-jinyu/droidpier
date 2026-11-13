@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { avdmanagerBin, CMDLINE_TOOLS_REVISION, MANIFEST_HOST, sdkmanagerBin } from "./platform.ts";
 import { SYSTEM_IMAGE } from "./setup.ts";
+import { repairAvdTarget } from "./avd.ts";
 import { INSTALL_IDS, type AvdSpec, type InstallProgress, type Licence } from "../../shared/protocol.ts";
 
 export type Progress = InstallProgress;
@@ -197,6 +198,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
     // avdmanager 会问要不要自定义硬件配置，答 no
     await runProc("avd", avdmanagerBin(deps.sdkRoot),
       ["create", "avd", "-n", spec.name, "-k", spec.image, "-d", spec.device], emit, onLicense, { stdin: "no\n", phase: "install" });
+    await repairAvdTarget(spec.name, { avdHome: deps.avdHome });
     const ini = await readFile(join(deps.avdHome, `${spec.name}.ini`), "utf8").catch(() => "");
     const dir = /^path=(.*)$/m.exec(ini)?.[1]?.trim() ?? join(deps.avdHome, `${spec.name}.avd`);
     const config = join(dir, "config.ini");

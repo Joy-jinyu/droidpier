@@ -1201,7 +1201,7 @@ function App() {
                   <If when={state() === "no-gateway" && upgrade()}>
                     {(cmd) => (
                       <View style={{ gap: 6 }}>
-                        <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>在终端运行下面的命令（第一次会自动安装，之后直接启动；保持终端开着），这个页面会自动连上</Text>
+                        <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>在终端运行下面的命令（第一次会自动安装，之后直接启动；它在后台运行，关闭终端也不影响），这个页面会自动连上</Text>
                         <CopyCmd cmd={cmd()} />
                       </View>
                     )}

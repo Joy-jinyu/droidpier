@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmod, lstat, readdir, readFile, rename, rm, symlink } from "node:fs/promises";
 import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { parseAvdConfig, listAvds, renameAvd, repairAvdTarget, deleteAvd } from "../src/avd.ts";
 import { parseDiscovery } from "../src/discovery.ts";
 
@@ -260,12 +260,14 @@ test("repairAvdTarget 也认反斜杠分隔的镜像目录", async (t) => {
   assert.match(await readFile(iniPath, "utf8"), /^target=android-36\.1$/m);
 });
 
-/** 删除用的临时 avdHome：两台 AVD（A 要删、B 留着），外加 avdHome 外的一个目录。 */
+/** 删除用的临时目录：userHome（相当于 ~/.android）下的 avd 是 avdHome，里面两台 AVD（A 要删、B 留着）；outside 在 avdHome 外。 */
 async function twoAvds(t: import("node:test").TestContext) {
-  const home = await mkdtemp(join(tmpdir(), "emu-avd-del-"));
+  const userHome = await mkdtemp(join(tmpdir(), "emu-user-del-"));
+  const home = join(userHome, "avd");
+  await mkdir(home);
   const disc = await mkdtemp(join(tmpdir(), "emu-disc-del-"));
   const outside = await mkdtemp(join(tmpdir(), "emu-outside-"));
-  t.after(() => Promise.all([home, disc, outside].map((d) => rm(d, { recursive: true, force: true }))));
+  t.after(() => Promise.all([userHome, disc, outside].map((d) => rm(d, { recursive: true, force: true }))));
   for (const n of ["A", "B"]) {
     await mkdir(join(home, `${n}.avd`));
     await writeFile(join(home, `${n}.avd`, "config.ini"), `avd.ini.displayname=${n}\n`);
@@ -276,15 +278,16 @@ async function twoAvds(t: import("node:test").TestContext) {
     exec: async (_file: string, args: string[]) => ({ stdout: args.includes("-list-avds") ? "A\nB\n" : "", stderr: "" }),
     discoveryDir: disc,
     avdHome: home,
-    alive: () => true,
-    avdmanager: async () => null,
+    userHome,
+    // 4242–4244 当作活着的模拟器进程，其余都不在
+    alive: (pid: number) => pid >= 4242 && pid <= 4244,
   };
   return { home, disc, outside, deps };
 }
 
 const exists = (p: string) => lstat(p).then(() => true, () => false);
 
-test("deleteAvd 没有 avdmanager 时删掉 <name>.ini 和它的 .avd 目录，别的 AVD 不动", async (t) => {
+test("deleteAvd 删掉 <name>.ini 和它的 .avd 目录，别的 AVD 不动", async (t) => {
   const { home, deps } = await twoAvds(t);
   await deleteAvd("A", deps);
   assert.equal(await exists(join(home, "A.ini")), false);
@@ -293,25 +296,31 @@ test("deleteAvd 没有 avdmanager 时删掉 <name>.ini 和它的 .avd 目录，�
   assert.equal(await exists(join(home, "B.avd", "config.ini")), true);
 });
 
-test("deleteAvd 有 avdmanager 时用 avdmanager delete avd -n <name>", async (t) => {
+test("deleteAvd path= 不是目录时按 path.rel（相对 ~/.android）找目录", async (t) => {
   const { home, deps } = await twoAvds(t);
-  const calls: string[][] = [];
-  const avdmanager = async () => async (args: string[]) => {
-    calls.push(args);
-    await rm(join(home, "A.avd"), { recursive: true });
-    await rm(join(home, "A.ini"));
-  };
-  await deleteAvd("A", { ...deps, avdmanager });
-  assert.deepEqual(calls, [["delete", "avd", "-n", "A"]]);
+  await writeFile(join(home, "A.ini"), `path=${join(home, "gone.avd")}\npath.rel=avd/A.avd\n`);
+  await deleteAvd("A", deps);
+  assert.equal(await exists(join(home, "A.avd")), false);
   assert.equal(await exists(join(home, "A.ini")), false);
-  assert.equal(await exists(join(home, "B.avd")), true);
 });
 
-test("deleteAvd avdmanager 失败时报它的原因；跑完还有文件留着也报错", async (t) => {
+test("deleteAvd path= 缺失、path.rel 指到别的 AVD 或 avdHome 外时拒绝，什么都不删", async (t) => {
+  const { home, outside, deps } = await twoAvds(t);
+  for (const rel of ["avd/B.avd", relative(dirname(home), outside)]) {
+    await writeFile(join(home, "A.ini"), `path.rel=${rel}\n`);
+    await assert.rejects(deleteAvd("A", deps));
+    assert.equal(await exists(join(home, "A.ini")), true, rel);
+  }
+  assert.equal(await exists(join(home, "B.avd", "config.ini")), true);
+  assert.equal(await exists(join(outside, "keep.txt")), true);
+});
+
+test("deleteAvd path= 和 path.rel 都不是目录时只删 .ini", async (t) => {
   const { home, deps } = await twoAvds(t);
-  await assert.rejects(deleteAvd("A", { ...deps, avdmanager: async () => async () => { throw new Error("Error: boom"); } }), /boom/);
-  assert.equal(await exists(join(home, "A.ini")), true);
-  await assert.rejects(deleteAvd("A", { ...deps, avdmanager: async () => async () => {} }), /没有删干净/);
+  await writeFile(join(home, "A.ini"), `path=${join(home, "gone.avd")}\npath.rel=avd/gone.avd\n`);
+  await deleteAvd("A", deps);
+  assert.equal(await exists(join(home, "A.ini")), false);
+  assert.equal(await exists(join(home, "A.avd", "config.ini")), true);
 });
 
 test("deleteAvd 拒绝运行中的设备：发现文件按名字对上", async (t) => {
@@ -331,25 +340,43 @@ test("deleteAvd 拒绝运行中的设备：发现文件名字不同但 avd.dir �
   assert.equal(await exists(join(home, "A.avd", "config.ini")), true);
 });
 
+test("deleteAvd 数据目录里的 .lock 记着活着的进程时当作运行中；进程不在了、空锁文件都不算", async (t) => {
+  const { home, deps } = await twoAvds(t);
+  await writeFile(join(home, "A.avd", "multiinstance.lock"), "");
+  await writeFile(join(home, "A.avd", "hardware-qemu.ini.lock"), "4244");
+  await assert.rejects(deleteAvd("A", deps), /先关闭这台设备再删除/);
+  assert.equal(await exists(join(home, "A.avd", "config.ini")), true);
+  // 模拟器崩溃后留下的旧锁（2026-11-13 实测停着的 AVD 目录里也有）
+  await writeFile(join(home, "A.avd", "hardware-qemu.ini.lock"), "99999");
+  await deleteAvd("A", deps);
+  assert.equal(await exists(join(home, "A.avd")), false);
+});
+
 test("deleteAvd .ini 的 path= 指到 avdHome 外面时拒绝，什么都不删", async (t) => {
   const { home, outside, deps } = await twoAvds(t);
   await writeFile(join(home, "A.ini"), `path=${outside}\n`);
-  let ran = false;
-  await assert.rejects(deleteAvd("A", { ...deps, avdmanager: async () => async () => { ran = true; } }), /不在/);
-  assert.equal(ran, false);
+  await assert.rejects(deleteAvd("A", deps), /不是 .* 里的 \.avd 目录/);
   assert.equal(await exists(join(outside, "keep.txt")), true);
   assert.equal(await exists(join(home, "A.ini")), true);
 });
 
-test("deleteAvd 拒绝指向 avdHome 本身、不以 .avd 结尾、别的 AVD 目录或相对路径的 path=", async (t) => {
+test("deleteAvd 拒绝 avdHome 本身、不以 .avd 结尾、不是 avdHome 的直接子目录、别的 AVD 的目录、互相包含的目录、相对路径", async (t) => {
   const { home, deps } = await twoAvds(t);
   await mkdir(join(home, "data"));
-  for (const path of [home, join(home, "data"), join(home, "B.avd"), "A.avd"]) {
+  await mkdir(join(home, "deep"));
+  await mkdir(join(home, "deep", "X.avd"));
+  await mkdir(join(home, "B.avd", "inner.avd"));
+  for (const path of [home, join(home, "data"), join(home, "deep", "X.avd"), join(home, "B.avd"), join(home, "B.avd", "inner.avd"), "A.avd"]) {
     await writeFile(join(home, "A.ini"), `path=${path}\n`);
     await assert.rejects(deleteAvd("A", deps), Error, path);
   }
-  assert.equal(await exists(join(home, "B.avd", "config.ini")), true);
+  // 别的 AVD 的 .ini 没写 path= 时，它的目录按 <avdHome>/<名>.avd 算
+  await writeFile(join(home, "B.ini"), "target=android-34\n");
+  await writeFile(join(home, "A.ini"), `path=${join(home, "B.avd")}\n`);
+  await assert.rejects(deleteAvd("A", deps));
+  assert.equal(await exists(join(home, "B.avd", "inner.avd")), true);
   assert.equal(await exists(join(home, "data")), true);
+  assert.equal(await exists(join(home, "deep", "X.avd")), true);
 });
 
 test("deleteAvd 不认识的 id、不合规的名字都拒绝", async (t) => {

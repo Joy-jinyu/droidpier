@@ -86,8 +86,8 @@ test("listAvds 认出显示名和 id 不同的运行中 AVD（发现文件按 av
   );
 
   const avds = await listAvds({
-    exec: async (cmd: string) => {
-      if (cmd.includes("-list-avds")) return { stdout: "Resizable_Experimental\n", stderr: "" };
+    exec: async (_file: string, args: string[]) => {
+      if (args.includes("-list-avds")) return { stdout: "Resizable_Experimental\n", stderr: "" };
       return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
     },
     discoveryDir: discDir,

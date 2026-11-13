@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { access, mkdir, mkdtemp, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { pipeline } from "node:stream/promises";
@@ -56,6 +56,22 @@ export function requireRepoUrl(href: string, what: string): void {
   if (u.protocol !== "https:" || u.hostname !== REPO_HOST) throw new StepError(`${what}不在 https://${REPO_HOST} 上，不用它：${href}`);
 }
 const exists = (p: string) => access(p).then(() => true, () => false);
+
+/** 安装用的临时目录：在 SDK 里，和装好的包同一块盘。 */
+const tmpRootOf = (sdk: string) => join(sdk, ".droidpier-tmp");
+
+/**
+ * 网关启动时删掉 <sdk>/.droidpier-tmp 里超过 maxAgeMs 没动过的目录（上次装到一半被杀掉留下的半个包）；
+ * 另一个网关正在用的不会这么老。删空了连 .droidpier-tmp 一起删。
+ */
+export async function cleanStaleInstallTmp(sdk: string, now: number, maxAgeMs = 86_400_000): Promise<void> {
+  const root = tmpRootOf(sdk);
+  for (const n of await readdir(root).catch(() => [] as string[])) {
+    const st = await stat(join(root, n)).catch(() => null);
+    if (st && now - st.mtimeMs > maxAgeMs) await rm(join(root, n), { recursive: true, force: true }).catch(() => {});
+  }
+  await rmdir(root).catch(() => {});
+}
 
 /**
  * 把 src 换到 target：已有的 target 先挪到 parking（调用方装好后删），新目录换不过去时把它挪回 target，
@@ -146,7 +162,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
     requireRepoUrl(url.href, "下载地址");
     await ensureLicence(id, pkg, emit, onLicense);
     const target = packageDir(deps.sdkRoot, pkgPath);
-    const tmpRoot = join(deps.sdkRoot, ".droidpier-tmp");
+    const tmpRoot = tmpRootOf(deps.sdkRoot);
     await mkdir(tmpRoot, { recursive: true });
     const tmp = await mkdtemp(join(tmpRoot, `${id}-`));
     try {

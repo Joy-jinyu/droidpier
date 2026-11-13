@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, utimes, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createServer } from "node:http";
-import { createInstaller, fetchWithIdle, realInstallerDeps, replaceDir, type InstallerDeps, type Licence, type Progress } from "../src/installer.ts";
+import { cleanStaleInstallTmp, createInstaller, fetchWithIdle, realInstallerDeps, replaceDir, type InstallerDeps, type Licence, type Progress } from "../src/installer.ts";
 import { licenceHashes } from "../src/sdk-repo.ts";
 import { H, REPO, SYS_IMG } from "./fixtures/repo-manifests.ts";
 
@@ -359,6 +359,21 @@ test("建设备时镜像没装：先装 spec 里的镜像再建", async (t) => {
   const avd = { name: "P", device: "pixel_5", image: "system-images;android-34;google_apis;arm64-v8a", ramMb: 4096 };
   const { ps } = await runWith(f.deps, ["avd", "system-image"], () => true, { avd });
   assert.deepEqual(ps.filter((p) => p.phase === "done").map((p) => p.id), ["system-image", "avd"]);
+});
+
+test("网关启动时：删掉 .droidpier-tmp 里一天前的残留目录，新的不动；目录不存在不报错", async (t) => {
+  const sdk = await mkdtemp(join(tmpdir(), "emu-stale-sdk-"));
+  t.after(() => rm(sdk, { recursive: true, force: true }));
+  await cleanStaleInstallTmp(sdk, Date.now());
+  const tmp = join(sdk, ".droidpier-tmp");
+  for (const d of ["emulator-old", "emulator-new"]) await mkdir(join(tmp, d, "unzip"), { recursive: true });
+  const old = new Date(Date.now() - 2 * 86_400_000);
+  await utimes(join(tmp, "emulator-old"), old, old);
+  await cleanStaleInstallTmp(sdk, Date.now());
+  assert.deepEqual(await readdir(tmp), ["emulator-new"]);
+  // 都删光了时连 .droidpier-tmp 一起删
+  await cleanStaleInstallTmp(sdk, Date.now() + 2 * 86_400_000);
+  assert.deepEqual(await readdir(sdk), []);
 });
 
 test("fetchWithIdle：服务器一直不回数据，过了空闲时限就失败", async (t) => {

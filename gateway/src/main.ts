@@ -10,7 +10,7 @@ import { avdHome, serviceLogPath, discoveryDir, emulatorBin, openBrowser, sdkRoo
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
-import { createInstaller, fetchWithIdle, realInstallerDeps, requireRepoUrl } from "./installer.ts";
+import { cleanStaleInstallTmp, createInstaller, fetchWithIdle, realInstallerDeps, requireRepoUrl } from "./installer.ts";
 import { buildCatalog, realCatalogDeps } from "./catalog.ts";
 import { createWebViews, defaultFetchJson, findFreePort, makeAdbExec, releasePort } from "./webviews.ts";
 import { createReverses } from "./reverse.ts";
@@ -116,6 +116,7 @@ async function discover(avdName?: string): Promise<EmulatorSession | null> {
 const getSession = cachedSession(discover);
 
 void cleanStaleUploads(tmpdir(), Date.now());
+void cleanStaleInstallTmp(sdkRoot(), Date.now());
 const env = await checkEnv(realEnvDeps());
 const installer = createInstaller(realInstallerDeps({ sdkRoot: sdkRoot(), avdHome: avdHome() }));
 const catalogDeps = realCatalogDeps({

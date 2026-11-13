@@ -468,14 +468,20 @@ function ToolGroup(props: { label: string; children: JSX.Element }) {
   );
 }
 
-/** 菜单里的一项：可带图标、右侧的说明（比如 ↗ 表示打开新页面）；danger 是删除这类破坏性操作。 */
-function Item(props: { label: string; onSelect: () => void; disabled?: boolean; danger?: boolean; icon?: IconName; trail?: string }) {
+/**
+ * 菜单里的一项：可带图标；trail 是右侧的短标记（比如 ↗ 表示打开新页面）；note 是标签下面的一行说明（比如不能点的原因）；
+ * danger 是删除这类破坏性操作。
+ */
+function Item(props: { label: string; onSelect: () => void; disabled?: boolean; danger?: boolean; icon?: IconName; trail?: string; note?: string }) {
   return (
     <MenuItem onSelect={props.onSelect} disabled={props.disabled}
       hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ backgroundColor: C.hover }} disabledStyle={{ opacity: 0.4 }}
       style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, ...ease(100) }}>
       <If when={props.icon}>{(i) => <Icon name={i()} size={16} tint={C.muted} />}</If>
-      <Text style={{ flex: 1, color: props.danger ? C.danger : C.text, fontSize: 13 }}>{props.label}</Text>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={{ color: props.danger ? C.danger : C.text, fontSize: 13 }}>{props.label}</Text>
+        <If when={props.note}>{(n) => <Text style={{ color: C.muted, fontSize: 11, lineHeight: 15 }}>{n()}</Text>}</If>
+      </View>
       <If when={props.trail}>{(t) => <Text style={{ color: C.muted, fontSize: 12 }}>{t()}</Text>}</If>
     </MenuItem>
   );
@@ -1223,7 +1229,7 @@ function App() {
   const DeviceRow = (props: { avd: () => Avd }) => {
     const a = props.avd;
     return (
-      <ContextMenu popupStyle={menuPopup()} popupStartingStyle={popOut(-4)} popupEndingStyle={popOut(-4)} trigger={
+      <ContextMenu offset={4} popupStyle={menuPopup()} popupStartingStyle={popOut(-4)} popupEndingStyle={popOut(-4)} trigger={
         <Button onPress={() => pickDevice(a())} selected={shown()?.name === a().name} accessibilityLabel={`${avdLabel(a())}，${avdStatus(a())}`}
           hoverStyle={{ backgroundColor: C.hover }} selectedStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} activeStyle={pressed(0.985)}
           style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: "transparent", ...ease() }}>
@@ -1238,7 +1244,7 @@ function App() {
         </Button>
       }>
         <Item label="重命名…" disabled={beingDeleted(a())} onSelect={() => openRename(a())} />
-        <Item label="删除…" danger trail={deleteReason(a()) ?? undefined} disabled={deleteReason(a()) !== null || beingDeleted(a())} onSelect={() => openDelete(a())} />
+        <Item label="删除…" danger note={deleteReason(a()) ?? undefined} disabled={deleteReason(a()) !== null || beingDeleted(a())} onSelect={() => openDelete(a())} />
       </ContextMenu>
     );
   };
@@ -1277,7 +1283,7 @@ function App() {
         </View>
       </If>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: C.lineSoft }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 12, paddingVertical: 10, paddingHorizontal: 16 }}>
           <If when={sidebarHidden()}>
             <IconBtn icon="panelLeft" label="展开侧栏" onPress={() => setSidebar(false)} />
           </If>
@@ -1313,7 +1319,7 @@ function App() {
                 </Toggle>
               </ToolGroup>
             </If>
-            <Menu popupStyle={menuPopup()} popupStartingStyle={popOut(-4)} popupEndingStyle={popOut(-4)} trigger={
+            <Menu align="end" offset={6} popupStyle={menuPopup()} popupStartingStyle={popOut(-4)} popupEndingStyle={popOut(-4)} trigger={
               <Button accessibilityLabel="更多操作" tooltip={<Tip label="更多操作" />} hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }}
                 activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, borderColor: C.lineSoft, backgroundColor: C.panel, ...ease() }}>
                 <Icon name="more" size={17} tint={C.keyText} />
@@ -1323,7 +1329,7 @@ function App() {
               <Item label="关闭模拟器" disabled={!shownIsLive() || state() !== "connected"} onSelect={() => act(host.call("emu.stop", {}))} />
               <MenuSeparator style={{ height: 1, marginVertical: 4, backgroundColor: C.line }} />
               <Item label="重命名…" disabled={!shown() || beingDeleted(shown()!)} onSelect={() => { const a = shown(); if (a) openRename(a); }} />
-              <Item label="删除…" danger trail={shown() ? deleteReason(shown()!) ?? undefined : undefined} disabled={!shown() || deleteReason(shown()!) !== null || beingDeleted(shown()!)}
+              <Item label="删除…" danger note={shown() ? deleteReason(shown()!) ?? undefined : undefined} disabled={!shown() || deleteReason(shown()!) !== null || beingDeleted(shown()!)}
                 onSelect={() => { const a = shown(); if (a) openDelete(a); }} />
             </Menu>
           </Toolbar>

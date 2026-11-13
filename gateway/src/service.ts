@@ -13,8 +13,8 @@ export { SERVICE_LABEL };
 /** launchd 不读 shell 配置，只给这个 PATH；网关用到的系统命令都在里面。 */
 const SERVICE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
-/** 运行 droidpier start 时 shell 里设了就带进 plist 的环境变量：SDK 和 AVD 放在非默认位置的用户靠它们。 */
-const PASSED_ENV = ["ANDROID_HOME", "ANDROID_AVD_HOME"];
+/** 带进 plist 的环境变量：SDK、AVD、Java 放在非默认位置的用户靠它们。这次运行 start 时没设就沿用上次存的。 */
+const PASSED_ENV = ["ANDROID_HOME", "ANDROID_AVD_HOME", "JAVA_HOME"];
 
 const LAUNCHCTL = "/bin/launchctl";
 
@@ -35,8 +35,8 @@ export type ServiceDeps = {
   rm(path: string): Promise<void>;
   /** 端口空着返回 null；会试着绑一下端口，服务可能正在启动时不要用。 */
   holder(port: number): Promise<PortHolder | null>;
-  /** 只问 /healthz，不碰端口；没有 droidpier 应答时返回 null。 */
-  health(port: number): Promise<{ version: string | null } | null>;
+  /** 只问 /healthz，不碰端口；没有 droidpier 应答时返回 null。pid 为 null 表示对方没报（旧版本）。 */
+  health(port: number): Promise<{ version: string | null; service: boolean; pid: number | null } | null>;
   open(url: string): void;
   sleep(ms: number): Promise<void>;
   log(s: string): void;
@@ -85,13 +85,38 @@ export function plistXml(o: { label: string; program: string[]; args: string[]; 
   ].join("\n");
 }
 
+function programArgs(xml: string): string[] {
+  const m = /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(xml);
+  return m ? [...m[1].matchAll(/<string>([\s\S]*?)<\/string>/g)].map((x) => unesc(x[1])) : [];
+}
+
 /** 从自己写的 plist 读回 --service 后面的用户参数。 */
 export function argsFromPlist(xml: string): string[] {
-  const m = /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(xml);
-  if (!m) return [];
-  const all = [...m[1].matchAll(/<string>([\s\S]*?)<\/string>/g)].map((x) => unesc(x[1]));
+  const all = programArgs(xml);
   const i = all.indexOf("--service");
   return i < 0 ? [] : all.slice(i + 1);
+}
+
+/** plist 里启动网关的命令（--service 之前的部分）。 */
+function programFromPlist(xml: string): string[] {
+  const all = programArgs(xml);
+  const i = all.indexOf("--service");
+  return i < 0 ? all : all.slice(0, i);
+}
+
+/** plist 里存的环境变量。 */
+function envFromPlist(xml: string): Record<string, string> {
+  const m = /<key>EnvironmentVariables<\/key>\s*<dict>([\s\S]*?)<\/dict>/.exec(xml);
+  const env: Record<string, string> = {};
+  for (const x of m?.[1].matchAll(/<key>([\s\S]*?)<\/key>\s*<string>([\s\S]*?)<\/string>/g) ?? []) env[unesc(x[1])] = unesc(x[2]);
+  return env;
+}
+
+/** DROIDPIER_SERVICE_LABEL（只给测试用）要能安全地拼进文件名和 launchctl 的目标名。 */
+export function serviceLabel(env: Record<string, string | undefined>): { label: string } | { error: string } {
+  const v = env.DROIDPIER_SERVICE_LABEL;
+  if (!v) return { label: SERVICE_LABEL };
+  return /^[A-Za-z0-9.-]+$/.test(v) && !v.includes("..") ? { label: v } : { error: `DROIDPIER_SERVICE_LABEL 不合法：${v}（只能有字母、数字、点和减号）` };
 }
 
 const paths = (d: ServiceDeps) => ({ plist: launchAgentPath(d.label, d.home), log: serviceLogPath(d.label, d.home) });
@@ -130,12 +155,18 @@ export async function serviceStart(d: ServiceDeps, o: { args: string[]; noOpen: 
     d.log(`后台服务的参数不对：${args.join(" ")}。重新指定参数运行 droidpier start，例如 droidpier start --port 7300`);
     return 1;
   }
+  const prevEnv = prev ? envFromPlist(prev) : {};
   const env: Record<string, string> = {};
-  for (const k of PASSED_ENV) if (d.env[k]) env[k] = d.env[k]!;
+  for (const k of PASSED_ENV) {
+    const v = d.env[k] || prevEnv[k];
+    if (v) env[k] = v;
+  }
   const xml = plistXml({ label: d.label, program: d.program, args, logPath: p.log, env });
 
   const before = await state(d);
-  if (before.pid === null) {
+  // 服务没在跑，或者要换到另一个端口：先看目标端口有没有被别人占着
+  const prevPort = prev ? portOf(argsFromPlist(prev)) : null;
+  if (before.pid === null || prevPort !== port) {
     const h = await d.holder(port);
     if (h) {
       d.log(
@@ -147,12 +178,17 @@ export async function serviceStart(d: ServiceDeps, o: { args: string[]; noOpen: 
     }
   }
 
+  if (prev && programFromPlist(prev).join(" ") !== d.program.join(" ")) d.log(`后台服务改为运行 ${d.program.join(" ")}`);
   await d.mkdir(dirname(p.plist));
   await d.mkdir(dirname(p.log));
   await d.writeFile(p.plist, xml);
   if (before.loaded && prev === xml) {
     // 配置没变：kickstart -k 杀掉旧进程再起，更新后的可执行文件就换上了
-    await d.exec(LAUNCHCTL, ["kickstart", "-k", target(d)]);
+    const r = await d.exec(LAUNCHCTL, ["kickstart", "-k", target(d)]);
+    if (r.code !== 0) {
+      d.log(`launchctl kickstart 失败：${(r.stderr || r.stdout).trim()}`);
+      return 1;
+    }
   } else {
     if (before.loaded) await d.exec(LAUNCHCTL, ["bootout", target(d)]);
     // bootout 返回时旧进程可能还在退出，这时 bootstrap 会失败，过一会儿再试
@@ -172,7 +208,9 @@ export async function serviceStart(d: ServiceDeps, o: { args: string[]; noOpen: 
   let pid: number | null = null;
   for (let waited = 0; ; waited += 500) {
     const s = await state(d);
-    if (s.pid !== null && s.pid !== before.pid && (await d.health(port))) {
+    // 只认 launchd 拉起的那个进程的应答：同一个端口上也可能有前台运行的 droidpier
+    const h = s.pid !== null && s.pid !== before.pid ? await d.health(port) : null;
+    if (h?.service && h.pid === s.pid) {
       pid = s.pid;
       break;
     }
@@ -212,7 +250,15 @@ export async function serviceStop(d: ServiceDeps): Promise<number> {
   await d.rm(p.plist);
   // bootout 返回时网关还在退出清理（最多 3 秒），launchd 这时仍列着它；等它真正退出，
   // 紧接着再运行 droidpier、droidpier start 或 status 才不会撞上正在退出的旧进程（2026-11-13 实测）
-  for (let waited = 0; waited < d.waitMs && (await state(d)).loaded; waited += 200) await d.sleep(200);
+  let listed = (await state(d)).loaded;
+  for (let waited = 0; waited < d.waitMs && listed; waited += 200) {
+    await d.sleep(200);
+    listed = (await state(d)).loaded;
+  }
+  if (listed) {
+    d.log("droidpier 后台服务还在退出，稍后用 droidpier status 查看；开机不会再自动启动");
+    return 0;
+  }
   d.log("已停止 droidpier 后台服务，开机也不会再自动启动。再次启动：droidpier start");
   return 0;
 }
@@ -259,11 +305,11 @@ export async function serviceLogs(d: ServiceDeps): Promise<number> {
   return 0;
 }
 
-/** 真实的依赖。DROIDPIER_SERVICE_LABEL 只给测试用：换一个 label，不碰正式的后台服务。 */
-export function realServiceDeps(): ServiceDeps {
+/** 真实的依赖。label 来自 serviceLabel()：DROIDPIER_SERVICE_LABEL 只给测试用，换一个 label，不碰正式的后台服务。 */
+export function realServiceDeps(label: string): ServiceDeps {
   const standalone = (globalThis as { Bun?: { isStandaloneExecutable: boolean } }).Bun?.isStandaloneExecutable;
   return {
-    label: process.env.DROIDPIER_SERVICE_LABEL || SERVICE_LABEL,
+    label,
     uid: process.getuid!(),
     home: homedir(),
     program: standalone ? [process.execPath] : [process.execPath, ...process.execArgv, process.argv[1]],
@@ -281,7 +327,7 @@ export function realServiceDeps(): ServiceDeps {
     holder: (port) => portHolder(port),
     health: async (port) => {
       const h = await probePort(port, 1000);
-      return h.kind === "droidpier" ? { version: h.version } : null;
+      return h.kind === "droidpier" ? { version: h.version, service: h.service === true, pid: h.pid ?? null } : null;
     },
     open: (url) => openBrowser(url, (e) => console.log(`打开浏览器失败：${e.message}`)),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),

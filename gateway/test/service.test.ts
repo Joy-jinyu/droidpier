@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { argsFromPlist, plistXml, serviceLogs, serviceStart, serviceStatus, serviceStop, SERVICE_LABEL, type ServiceDeps } from "../src/service.ts";
+import { argsFromPlist, plistXml, serviceLabel, serviceLogs, serviceStart, serviceStatus, serviceStop, SERVICE_LABEL, type ServiceDeps } from "../src/service.ts";
 
 const HOME = "/Users/someone";
 const PLIST = `${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist`;
@@ -10,7 +10,7 @@ const BIN = `${HOME}/.local/bin/droidpier`;
 type Holder = { kind: "droidpier"; version: string | null; service?: boolean } | { kind: "other" } | null;
 
 /** 假的 launchd + 文件系统 + 端口：bootstrap 读 plist 起一个新 pid，kickstart -k 换 pid，bootout 停掉。 */
-function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: number | null; holder?: Holder; startsOk?: boolean; env?: Record<string, string>; slowExit?: number } = {}) {
+function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: number | null; holder?: Holder; startsOk?: boolean; env?: Record<string, string>; slowExit?: number; foreground?: boolean; kickstartFails?: boolean } = {}) {
   const files: Record<string, string> = { ...o.files };
   const calls: string[] = [];
   const out: string[] = [];
@@ -49,6 +49,7 @@ function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: numbe
         return { code: 0, stdout: "", stderr: "" };
       }
       if (sub === "kickstart") {
+        if (o.kickstartFails) return { code: 37, stdout: "", stderr: "Operation already in progress" };
         spawn();
         return { code: 0, stdout: "", stderr: "" };
       }
@@ -65,7 +66,8 @@ function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: numbe
     mkdir: async () => {},
     rm: async (p) => void delete files[p],
     holder: async () => o.holder ?? null,
-    health: async () => (pid ? { version: "2026-11-13T00:00:00.000Z" } : null),
+    // foreground：端口上应答的是一个前台运行的 droidpier，不是 launchd 拉起的那个
+    health: async () => (o.foreground ? { version: "x", service: false, pid: 42 } : pid ? { version: "2026-11-13T00:00:00.000Z", service: true, pid } : null),
     open: (url) => void opened.push(url),
     sleep: async () => {},
     log: (s) => void out.push(s),
@@ -255,4 +257,68 @@ test("测试用的 label 换日志文件名，不碰正式服务的日志", asyn
   await serviceStart(f.deps, { args: [], noOpen: true });
   assert.ok(f.files[`${HOME}/Library/LaunchAgents/dev.devpier.droidpier.test.plist`]);
   assert.match(f.files[`${HOME}/Library/LaunchAgents/dev.devpier.droidpier.test.plist`], /Droidpier\/dev\.devpier\.droidpier\.test\.log/);
+});
+
+test("start：/healthz 应答的不是 launchd 拉起的那个进程（前台的 droidpier）时不算启动成功", async () => {
+  const f = fake({ foreground: true });
+  assert.equal(await serviceStart(f.deps, { args: [], noOpen: false }), 1);
+  assert.match(f.out.join("\n"), /没有启动起来/);
+  assert.deepEqual(f.opened, []);
+});
+
+test("start：换端口时也先看新端口有没有被占", async () => {
+  const f = fake();
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  const before = f.files[PLIST];
+  f.deps.holder = async () => ({ kind: "other" });
+  assert.equal(await serviceStart(f.deps, { args: ["--port", "7311"], noOpen: true }), 1);
+  assert.equal(f.files[PLIST], before);
+  assert.match(f.out.join("\n"), /端口 7311 被别的程序占用/);
+});
+
+test("start：kickstart 失败时报出 launchctl 的错误，退出码 1", async () => {
+  const f = fake({ kickstartFails: true });
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  f.out.length = 0;
+  assert.equal(await serviceStart(f.deps, { args: [], noOpen: true }), 1);
+  assert.match(f.out.join("\n"), /launchctl kickstart 失败：Operation already in progress/);
+});
+
+test("start：这次没设 ANDROID_HOME 时沿用 plist 里上次的值；JAVA_HOME 也带上", async () => {
+  const f = fake({ env: { ANDROID_HOME: "/opt/sdk", JAVA_HOME: "/opt/jdk" } });
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  f.deps.env = {};
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  assert.match(f.files[PLIST], /<key>ANDROID_HOME<\/key>\s*<string>\/opt\/sdk<\/string>/);
+  assert.match(f.files[PLIST], /<key>JAVA_HOME<\/key>\s*<string>\/opt\/jdk<\/string>/);
+  f.deps.env = { ANDROID_HOME: "/new/sdk" };
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  assert.match(f.files[PLIST], /<key>ANDROID_HOME<\/key>\s*<string>\/new\/sdk<\/string>/);
+});
+
+test("start：可执行文件换了位置时说一句后台服务改为运行新位置的文件", async () => {
+  const f = fake({ files: { [PLIST]: plistXml({ label: SERVICE_LABEL, program: ["/old/place/droidpier"], args: [], logPath: LOG, env: {} }) } });
+  assert.equal(await serviceStart(f.deps, { args: [], noOpen: true }), 0);
+  assert.ok(f.out.some((l) => l.includes(`后台服务改为运行 ${BIN}`)));
+  const g = fake();
+  await serviceStart(g.deps, { args: [], noOpen: true });
+  g.out.length = 0;
+  await serviceStart(g.deps, { args: [], noOpen: true });
+  assert.ok(!g.out.some((l) => l.includes("后台服务改为运行")));
+});
+
+test("stop：等过了还在退出时不说已停止，让用户稍后看 status", async () => {
+  const f = fake({ slowExit: 1_000_000 });
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  f.out.length = 0;
+  assert.equal(await serviceStop(f.deps), 0);
+  const text = f.out.join("\n");
+  assert.doesNotMatch(text, /已停止/);
+  assert.match(text, /还在退出，稍后用 droidpier status 查看/);
+});
+
+test("serviceLabel：默认用正式 label；测试 label 只许字母、数字、点和减号", () => {
+  assert.deepEqual(serviceLabel({}), { label: SERVICE_LABEL });
+  assert.deepEqual(serviceLabel({ DROIDPIER_SERVICE_LABEL: "dev.devpier.droidpier.test-1" }), { label: "dev.devpier.droidpier.test-1" });
+  for (const bad of ["../x", "a b", "a/b", "a<b"]) assert.ok("error" in serviceLabel({ DROIDPIER_SERVICE_LABEL: bad }), bad);
 });

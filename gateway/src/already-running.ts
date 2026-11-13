@@ -2,8 +2,8 @@
 import { createServer } from "node:net";
 import { INSTALL_CMD } from "../../shared/protocol.ts";
 
-/** 占着端口的程序。version 为 null 表示认得出是 droidpier 但它没报版本（加 /healthz 之前的版本）；service 表示它是后台服务。 */
-export type PortHolder = { kind: "droidpier"; version: string | null; service?: boolean } | { kind: "other" };
+/** 占着端口的程序。version 为 null 表示认得出是 droidpier 但它没报版本（加 /healthz 之前的版本）；service 表示它是后台服务；pid 是旧版没有的。 */
+export type PortHolder = { kind: "droidpier"; version: string | null; service?: boolean; pid?: number } | { kind: "other" };
 
 /** 端口被占时要打印的话和退出码；code 0 表示另一个 droidpier 已在运行，照常打开页面即可。 */
 export function busyPortReport(o: { port: number; pageUrl: string; ownVersion: string; running: PortHolder }): { code: 0 | 1; lines: string[] } {
@@ -43,8 +43,12 @@ export async function probePort(port: number, timeoutMs = 1500): Promise<PortHol
   const base = `http://127.0.0.1:${port}`;
   const h = await get(`${base}/healthz`, timeoutMs);
   if (h?.ok) {
-    const body = (await h.json().catch(() => null)) as { app?: unknown; version?: unknown; service?: unknown } | null;
-    if (body?.app === "droidpier") return { kind: "droidpier", version: typeof body.version === "string" && body.version ? body.version : null, service: body.service === true };
+    const body = (await h.json().catch(() => null)) as { app?: unknown; version?: unknown; service?: unknown; pid?: unknown } | null;
+    if (body?.app === "droidpier") {
+      const holder: PortHolder = { kind: "droidpier", version: typeof body.version === "string" && body.version ? body.version : null, service: body.service === true };
+      if (typeof body.pid === "number") holder.pid = body.pid;
+      return holder;
+    }
   }
   const page = await get(`${base}/app/`, timeoutMs);
   const html = page?.ok ? await page.text().catch(() => "") : "";

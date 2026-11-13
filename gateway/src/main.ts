@@ -23,7 +23,7 @@ import { buildPageUrl } from "./page-url.ts";
 import { parseCli, USAGE, versionLine } from "./cli.ts";
 import { checkPortFirst, explainBusyPort } from "./already-running.ts";
 import { cleanStaleUploads } from "./upload-temp.ts";
-import { realServiceDeps, serviceLogs, serviceStart, serviceStatus, serviceStop } from "./service.ts";
+import { realServiceDeps, serviceLabel, serviceLogs, serviceStart, serviceStatus, serviceStop } from "./service.ts";
 import { tmpdir } from "node:os";
 
 // scripts/build-binary.ts 打包时把 DROIDPIER_VERSION 替换成构建时间；直接用源码跑时没有
@@ -55,7 +55,12 @@ if (cli.kind === "service") {
     console.error("后台运行目前只支持 macOS；在终端里直接运行 droidpier");
     process.exit(1);
   }
-  const d = realServiceDeps();
+  const l = serviceLabel(process.env);
+  if ("error" in l) {
+    console.error(l.error);
+    process.exit(1);
+  }
+  const d = realServiceDeps(l.label);
   const run = { start: () => serviceStart(d, { args: cli.args, noOpen: cli.noOpen }), stop: () => serviceStop(d), status: () => serviceStatus(d), logs: () => serviceLogs(d) };
   process.exit(await run[cli.command]());
 }

@@ -43,6 +43,8 @@ export function parseCli(args: string[]): CliResult {
     const command = first as ServiceCommand;
     if (command !== "start") return rest.length ? { kind: "error", message: `多余的参数：${rest[0]}` } : { kind: "service", command, args: [], noOpen: false };
     if (rest.includes("--service")) return { kind: "error", message: "不认识的参数：--service" };
+    // 后台服务的参数会存进登录项，测试用的放行来源不能跟着常驻
+    if (rest.includes("--allow-origin")) return { kind: "error", message: "--allow-origin 只用于本地测试，不能用在 droidpier start；在前台运行：droidpier --allow-origin <来源>" };
     const r = parseRun(rest);
     if (r.kind === "error") return r;
     // --no-open 只管这一次打不打开页面；后台服务本来就不开浏览器

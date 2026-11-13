@@ -55,6 +55,12 @@ test("parseCli：start 的参数照样检查", () => {
   assert.deepEqual(parseCli(["start", "--service"]), { kind: "error", message: "不认识的参数：--service" });
 });
 
+test("parseCli：start 不接受 --allow-origin（测试用的放行来源不能存进登录项）", () => {
+  const r = parseCli(["start", "--allow-origin", "http://droid.test:7351"]);
+  assert.equal(r.kind, "error");
+  assert.match((r as { message: string }).message, /--allow-origin 只用于本地测试，不能用在 droidpier start/);
+});
+
 test("parseCli：stop / status / logs 不带参数", () => {
   for (const c of ["stop", "status", "logs"] as const) {
     assert.deepEqual(parseCli([c]), { kind: "service", command: c, args: [], noOpen: false });

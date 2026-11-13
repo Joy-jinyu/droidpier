@@ -191,7 +191,7 @@ export async function startServer(opts: {
       return;
     }
     if (rel === "/healthz") {
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ app: "droidpier", version: opts.version ?? "", service: opts.service === true }));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ app: "droidpier", version: opts.version ?? "", service: opts.service === true, pid: process.pid }));
       return;
     }
     if (rel === "/" || rel === APP_PATH.slice(0, -1)) {

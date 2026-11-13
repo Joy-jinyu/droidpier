@@ -12,7 +12,7 @@ const SCRIPT = fileURLToPath(new URL("../../scripts/install.sh", import.meta.url
 const NAME = "droidpier-darwin-arm64";
 
 /** 假的下载站：一个打成 .tar.xz 的小脚本代替真可执行文件，sha256 可以故意写错；publish 换一版内容。 */
-async function fixture(t: { after(fn: () => unknown): void }, opts: { badSha?: boolean } = {}) {
+async function fixture(t: { after(fn: () => unknown): void }, opts: { badSha?: boolean; old?: boolean } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "emu-install-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const files = join(dir, "files");
@@ -20,8 +20,10 @@ async function fixture(t: { after(fn: () => unknown): void }, opts: { badSha?: b
   await mkdir(files);
   await mkdir(home);
   await mkdir(join(dir, "tmp"));
-  const publish = async (label: string) => {
-    await writeFile(join(dir, NAME), `#!/bin/sh\necho ${label} "$@"\n`);
+  // 新版的 --help 里有 droidpier start；old 模拟还不支持后台运行的旧版本
+  const publish = async (label: string, old = opts.old ?? false) => {
+    const help = old ? "" : `[ "$1" = --help ] && { printf '用法：\\n  droidpier start\\n'; exit 0; }\n`;
+    await writeFile(join(dir, NAME), `#!/bin/sh\n${help}echo ${label} "$@"\n`);
     await chmod(join(dir, NAME), 0o644);
     execFileSync("/usr/bin/tar", ["-cJf", join(files, `${NAME}.tar.xz`), "-C", dir, NAME]);
     const sha = createHash("sha256").update(await readFile(join(files, `${NAME}.tar.xz`))).digest("hex");
@@ -133,6 +135,13 @@ test("install.sh：DROIDPIER_FOREGROUND=1 照旧在这个终端里前台运行",
   const r = await run({ DROIDPIER_FOREGROUND: "1" }, ["--port", "7310"]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /启动 droidpier（保持这个终端开着；按 Ctrl\+C 停止）\nfake-gateway --port 7310\n$/);
+});
+
+test("install.sh：已装的 droidpier 不认识 start（离线时留着的旧版本）时退回前台运行", async (t) => {
+  const { run } = await fixture(t, { old: true });
+  const r = await run({}, ["--port", "7310"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /已装的 droidpier 不支持后台运行，在这个终端里前台运行（保持终端开着）\nfake-gateway --port 7310\n$/);
 });
 
 test("install.sh：下载站连不上但已经装过时，提示后启动已装的版本", async (t) => {

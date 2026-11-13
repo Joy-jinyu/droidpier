@@ -105,6 +105,11 @@ main() {
     echo "启动 droidpier（保持这个终端开着；按 Ctrl+C 停止）"
     exec "$target" "$@" </dev/null
   fi
+  # 连不上下载站时留着的旧版本（或下载站刚换版本时拿到的旧包）还没有 start 子命令
+  if ! "$target" --help 2>/dev/null </dev/null | grep -q 'droidpier start'; then
+    echo "已装的 droidpier 不支持后台运行，在这个终端里前台运行（保持终端开着）"
+    exec "$target" "$@" </dev/null
+  fi
   echo "在后台启动 droidpier"
   exec "$target" start "$@" </dev/null
 }

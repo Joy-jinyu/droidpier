@@ -72,8 +72,8 @@ class FakeSession implements EmulatorSession {
   /** 设备里复制了内容。 */
   fireClipboard(text: string) { for (const cb of this.clipCbs) cb(text); }
   private rotationCbs: Array<(r: 0 | 90 | 180 | 270) => void> = [];
-  async rotate() {
-    this.fireRotation(((this.rotation + 90) % 360) as 0 | 90 | 180 | 270);
+  async rotate(dir: "left" | "right" = "right") {
+    this.fireRotation(((this.rotation + (dir === "left" ? 270 : 90)) % 360) as 0 | 90 | 180 | 270);
     return this.rotation;
   }
   onRotation(cb: (r: 0 | 90 | 180 | 270) => void) { this.rotationCbs.push(cb); }
@@ -682,6 +682,16 @@ test("rotate：会话转 90°，同一会话的所有连接收到新方向", asy
   c1.ws.send(JSON.stringify({ t: "rotate" }));
   await until(() => [c1, c2].every((c) => c.msgs.some((m) => m.t === "orientation" && m.rotation === 90)));
   assert.equal(session!.rotation, 90);
+});
+
+test("rotate 带 dir left：会话逆时针转 90°", async (t) => {
+  const { connect, session } = await setup(t);
+  const c = await connect();
+  hello(c);
+  await until(() => session!.subs.length === 1);
+  c.ws.send(JSON.stringify({ t: "rotate", dir: "left" }));
+  await until(() => c.msgs.some((m) => m.t === "orientation" && m.rotation === 270));
+  assert.equal(session!.rotation, 270);
 });
 
 test("横屏时帧尺寸按转过来的设备尺寸限制", async (t) => {

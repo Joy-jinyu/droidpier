@@ -194,6 +194,9 @@ export type WebViewPage = {
 /** 设备顺时针转过的角度。 */
 export type Rotation = 0 | 90 | 180 | 270;
 
+/** 旋转方向：left 逆时针、right 顺时针转 90°。 */
+export type RotateDir = "left" | "right";
+
 /** 回复里标出“adb 没有响应”这类失败。 */
 export type AdbErrorCode = "adb-unresponsive";
 
@@ -211,7 +214,8 @@ export type ClientMsg =
   | { t: "start"; name: string }
   | { t: "stop" }
   | { t: "use"; name: string }
-  | { t: "rotate" }
+  /** 不带 dir 时顺时针（旧页面不带）。 */
+  | { t: "rotate"; dir?: RotateDir }
   | { t: "screenshot" }
   /** 页面转到后台：停推画面，直到 resume。 */
   | { t: "pause" }
@@ -326,9 +330,12 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case "createAvd":
       if (!isStr(o.name) || !isStr(o.device) || !isStr(o.image)) return null;
       return { t: "createAvd", name: o.name, device: o.device, image: o.image };
+    case "rotate":
+      if (o.dir === undefined) return { t: "rotate" };
+      if (o.dir !== "left" && o.dir !== "right") return null;
+      return { t: "rotate", dir: o.dir };
     case "avds":
     case "stop":
-    case "rotate":
     case "screenshot":
     case "pause":
     case "resume":

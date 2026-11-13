@@ -18,8 +18,9 @@ import { connectCdp } from "./cdp.ts";
 import { adb, killAdbChildren } from "./adb.ts";
 import { waitForReboot } from "./reboot.ts";
 import { exitHandler } from "./exit.ts";
-import { allowedOrigins, isOrigin, PUBLIC_ORIGIN } from "./auth.ts";
-import { buildPageUrl, DEFAULT_PORT } from "./page-url.ts";
+import { allowedOrigins, PUBLIC_ORIGIN } from "./auth.ts";
+import { buildPageUrl } from "./page-url.ts";
+import { parseCli, USAGE, versionLine } from "./cli.ts";
 import { checkPortFirst, explainBusyPort } from "./already-running.ts";
 import { cleanStaleUploads } from "./upload-temp.ts";
 import { tmpdir } from "node:os";
@@ -34,22 +35,22 @@ const STATIC_DIR = (globalThis as { Bun?: { isStandaloneExecutable: boolean } })
   ? join(import.meta.dirname, "Droidpier")
   : fileURLToPath(new URL("../../.nsh/out/Droidpier", import.meta.url));
 
-const portArg = process.argv.indexOf("--port");
-const port = portArg > 0 ? Number(process.argv[portArg + 1]) : DEFAULT_PORT;
-if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-  console.error(`--port 不合法：${process.argv[portArg + 1]}`);
+// --help / --version / 参数有错都在这里退出，不碰端口、SDK 和模拟器
+const cli = parseCli(process.argv.slice(2));
+if (cli.kind === "help") {
+  console.log(USAGE);
+  process.exit(0);
+}
+if (cli.kind === "version") {
+  console.log(versionLine(VERSION));
+  process.exit(0);
+}
+if (cli.kind === "error") {
+  console.error(`${cli.message}\n\n${USAGE}`);
   process.exit(1);
 }
-const noOpen = process.argv.includes("--no-open");
+const { port, noOpen, allowOrigins: extraOrigins } = cli.options;
 // 默认打开公网页面；--local 改为打开本机页面；--public 是兼容别名，不改行为（见 gateway/src/page-url.ts）
-// 本地模拟公网页面时临时放行的来源，例如 --allow-origin http://droid.test:7351
-const extraOrigins = process.argv.flatMap((a, i) => (process.argv[i - 1] === "--allow-origin" ? [a] : []));
-for (const o of extraOrigins) {
-  if (!isOrigin(o)) {
-    console.error(`--allow-origin 不合法：${o}（要写成 http://主机:端口）`);
-    process.exit(1);
-  }
-}
 
 /** 端口被占时打印判断、需要时打开页面，然后退出。 */
 function exitBusy(r: { code: 0 | 1; lines: string[] }, pageUrl: string): never {

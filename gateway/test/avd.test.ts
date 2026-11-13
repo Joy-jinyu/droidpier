@@ -58,9 +58,9 @@ test("listAvds 合并运行状态：正在运行的 AVD 显示 grpc 并带 grpcP
   );
 
   const avds = await listAvds({
-    exec: async (cmd: string) => {
-      if (cmd.includes("-list-avds")) return { stdout: "Pixel_5_API_34\n", stderr: "" };
-      if (cmd.includes("devices")) return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
+    exec: async (_file: string, args: string[]) => {
+      if (args.includes("-list-avds")) return { stdout: "Pixel_5_API_34\n", stderr: "" };
+      if (args.includes("devices")) return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
       return { stdout: "", stderr: "" };
     },
     discoveryDir: discDir,
@@ -77,14 +77,36 @@ test("listAvds 合并运行状态：正在运行的 AVD 显示 grpc 并带 grpcP
   assert.equal(avd.apiLevel, 34);
 });
 
+test("listAvds 认出显示名和 id 不同的运行中 AVD（发现文件按 avd.id 对上）", async (t) => {
+  const tmpBase = await mkdtemp(join(tmpdir(), "emu-avd-test-"));
+  const discDir = await mkdtemp(join(tmpdir(), "emu-disc-test-"));
+  t.after(() => Promise.all([rm(tmpBase, { recursive: true, force: true }), rm(discDir, { recursive: true, force: true })]));
+  await writeFile(
+    join(discDir, `pid_${process.pid}.ini`),
+    "port.serial=5554\ngrpc.port=8554\navd.id=Resizable_Experimental\navd.name=Resizable (Experimental)\n",
+  );
+
+  const avds = await listAvds({
+    exec: async (_file: string, args: string[]) => {
+      if (args.includes("-list-avds")) return { stdout: "Resizable_Experimental\n", stderr: "" };
+      return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
+    },
+    discoveryDir: discDir,
+    avdHome: tmpBase,
+  });
+
+  assert.equal(avds[0].running, "grpc");
+  assert.equal(avds[0].serial, 5554);
+});
+
 test("listAvds emulator -list-avds 有 INFO 行时过滤掉", async (t) => {
   const tmpBase = await mkdtemp(join(tmpdir(), "emu-avd-test-"));
   const discDir = await mkdtemp(join(tmpdir(), "emu-disc-test-"));
   t.after(() => Promise.all([rm(tmpBase, { recursive: true, force: true }), rm(discDir, { recursive: true, force: true })]));
 
   const avds = await listAvds({
-    exec: async (cmd: string) => {
-      if (cmd.includes("-list-avds"))
+    exec: async (_file: string, args: string[]) => {
+      if (args.includes("-list-avds"))
         return { stdout: "INFO: Storing crashdata in /tmp/xyz\nPixel_5_API_34\n", stderr: "" };
       return { stdout: "", stderr: "" };
     },
@@ -106,7 +128,7 @@ async function oneAvd(t: import("node:test").TestContext, config: string) {
   await writeFile(join(dir, "config.ini"), config);
   await writeFile(join(home, "Resizable_Experimental.ini"), `path=${dir}\n`);
   const deps = {
-    exec: async (cmd: string) => ({ stdout: cmd.includes("-list-avds") ? "Resizable_Experimental\n" : "", stderr: "" }),
+    exec: async (_file: string, args: string[]) => ({ stdout: args.includes("-list-avds") ? "Resizable_Experimental\n" : "", stderr: "" }),
     discoveryDir: disc,
     avdHome: home,
   };
@@ -144,7 +166,7 @@ test("renameAvd 只认带 = 的行，重复的 avd.ini.displayname 都换掉", a
 
 test("renameAvd 不问 adb：adb 卡住时照样改名", async (t) => {
   const { deps, configPath } = await oneAvd(t, "avd.ini.displayname=旧名字\n");
-  const exec = async (cmd: string) => (cmd.includes("-list-avds") ? deps.exec(cmd) : new Promise<never>(() => {}));
+  const exec = async (file: string, args: string[]) => (args.includes("-list-avds") ? deps.exec(file, args) : new Promise<never>(() => {}));
   await renameAvd("Resizable_Experimental", "新名字", { ...deps, exec });
   assert.equal(await readFile(configPath, "utf8"), "avd.ini.displayname=新名字\n");
 });
@@ -161,4 +183,32 @@ test("renameAvd 改符号链接指向的文件，链接还在，权限不变，�
   assert.equal((await lstat(real)).mode & 0o777, 0o640);
   const left = (await readdir(dirname(configPath))).filter((f) => f.includes("droidpier-"));
   assert.deepEqual(left, []);
+});
+
+test("listAvds SDK 路径带空格（比如装在名字带空格的外置盘上）时也能列出 AVD", async (t) => {
+  const base = await mkdtemp(join(tmpdir(), "emu avd sdk-"));
+  const sdk = join(base, "Android SDK");
+  const avdHome = join(base, "avd");
+  const discDir = join(base, "running");
+  t.after(() => rm(base, { recursive: true, force: true }));
+  await mkdir(join(sdk, "emulator"), { recursive: true });
+  await mkdir(join(sdk, "platform-tools"), { recursive: true });
+  await mkdir(avdHome);
+  await mkdir(discDir);
+  await writeFile(join(sdk, "emulator/emulator"), "#!/bin/sh\n[ \"$1\" = -list-avds ] && echo Pixel_5_API_34\n");
+  await writeFile(join(sdk, "platform-tools/adb"), "#!/bin/sh\nprintf 'List of devices attached\\nemulator-5554\\tdevice\\n'\n");
+  await chmod(join(sdk, "emulator/emulator"), 0o755);
+  await chmod(join(sdk, "platform-tools/adb"), 0o755);
+  // 没开 gRPC 的运行中模拟器：只有 adb devices 读到了串口，才会报成 no-grpc
+  await writeFile(join(discDir, `pid_${process.pid}.ini`), "port.serial=5554\navd.name=Pixel_5_API_34\n");
+  const saved = process.env.ANDROID_HOME;
+  process.env.ANDROID_HOME = sdk;
+  t.after(() => {
+    if (saved === undefined) delete process.env.ANDROID_HOME;
+    else process.env.ANDROID_HOME = saved;
+  });
+
+  const avds = await listAvds({ discoveryDir: discDir, avdHome });
+
+  assert.deepEqual(avds.map((a) => [a.name, a.running, a.serial]), [["Pixel_5_API_34", "no-grpc", 5554]]);
 });

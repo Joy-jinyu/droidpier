@@ -1,13 +1,13 @@
 import { readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { exec as execCb } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { avdHome as defaultAvdHome, emulatorBin, adbBin, discoveryDir as defaultDiscoveryDir } from "./platform.ts";
-import { pidAlive } from "./discovery.ts";
+import { discoveryAvdName, pidAlive } from "./discovery.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 import { displayNameError } from "../../shared/avd-spec.ts";
 
-const execP = promisify(execCb);
+const execFileP = promisify(execFile);
 
 export type { AvdInfo };
 
@@ -52,7 +52,8 @@ export function parseAvdConfig(text: string): Pick<AvdInfo, "displayName" | "wid
   return result;
 }
 
-type ExecFn = (cmd: string) => Promise<{ stdout: string; stderr: string }>;
+/** 不经过 shell 跑命令：SDK 路径可能带空格（比如装在名字带空格的外置盘上）。 */
+type ExecFn = (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
 
 type Deps = {
   exec: ExecFn;
@@ -86,7 +87,7 @@ async function scanAllRunning(dir: string): Promise<Map<string, RunningEntry>> {
         const i = line.indexOf("=");
         if (i > 0) kv.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
       }
-      const avdName = kv.get("avd.name");
+      const avdName = discoveryAvdName(kv);
       if (!avdName) continue;
       const serial = Number(kv.get("port.serial"));
       const grpcPort = Number(kv.get("grpc.port")) || undefined;
@@ -113,7 +114,7 @@ async function resolveConfigIni(home: string, name: string): Promise<string | un
 
 /** emulator -list-avds 列出的 AVD id，去掉 INFO 行和含空格的行。 */
 async function avdIds(execFn: ExecFn): Promise<string[]> {
-  const { stdout } = await execFn(`${emulatorBin()} -list-avds`);
+  const { stdout } = await execFn(emulatorBin(), ["-list-avds"]);
   return stdout
     .split("\n")
     .map((l) => l.trim())
@@ -122,7 +123,7 @@ async function avdIds(execFn: ExecFn): Promise<string[]> {
 
 /** 列出所有 AVD 及其运行状态。支持注入依赖方便测试。 */
 export async function listAvds(deps?: Partial<Deps>): Promise<AvdInfo[]> {
-  const execFn: ExecFn = deps?.exec ?? ((cmd) => execP(cmd));
+  const execFn: ExecFn = deps?.exec ?? ((file, args) => execFileP(file, args));
   const discDir = deps?.discoveryDir ?? defaultDiscoveryDir();
   const home = deps?.avdHome ?? defaultAvdHome();
 
@@ -135,7 +136,7 @@ export async function listAvds(deps?: Partial<Deps>): Promise<AvdInfo[]> {
   // 3. adb devices 里的串口集合（用于 no-grpc 检测）
   const adbSerialSet = new Set<number>();
   try {
-    const { stdout: adbOut } = await execFn(`${adbBin()} devices`);
+    const { stdout: adbOut } = await execFn(adbBin(), ["devices"]);
     for (const line of adbOut.split("\n")) {
       const m = /^emulator-(\d+)\s+device/.exec(line.trim());
       if (m) adbSerialSet.add(Number(m[1]));
@@ -196,7 +197,7 @@ export async function renameAvd(name: string, displayName: string, deps?: Partia
   const error = displayNameError(displayName);
   if (error) throw new Error(error);
   // 只跑 -list-avds，不跑 listAvds：它还要问 adb，adb 卡住时改名不能跟着卡
-  if (!(await avdIds(deps?.exec ?? ((cmd) => execP(cmd)))).includes(name)) throw new Error(`没有这个设备：${name}`);
+  if (!(await avdIds(deps?.exec ?? ((file, args) => execFileP(file, args)))).includes(name)) throw new Error(`没有这个设备：${name}`);
   const found = await resolveConfigIni(deps?.avdHome ?? defaultAvdHome(), name);
   if (!found) throw new Error(`找不到 ${name} 的 config.ini`);
   // config.ini 是符号链接时改它指向的文件，换过去也不能把链接换成普通文件

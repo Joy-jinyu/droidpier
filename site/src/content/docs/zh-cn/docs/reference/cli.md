@@ -1,19 +1,31 @@
 ---
 title: 命令行
 description: Droidpier 网关命令的选项和环境变量。
-sourceHash: 6811a7927009
+sourceHash: b62f19b96312
 ---
 
 <!-- verify: phase 3 -->
 ```sh
+droidpier start [--port <port>] [--local] [--no-open]
+droidpier stop
+droidpier status
+droidpier logs
 droidpier [--port <port>] [--local] [--no-open]
 ```
 
-网关在前台运行，直到你按 `Ctrl+C`。停止它不会停止正在运行的模拟器。
+| 命令 | 作用 |
+|---|---|
+| `droidpier start` | 以 macOS LaunchAgent 的方式在后台运行网关。关闭终端后继续运行，登录时自动启动，崩溃后自动重启。已在运行时会重启它。会保存你给的选项；不带选项时沿用保存的选项。启动后打开一次页面，除非加 `--no-open`。 |
+| `droidpier stop` | 停止后台运行的网关，登录时也不再自动启动。 |
+| `droidpier status` | 显示后台网关是否在运行，以及它的进程 ID、端口、版本和日志文件。 |
+| `droidpier logs` | 打印日志文件路径和最后 50 行。 |
+| `droidpier` | 在当前终端窗口中运行网关，直到你按 `Ctrl+C`。 |
+
+停止网关不会停止正在运行的模拟器。
 
 ## 用安装命令启动 {#start-with-the-install-command}
 
-安装命令 `curl -fsSL https://droid.devpier.dev/install.sh | sh` 会安装或更新网关，然后启动它。如需给网关传选项，把选项写在 `sh -s --` 后面：
+安装命令 `curl -fsSL https://droid.devpier.dev/install.sh | sh` 会安装或更新网关，然后运行 `droidpier start`。要传选项给它，把选项放在 `sh -s --` 之后，它们会保存给后台运行的网关：
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
@@ -23,6 +35,12 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
+```
+
+要像以前一样在终端窗口中运行网关，设置 `DROIDPIER_FOREGROUND=1`：
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 ```
 
 ## 选项
@@ -53,6 +71,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME` 在首次运行检查时读取。
 
+设置了 `ANDROID_HOME` 和 `ANDROID_AVD_HOME` 时，`droidpier start` 会把它们保存给后台运行的网关，因为 launchd 不读取你的 shell 配置。修改它们后请重新运行 `droidpier start`。
+
 ## 打印内容
 
 启动时，网关会打印页面地址。如果没有模拟器在运行，它会打印原因并继续运行。
@@ -60,7 +80,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 <!-- verify: phase 3 -->
 默认情况下，打印的地址是公共页面 `https://droid.devpier.dev/app/`。当网关不在端口 `7300` 上运行时，地址以 `#port=<port>` 结尾。使用 `--local` 时，则是本地页面 `http://127.0.0.1:<port>/app/`。网关会使用 macOS `open` 命令打开该地址，除非你传入 `--no-open`。
 
-如果该端口上已有网关在运行，就不会再启动第二个。它会打印 droidpier 已经在运行及端口号，并打开页面。如果端口被别的程序占用，它会说明这一点，建议换一个端口，然后退出。
+如果该端口上已有网关在运行，不会再启动第二个。它会打印 droidpier 已在运行及端口，并打开页面。如果在运行的是后台网关，还会打印 `droidpier stop`。如果端口被其他程序占用，它会说明这一点，建议换一个端口，然后退出。
 
 <!-- verify: phase 3 -->
 缺少 Android SDK 组件时，网关会逐项列出，并附上手动安装的命令，然后提示你到页面上完成安装。它从不在终端中提问：安装、新建设备和许可证都在页面上确认。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
@@ -82,3 +102,5 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 |---|---|
 | 安装的可执行文件 | `~/.local/bin/droidpier` |
 | 已安装版本的校验和 | `~/.local/share/droidpier/installed.sha256` |
+| 后台网关的设置 | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
+| 后台网关的日志 | `~/Library/Logs/Droidpier/droidpier.log` |

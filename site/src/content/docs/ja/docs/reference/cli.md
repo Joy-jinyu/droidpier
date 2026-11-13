@@ -1,19 +1,31 @@
 ---
 title: コマンドライン
 description: Droidpier ゲートウェイコマンドのオプションと環境変数。
-sourceHash: 6811a7927009
+sourceHash: b62f19b96312
 ---
 
 <!-- verify: phase 3 -->
 ```sh
+droidpier start [--port <port>] [--local] [--no-open]
+droidpier stop
+droidpier status
+droidpier logs
 droidpier [--port <port>] [--local] [--no-open]
 ```
 
-ゲートウェイは `Ctrl+C` を押すまでフォアグラウンドで動作します。停止しても起動中のエミュレーターは止まりません。
+| コマンド | 動作 |
+|---|---|
+| `droidpier start` | ゲートウェイを macOS の LaunchAgent としてバックグラウンドで動かします。ターミナルを閉じても動き続け、ログイン時に起動し、クラッシュしたら再起動します。すでに動いている場合は再起動します。指定したオプションは保存され、オプションなしなら保存済みのものを使います。`--no-open` を付けない限り、ページを 1 回開きます。 |
+| `droidpier stop` | バックグラウンドのゲートウェイを止めます。ログイン時にも起動しなくなります。 |
+| `droidpier status` | バックグラウンドのゲートウェイが動いているかを、プロセス ID、ポート、バージョン、ログファイルとともに表示します。 |
+| `droidpier logs` | ログファイルのパスと最後の 50 行を表示します。 |
+| `droidpier` | `Ctrl+C` を押すまで、このターミナルウィンドウでゲートウェイを動かします。 |
+
+ゲートウェイを止めても、実行中のエミュレーターは止まりません。
 
 ## インストールコマンドで起動する {#start-with-the-install-command}
 
-インストールコマンド `curl -fsSL https://droid.devpier.dev/install.sh | sh` は、ゲートウェイをインストール（または更新）してから起動します。ゲートウェイにオプションを渡すには、`sh -s --` の後ろに書きます。
+インストールコマンド `curl -fsSL https://droid.devpier.dev/install.sh | sh` は、ゲートウェイをインストールまたは更新してから `droidpier start` を実行します。オプションを渡すには `sh -s --` の後に書きます。オプションはバックグラウンドのゲートウェイ用に保存されます。
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
@@ -23,6 +35,12 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
+```
+
+以前のようにターミナルウィンドウでゲートウェイを動かすには、`DROIDPIER_FOREGROUND=1` を設定します。
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 ```
 
 ## オプション
@@ -53,6 +71,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME` は初回起動チェック時に読み込まれます。
 
+`ANDROID_HOME` と `ANDROID_AVD_HOME` が設定されていれば、`droidpier start` はそれらをバックグラウンドのゲートウェイ用に保存します。launchd はシェルの設定を読まないためです。変更したら `droidpier start` をもう一度実行してください。
+
 ## 表示内容
 
 起動時に、ゲートウェイはページのアドレスを表示します。エミュレーターが起動していない場合は、理由を表示して動き続けます。
@@ -60,7 +80,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 <!-- verify: phase 3 -->
 デフォルトでは、表示されるアドレスは公開ページ `https://droid.devpier.dev/app/` です。ゲートウェイがポート `7300` 以外で動いている場合、アドレスの末尾は `#port=<port>` になります。`--local` を指定すると、ローカルページ `http://127.0.0.1:<port>/app/` になります。`--no-open` を指定しない限り、ゲートウェイは macOS の `open` コマンドでそのアドレスを開きます。
 
-そのポートですでにゲートウェイが動いている場合、2 つ目は起動しません。droidpier がすでに動いていることとポート番号を表示し、ページを開きます。別のプログラムがポートを使用している場合は、そのことを表示し、別のポートを提案して終了します。
+そのポートですでにゲートウェイが動いている場合、2 つ目は起動しません。droidpier がすでに動いていることをポートとともに表示し、ページを開きます。動いているのがバックグラウンドのゲートウェイなら、`droidpier stop` も表示します。別のプログラムがポートを使っている場合は、その旨と別のポートを示して終了します。
 
 <!-- verify: phase 3 -->
 Android SDK のコンポーネントが不足している場合、ゲートウェイは項目ごとに手動インストール用のコマンドを添えて表示し、ページでセットアップを完了するよう案内します。ターミナルで質問することはありません。インストール、デバイスの作成、ライセンスへの同意はすべてページで確認します。[初回起動](/ja/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)を参照してください。
@@ -82,3 +102,5 @@ Android SDK のコンポーネントが不足している場合、ゲートウ�
 |---|---|
 | インストールされる実行ファイル | `~/.local/bin/droidpier` |
 | インストール済みバージョンのチェックサム | `~/.local/share/droidpier/installed.sha256` |
+| バックグラウンドのゲートウェイの設定 | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
+| バックグラウンドのゲートウェイのログ | `~/Library/Logs/Droidpier/droidpier.log` |

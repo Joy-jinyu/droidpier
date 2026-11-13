@@ -1,19 +1,31 @@
 ---
 title: سطر الأوامر
 description: الخيارات ومتغيرات البيئة لأمر بوابة Droidpier.
-sourceHash: 6811a7927009
+sourceHash: b62f19b96312
 ---
 
 <!-- verify: phase 3 -->
 ```sh
+droidpier start [--port <port>] [--local] [--no-open]
+droidpier stop
+droidpier status
+droidpier logs
 droidpier [--port <port>] [--local] [--no-open]
 ```
 
-تعمل البوابة في المقدمة حتى تضغط `Ctrl+C`. لا يؤدي إيقافها إلى إيقاف المحاكيات قيد التشغيل.
+| الأمر | ما يفعله |
+|---|---|
+| `droidpier start` | يشغّل البوابة في الخلفية بوصفها LaunchAgent في macOS. تستمر بعد إغلاق Terminal، وتبدأ عند تسجيل الدخول، وتُعاد إذا تعطّلت. إذا كانت تعمل بالفعل، يعيد تشغيلها. يحفظ الخيارات التي تمرّرها؛ ومن دون خيارات يُبقي المحفوظة. يفتح الصفحة مرة واحدة ما لم تمرّر `--no-open`. |
+| `droidpier stop` | يوقف البوابة العاملة في الخلفية، فلا تبدأ بعد ذلك عند تسجيل الدخول. |
+| `droidpier status` | يعرض ما إذا كانت البوابة تعمل في الخلفية، مع معرّف العملية والمنفذ والإصدار وملف السجل. |
+| `droidpier logs` | يطبع مسار ملف السجل وآخر 50 سطرًا منه. |
+| `droidpier` | يشغّل البوابة في نافذة Terminal هذه إلى أن تضغط `Ctrl+C`. |
+
+إيقاف البوابة لا يوقف المحاكيات العاملة.
 
 ## التشغيل بأمر التثبيت {#start-with-the-install-command}
 
-أمر التثبيت، `curl -fsSL https://droid.devpier.dev/install.sh | sh`، يثبّت البوابة أو يحدّثها ثم يشغّلها. لتمرير خيارات إلى البوابة، ضعها بعد `sh -s --`:
+يثبّت أمر التثبيت `curl -fsSL https://droid.devpier.dev/install.sh | sh` البوابة أو يحدّثها، ثم يشغّل `droidpier start`. لتمرير خيارات، ضعها بعد `sh -s --`. تُحفظ هذه الخيارات للبوابة العاملة في الخلفية:
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
@@ -23,6 +35,12 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
+```
+
+لتشغيل البوابة في نافذة Terminal كما في السابق، اضبط `DROIDPIER_FOREGROUND=1`:
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 ```
 
 ## الخيارات
@@ -53,6 +71,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 <!-- verify: phase 3 -->
 يُقرأ `ANDROID_HOME` أثناء فحص التشغيل الأول.
 
+عند ضبط `ANDROID_HOME` و`ANDROID_AVD_HOME`، يحفظهما `droidpier start` للبوابة العاملة في الخلفية، لأن launchd لا يقرأ ملف إعدادات الصدفة لديك. شغّل `droidpier start` مجددًا بعد تغييرهما.
+
 ## ما الذي تطبعه
 
 عند البدء، تطبع البوابة عنوان الصفحة. إذا لم يكن هناك محاكٍ قيد التشغيل، تطبع السبب وتستمر في العمل.
@@ -60,7 +80,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 <!-- verify: phase 3 -->
 افتراضيًا، يكون العنوان المطبوع هو الصفحة العامة، `https://droid.devpier.dev/app/`. وعندما لا تعمل البوابة على المنفذ `7300`، ينتهي العنوان بـ `#port=<port>`. ومع `--local`، يكون الصفحة المحلية، `http://127.0.0.1:<port>/app/`. وتفتح البوابة العنوان بأمر `open` في macOS ما لم تمرّر `--no-open`.
 
-إذا كانت هناك بوابة تعمل بالفعل على المنفذ، فلا تبدأ بوابة ثانية. تطبع أن droidpier يعمل بالفعل، مع رقم المنفذ، وتفتح الصفحة. وإذا كان برنامج آخر يستخدم المنفذ، تخبرك بذلك وتقترح منفذًا آخر ثم تخرج.
+إذا كانت هناك بوابة تعمل بالفعل على المنفذ، فلا تبدأ بوابة ثانية. يطبع أن droidpier يعمل بالفعل مع رقم المنفذ، ويفتح الصفحة. إذا كانت البوابة العاملة هي بوابة الخلفية، يطبع أيضًا `droidpier stop`. إذا كان برنامج آخر يستخدم المنفذ، ينبّه إلى ذلك ويقترح منفذًا آخر ثم يخرج.
 
 <!-- verify: phase 3 -->
 عندما تكون أجزاء من Android SDK مفقودة، تعرض البوابة كل جزء مع أمر لتثبيته يدويًا، وتطلب منك إكمال الإعداد في الصفحة. ولا تسأل أي شيء في Terminal أبدًا: التثبيت والأجهزة الجديدة والتراخيص كلها تُؤكَّد في الصفحة. راجع [التشغيل الأول](/ar/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -82,3 +102,5 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
 |---|---|
 | الملف التنفيذي المثبَّت | `~/.local/bin/droidpier` |
 | المجموع الاختباري للإصدار المثبّت | `~/.local/share/droidpier/installed.sha256` |
+| إعدادات بوابة الخلفية | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
+| سجل بوابة الخلفية | `~/Library/Logs/Droidpier/droidpier.log` |

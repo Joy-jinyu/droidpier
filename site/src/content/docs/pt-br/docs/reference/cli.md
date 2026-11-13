@@ -1,19 +1,31 @@
 ---
 title: Linha de comando
 description: Opções e variáveis de ambiente do comando do gateway Droidpier.
-sourceHash: 6811a7927009
+sourceHash: b62f19b96312
 ---
 
 <!-- verify: phase 3 -->
 ```sh
+droidpier start [--port <port>] [--local] [--no-open]
+droidpier stop
+droidpier status
+droidpier logs
 droidpier [--port <port>] [--local] [--no-open]
 ```
 
-O gateway roda em primeiro plano até você pressionar `Ctrl+C`. Pará-lo não para os emuladores em execução.
+| Comando | Efeito |
+|---|---|
+| `droidpier start` | Roda o gateway em segundo plano, como LaunchAgent do macOS. Continua rodando depois que você fecha o Terminal, inicia no login e reinicia se travar. Se já estiver rodando, reinicia. Salva as opções que você passar; sem opções, mantém as salvas. Abre a página uma vez, a menos que você passe `--no-open`. |
+| `droidpier stop` | Para o gateway em segundo plano. Ele não inicia mais no login. |
+| `droidpier status` | Mostra se o gateway em segundo plano está rodando, com ID do processo, porta, versão e arquivo de log. |
+| `droidpier logs` | Imprime o caminho do arquivo de log e as últimas 50 linhas. |
+| `droidpier` | Roda o gateway nesta janela do Terminal até você pressionar `Ctrl+C`. |
+
+Parar o gateway não para os emuladores em execução.
 
 ## Inicie com o comando de instalação {#start-with-the-install-command}
 
-O comando de instalação, `curl -fsSL https://droid.devpier.dev/install.sh | sh`, instala ou atualiza o gateway e depois o inicia. Para passar opções ao gateway, coloque-as depois de `sh -s --`:
+O comando de instalação, `curl -fsSL https://droid.devpier.dev/install.sh | sh`, instala ou atualiza o gateway e depois executa `droidpier start`. Para passar opções, coloque-as depois de `sh -s --`. Elas ficam salvas para o gateway em segundo plano:
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
@@ -23,6 +35,12 @@ Para instalar ou atualizar sem iniciar o gateway, defina `DROIDPIER_NO_START=1`:
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
+```
+
+Para rodar o gateway na janela do Terminal, como antes, defina `DROIDPIER_FOREGROUND=1`:
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 ```
 
 ## Opções
@@ -53,6 +71,8 @@ Com ou sem `--no-open`, a página encontra o gateway sozinha. Veja [Primeira exe
 <!-- verify: phase 3 -->
 `ANDROID_HOME` é lida pela verificação da primeira execução.
 
+Quando `ANDROID_HOME` e `ANDROID_AVD_HOME` estão definidas, `droidpier start` as salva para o gateway em segundo plano, porque o launchd não lê o perfil do seu shell. Execute `droidpier start` de novo depois de alterá-las.
+
 ## O que ele mostra
 
 Ao iniciar, o gateway mostra o endereço da página. Se nenhum emulador estiver em execução, ele mostra o motivo e continua rodando.
@@ -60,7 +80,7 @@ Ao iniciar, o gateway mostra o endereço da página. Se nenhum emulador estiver 
 <!-- verify: phase 3 -->
 Por padrão, o endereço mostrado é a página pública, `https://droid.devpier.dev/app/`. Quando o gateway não está rodando na porta `7300`, o endereço termina em `#port=<port>`. Com `--local`, é a página local, `http://127.0.0.1:<port>/app/`. O gateway abre o endereço com o comando `open` do macOS, a menos que você passe `--no-open`.
 
-Se já houver um gateway rodando na porta, um segundo não inicia. Ele mostra que o droidpier já está rodando, com a porta, e abre a página. Se outro programa usa a porta, ele avisa, sugere outra porta e sai.
+Se já há um gateway rodando na porta, um segundo não inicia. Ele informa que o droidpier já está rodando, com a porta, e abre a página. Se o que está rodando é o gateway em segundo plano, também mostra `droidpier stop`. Se outro programa usa a porta, ele avisa, sugere outra porta e sai.
 
 <!-- verify: phase 3 -->
 Quando faltam partes do Android SDK, o gateway lista cada uma com um comando para instalá-la manualmente e pede que você termine a configuração na página. Ele nunca pergunta nada no Terminal: instalações, novos dispositivos e licenças são confirmados na página. Veja [Primeira execução](/pt-br/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -82,3 +102,5 @@ Quando faltam partes do Android SDK, o gateway lista cada uma com um comando par
 |---|---|
 | Executável instalado | `~/.local/bin/droidpier` |
 | Checksum da versão instalada | `~/.local/share/droidpier/installed.sha256` |
+| Configuração do gateway em segundo plano | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
+| Log do gateway em segundo plano | `~/Library/Logs/Droidpier/droidpier.log` |

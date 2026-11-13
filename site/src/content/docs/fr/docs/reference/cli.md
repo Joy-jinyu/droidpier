@@ -1,19 +1,31 @@
 ---
 title: Ligne de commande
 description: Options et variables d’environnement de la commande de la passerelle Droidpier.
-sourceHash: 6811a7927009
+sourceHash: b62f19b96312
 ---
 
 <!-- verify: phase 3 -->
 ```sh
+droidpier start [--port <port>] [--local] [--no-open]
+droidpier stop
+droidpier status
+droidpier logs
 droidpier [--port <port>] [--local] [--no-open]
 ```
 
-La passerelle tourne au premier plan jusqu’à ce que vous appuyiez sur `Ctrl+C`. L’arrêter n’arrête pas les émulateurs en cours d’exécution.
+| Commande | Effet |
+|---|---|
+| `droidpier start` | Fait tourner la passerelle en arrière-plan, comme LaunchAgent macOS. Elle continue après la fermeture de Terminal, démarre à l’ouverture de session et redémarre si elle plante. Si elle tourne déjà, elle redémarre. Les options données sont enregistrées ; sans option, les options enregistrées sont conservées. Ouvre la page une fois, sauf avec `--no-open`. |
+| `droidpier stop` | Arrête la passerelle en arrière-plan. Elle ne démarre plus à l’ouverture de session. |
+| `droidpier status` | Indique si la passerelle en arrière-plan tourne, avec son ID de processus, son port, sa version et son fichier journal. |
+| `droidpier logs` | Affiche le chemin du fichier journal et ses 50 dernières lignes. |
+| `droidpier` | Fait tourner la passerelle dans cette fenêtre Terminal jusqu’à ce que vous appuyiez sur `Ctrl+C`. |
+
+Arrêter la passerelle n’arrête pas les émulateurs en cours.
 
 ## Démarrer avec la commande d’installation {#start-with-the-install-command}
 
-La commande d’installation, `curl -fsSL https://droid.devpier.dev/install.sh | sh`, installe ou met à jour la passerelle, puis la démarre. Pour passer des options à la passerelle, placez-les après `sh -s --` :
+La commande d’installation, `curl -fsSL https://droid.devpier.dev/install.sh | sh`, installe ou met à jour la passerelle, puis lance `droidpier start`. Pour lui passer des options, placez-les après `sh -s --`. Elles sont enregistrées pour la passerelle en arrière-plan :
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7310
@@ -23,6 +35,12 @@ Pour installer ou mettre à jour sans démarrer la passerelle, définissez `DROI
 
 ```sh
 curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh
+```
+
+Pour faire tourner la passerelle dans la fenêtre Terminal, comme avant, définissez `DROIDPIER_FOREGROUND=1` :
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 ```
 
 ## Options
@@ -53,6 +71,8 @@ Avec ou sans `--no-open`, la page trouve la passerelle d’elle-même. Voir [Pre
 <!-- verify: phase 3 -->
 `ANDROID_HOME` est lue par la vérification du premier lancement.
 
+Quand `ANDROID_HOME` et `ANDROID_AVD_HOME` sont définies, `droidpier start` les enregistre pour la passerelle en arrière-plan, car launchd ne lit pas le profil de votre shell. Relancez `droidpier start` après les avoir modifiées.
+
 ## Ce qu’elle affiche
 
 Au démarrage, la passerelle affiche l’adresse de la page. Si aucun émulateur ne tourne, elle affiche la raison et continue de tourner.
@@ -60,7 +80,7 @@ Au démarrage, la passerelle affiche l’adresse de la page. Si aucun émulateur
 <!-- verify: phase 3 -->
 Par défaut, l’adresse affichée est celle de la page publique, `https://droid.devpier.dev/app/`. Quand la passerelle ne tourne pas sur le port `7300`, l’adresse se termine par `#port=<port>`. Avec `--local`, c’est celle de la page locale, `http://127.0.0.1:<port>/app/`. La passerelle ouvre l’adresse avec la commande macOS `open`, sauf si vous passez `--no-open`.
 
-Si une passerelle tourne déjà sur le port, une deuxième ne démarre pas. Elle affiche que droidpier tourne déjà, avec le port, et ouvre la page. Si un autre programme utilise le port, elle le signale, propose un autre port et s’arrête.
+Si une passerelle tourne déjà sur le port, une seconde ne démarre pas. Elle indique que droidpier tourne déjà, avec le port, et ouvre la page. Si celle qui tourne est la passerelle en arrière-plan, elle affiche aussi `droidpier stop`. Si un autre programme utilise le port, elle le signale, propose un autre port et quitte.
 
 <!-- verify: phase 3 -->
 Quand des parties de l’Android SDK manquent, la passerelle liste chacune avec une commande pour l’installer à la main, et vous invite à terminer la configuration sur la page. Elle ne pose jamais de question dans Terminal : les installations, les nouveaux appareils et les licences se confirment sur la page. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -82,3 +102,5 @@ Quand des parties de l’Android SDK manquent, la passerelle liste chacune avec 
 |---|---|
 | Exécutable installé | `~/.local/bin/droidpier` |
 | Somme de contrôle de la version installée | `~/.local/share/droidpier/installed.sha256` |
+| Réglages de la passerelle en arrière-plan | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
+| Journal de la passerelle en arrière-plan | `~/Library/Logs/Droidpier/droidpier.log` |

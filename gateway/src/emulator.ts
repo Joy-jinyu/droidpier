@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { pidAlive, type Running } from "./discovery.ts";
 import { loadController } from "./sdk.ts";
 import { adb } from "./adb.ts";
-import type { FrameHeader, Rotation } from "../../shared/protocol.ts";
+import type { FrameHeader, RotateDir, Rotation } from "../../shared/protocol.ts";
 
 type Size = { width: number; height: number };
 
@@ -21,8 +21,8 @@ export interface EmulatorSession {
   touch(x: number, y: number, down: boolean): Promise<void>;
   key(key: string, eventType: "keydown" | "keyup" | "keypress"): Promise<void>;
   text(text: string): Promise<void>;
-  /** 顺时针转 90°，返回新的方向。 */
-  rotate(): Promise<Rotation>;
+  /** 转 90°（缺省顺时针），返回新的方向。 */
+  rotate(dir?: RotateDir): Promise<Rotation>;
   /** 只写设备剪贴板，不粘贴。 */
   setClipboard(text: string): Promise<void>;
   getClipboard(): Promise<string>;
@@ -49,6 +49,11 @@ export function rotationFromZ(z: number): Rotation {
 /** 设备顺时针角度 → 方向模型 z 轴角度，落在 (-180, 180]。 */
 export function zForRotation(r: Rotation): number {
   return r === 0 ? 0 : r === 90 ? -90 : r === 180 ? 180 : 90;
+}
+
+/** 从 r 往 dir 方向转 90° 后的方向。 */
+export function turn(r: Rotation, dir: RotateDir): Rotation {
+  return ((r + (dir === "left" ? 270 : 90)) % 360) as Rotation;
 }
 
 // 帧里的 SkinRotation 是模拟器按机身方向给的：LANDSCAPE 对应 z=90（Android ROTATION_90），
@@ -253,9 +258,9 @@ export async function connectEmulator(running: Running, timeoutMs = 3000): Promi
     },
 
     // gRPC setPhysicalModel 在 32.1.14 上实测生效，不需要退到 adb emu rotate；保留 x、y 两轴的倾角
-    async rotate() {
+    async rotate(dir = "right") {
       const [x = 0, y = 0, z = 0] = await readModel();
-      const next = ((rotationFromZ(z) + 90) % 360) as Rotation;
+      const next = turn(rotationFromZ(z), dir);
       await unary("setPhysicalModel", { target: "ROTATION", value: { data: [x, y, zForRotation(next)] } });
       setRotation(next);
       return next;

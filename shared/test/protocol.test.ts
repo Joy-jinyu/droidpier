@@ -70,6 +70,13 @@ test("parseClientMsg 解析 rotate", () => {
   assert.deepEqual(parseClientMsg('{"t":"rotate"}'), { t: "rotate" });
 });
 
+test("parseClientMsg 解析 rotate 的方向，认不出的方向返回 null", () => {
+  assert.deepEqual(parseClientMsg('{"t":"rotate","dir":"left"}'), { t: "rotate", dir: "left" });
+  assert.deepEqual(parseClientMsg('{"t":"rotate","dir":"right"}'), { t: "rotate", dir: "right" });
+  assert.equal(parseClientMsg('{"t":"rotate","dir":"up"}'), null);
+  assert.equal(parseClientMsg('{"t":"rotate","dir":1}'), null);
+});
+
 test("BIN_SCREENSHOT 值为 2", () => {
   assert.equal(BIN_SCREENSHOT, 2);
 });

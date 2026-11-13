@@ -811,7 +811,7 @@ export async function startServer(opts: {
         case "rotate":
           // 排进输入队列：连点两次时第二次要读到第一次转完的方向
           // 新方向由 onRotation 广播
-          enqueue("rotate", (s) => s.rotate().then(
+          enqueue("rotate", (s) => s.rotate(m.dir).then(
             () => {},
             (e: Error) => send(ws, { t: "error", message: `旋转失败：${e.message}` }),
           ));

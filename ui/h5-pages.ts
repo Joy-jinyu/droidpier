@@ -23,3 +23,8 @@ export function pickPage<T extends ListedPage>(list: T[]): T | undefined {
   const real = list.filter((p) => !isPreload(p));
   return real.find((p) => p.visible) ?? real[0];
 }
+
+/** 设备上正在看的页面：前台可见的那一个，不算 data: 预加载页面；没有就是 undefined（不是可调试的 WebView 或 Chrome 时也没有）。 */
+export function activePage<T extends ListedPage>(list: T[]): T | undefined {
+  return list.find((p) => p.visible && !isPreload(p));
+}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { foregroundPkg, h5KeyShown, pickPage } from "../../ui/h5-pages.ts";
+import { activePage, foregroundPkg, h5KeyShown, pickPage } from "../../ui/h5-pages.ts";
 
 const page = (id: string, o: { pkg?: string; url?: string; visible?: boolean } = {}) => ({
   socket: "webview_devtools_remote_1", id, title: "", url: o.url ?? `https://example.com/${id}`, pkg: o.pkg ?? "com.example.app", visible: o.visible ?? false,
@@ -41,4 +41,11 @@ test("默认页面：不选 data: 预加载页面", () => {
   assert.equal(pickPage([preload, page("bg")])?.id, "bg");
   assert.equal(pickPage([preload]), undefined);
   assert.equal(pickPage([]), undefined);
+});
+
+test("activePage：前台可见的页面；后台的、data: 预加载的不算", () => {
+  assert.equal(activePage([page("bg"), page("fg", { visible: true })])?.url, "https://example.com/fg");
+  assert.equal(activePage([page("pre", { url: "data:text/html,", visible: true }), page("bg")]), undefined);
+  assert.equal(activePage([page("bg")]), undefined);
+  assert.equal(activePage([]), undefined);
 });

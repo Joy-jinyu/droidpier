@@ -11,7 +11,7 @@ import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
 import { matchesAvd } from "./device-search";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
-import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
+import { activePage, foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
 import { setupCardShown } from "./setup-card";
 import { deleteBlocked } from "./avd-delete";
 
@@ -207,6 +207,8 @@ const animateNext = () => {
 // 机身边框：内边距 + 1 像素描边
 const BEZEL = 11;
 const H5_EMPTY = "没有可审查的 H5。只有 debug 包或开启了 WebView 调试的 App 才能审查；先在 App 里打开一个 H5 页面。";
+// 页头地址栏放得下的字符数，超过时中间换成省略号：地址栏窄到约 380 像素时也不折行（再折 nsh 只会在连字符处断开、后面全丢）
+const URL_BAR_CHARS = 44;
 // 下拉框里没有标题的页面，地址大约放得下的字符数
 const URL_CHARS = 28;
 const pageKey = (p: Page) => `${p.socket}/${p.id}`;
@@ -408,6 +410,8 @@ const ICON_PATHS = {
   globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
   book: '<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>',
   chevronUp: '<path d="m18 15-6-6-6 6"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
@@ -1096,6 +1100,11 @@ function App() {
   // 主区现在显示的就是画面上这台：没有选中的设备时（列表里没有它），连着就算
   const shownIsLive = () => { const a = shown(); return a ? isCurrent(a) : state() === "connected"; };
   const switchTo = (a: Avd) => act(host.call("emu.use", { name: a.name }));
+  const copyHref = (url: string) =>
+    host.call("emu.copy", { text: url }).then(
+      () => showNotice({ text: "已复制页面地址" }),
+      () => showNotice({ text: "复制失败，请手动选中地址复制", error: true }),
+    );
   const pickDevice = (a: Avd) => {
     if (a.name !== selected()) animateNext();
     selected.set(a.name);
@@ -1293,6 +1302,18 @@ function App() {
               <Text style={{ flexShrink: 1, color: C.muted, fontSize: 11, numberOfLines: 1 }}>{subtitle()}</Text>
             </View>
           </View>
+          {/* 设备上前台页面的地址（可调试的 WebView 或 Chrome 才有），点复制按钮复制完整地址 */}
+          <If when={shownIsLive() ? activePage(pages() ?? []) : undefined}>
+            {(p) => (
+              <View role="group" accessibilityLabel="当前页面"
+                style={{ flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1, minWidth: 160, maxWidth: 520, height: 32, paddingLeft: 10, paddingRight: 2, borderRadius: 8, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.panel, ...ease(200) }}>
+                <Icon name="link" size={14} tint={C.muted} />
+                <Text accessibilityLabel={`当前页面地址：${p().url}`}
+                  style={{ flex: 1, minWidth: 0, color: C.keyText, fontSize: 12, fontFamily: "monospace", userSelect: "text", numberOfLines: 1 }}>{middleEllipsis(p().url, URL_BAR_CHARS)}</Text>
+                <IconBtn icon="copy" label="复制地址" onPress={() => copyHref(p().url)} />
+              </View>
+            )}
+          </If>
           <Toolbar accessibilityLabel="设备操作" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
             <ZoomControl zoom={zoom()} onZoom={setZoom} />
             <ToolGroup label="画面">

@@ -12,6 +12,7 @@ import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
 import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
 import { setupCardShown } from "./setup-card";
+import { deleteBlocked } from "./avd-delete";
 
 type State =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
@@ -375,6 +376,7 @@ const ICON_PATHS = {
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
   pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   minus: '<path d="M5 12h14"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
@@ -391,11 +393,11 @@ function Icon(props: { name: IconName; size?: number; tint: string }) {
   return <Image src={iconSrc(props.name)} style={{ pointerEvents: "none", width: size, height: size, tintColor: props.tint }} />;
 }
 
-/** 只有图标的按钮：名字给读屏和悬停提示。 */
-function IconBtn(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean }) {
+/** 只有图标的按钮：名字给读屏和悬停提示；有 tip 时悬停提示换成 tip（比如不能点的原因），读屏念名字加 tip。 */
+function IconBtn(props: { icon: IconName; label: string; onPress: () => void; disabled?: boolean; tip?: string }) {
   return (
-    <View onPress={props.onPress} role="button" accessibilityLabel={props.label} disabled={props.disabled}
-      tooltip={<Tip label={props.label} />}
+    <View onPress={props.onPress} role="button" accessibilityLabel={props.tip ? `${props.label}：${props.tip}` : props.label} disabled={props.disabled}
+      tooltip={<Tip label={props.tip ?? props.label} />}
       hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }}
       style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: "transparent", opacity: props.disabled ? 0.4 : 1 }}>
       <Icon name={props.icon} size={16} tint={C.muted} />
@@ -1048,10 +1050,35 @@ function App() {
     ).finally(() => renaming.set(false));
   };
 
+  // 删除确认框：删的是整台设备的数据，系统镜像不动；失败时留在框里显示原因
+  const deleteTarget = signal<Avd | null>(null);
+  const deleteError = signal<string | null>(null);
+  const deleting = signal(false);
+  const openDelete = (a: Avd) => {
+    deleteError.set(null);
+    deleteTarget.set(a);
+  };
+  const confirmDelete = () => {
+    const a = deleteTarget();
+    if (!a || deleting()) return;
+    deleting.set(true);
+    const still = () => deleteTarget()?.name === a.name;
+    (host.call("emu.deleteAvd", { name: a.name }) as Promise<{ ok: boolean; error?: string }>).then(
+      (r) => {
+        if (r.ok) {
+          if (still()) deleteTarget.set(null);
+          showNotice({ text: `已删除 ${avdLabel(a)}` });
+        } else if (still()) deleteError.set(`没有删除：${r.error ?? "未知原因"}`);
+      },
+      (e: Error) => { if (still()) deleteError.set(`没有删除：${e.message}`); },
+    ).finally(() => deleting.set(false));
+  };
+
   const DeviceRow = (props: { avd: () => Avd }) => {
     const a = props.avd;
     const boot = () => boots()[a().name];
     const current = () => a().running === "grpc" && a().serial === serial() && (state() === "connected" || state() === "rebooting");
+    const blocked = () => deleteBlocked(a(), isBooting(boot()));
     const spec = () => {
       const parts: string[] = [];
       if (a().width && a().height) parts.push(`${a().width}×${a().height}`);
@@ -1072,6 +1099,8 @@ function App() {
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a().running === "no" ? C.idle : statusColor() }} />
           <Text style={{ flex: 1, color: C.text, fontSize: 13, lineHeight: 18, fontWeight: current() ? "600" : "500" }}>{avdLabel(a())}</Text>
           <IconBtn icon="pencil" label={`重命名 ${avdLabel(a())}`} onPress={() => openRename(a())} />
+          <IconBtn icon="trash" label={`删除设备 ${avdLabel(a())}`} tip={blocked() ?? undefined} disabled={blocked() !== null}
+            onPress={() => { if (!blocked()) openDelete(a()); }} />
         </View>
         <Text style={{ color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{spec()}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -1392,6 +1421,23 @@ function App() {
               <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
                 <Btn label="取消" onPress={() => renameTarget.set(null)} />
                 <Btn label={renaming() ? "保存中…" : "保存"} kind="primary" disabled={renaming()} onPress={saveRename} />
+              </View>
+            </View>
+          )}
+        </If>
+      </Dialog>
+      <Dialog open={deleteTarget() !== null} animation="fade" onOpenChange={({ open }) => { if (!open && !deleting()) deleteTarget.set(null); }}
+        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        <If when={deleteTarget()}>
+          {(a) => (
+            <View role="group" accessibilityLabel="确认删除设备" style={{ gap: 10 }}>
+              <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>{`删除设备 ${avdLabel(a())}？`}</Text>
+              <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>会删除这台设备的全部数据（已装的 App、文件、快照），不能恢复。系统镜像不会删除。</Text>
+              <If when={deleteError()}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 12, lineHeight: 18, userSelect: "text" }}>{e()}</Text>}</If>
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+                <Btn label="取消" disabled={deleting()} onPress={() => deleteTarget.set(null)} />
+                <Btn label={deleting() ? "删除中…" : "删除"} kind="danger" disabled={deleting()} onPress={confirmDelete} />
               </View>
             </View>
           )}

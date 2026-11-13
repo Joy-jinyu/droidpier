@@ -455,8 +455,9 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
   let resolve!: (r: any) => void;
   let reject!: (e: Error) => void;
   let displayName: string | undefined;
+  let deleted = false;
   const ops: AvdOps = {
-    list: async () => [{ name: "A", running: "no", ...(displayName ? { displayName } : {}) }],
+    list: async () => (deleted ? [] : [{ name: "A", running: "no", ...(displayName ? { displayName } : {}) }]),
     start: (name) => {
       calls.push(`start ${name}`);
       if (job && job.name === name && job.progress === "booting") return job;
@@ -472,6 +473,11 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
     rename: async (name, d) => {
       if (name !== "A") throw new Error(`没有这个设备：${name}`);
       displayName = d;
+    },
+    delete: async (name) => {
+      calls.push(`delete ${name}`);
+      if (name !== "A" || deleted) throw new Error(`没有这个设备：${name}`);
+      deleted = true;
     },
   };
   return {
@@ -513,6 +519,48 @@ test("renameAvd：回复成功，所有连接都收到带新显示名的 avds", 
   assert.deepEqual(a.msgs.find((m) => m.t === "renameAvd"), { t: "renameAvd", rid: 7, ok: true });
   assert.deepEqual(b.msgs.find((m) => m.t === "avds"), { t: "avds", list: [{ name: "A", running: "no", displayName: "测试机" }] });
   assert.equal(b.msgs.some((m) => m.t === "renameAvd"), false);
+});
+
+test("deleteAvd：回复成功，所有连接都收到删掉后的 avds", async (t) => {
+  const f = fakeAvd({});
+  const { connect } = await setup(t, new FakeSession(), undefined, f.ops);
+  const a = await connect();
+  const b = await connect();
+  hello(a);
+  hello(b);
+  await until(() => a.msgs.length > 0 && b.msgs.length > 0);
+  a.ws.send(JSON.stringify({ t: "deleteAvd", rid: 9, name: "A" }));
+  await until(() => a.msgs.some((m) => m.t === "deleteAvd") && b.msgs.some((m) => m.t === "avds") && a.msgs.some((m) => m.t === "avds"));
+  assert.deepEqual(a.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 9, ok: true });
+  assert.deepEqual(b.msgs.find((m) => m.t === "avds"), { t: "avds", list: [] });
+  assert.equal(b.msgs.some((m) => m.t === "deleteAvd"), false);
+});
+
+test("deleteAvd：失败时回复原因，不广播 avds", async (t) => {
+  const f = fakeAvd({});
+  const { connect } = await setup(t, new FakeSession(), undefined, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 10, name: "B" }));
+  await until(() => c.msgs.some((m) => m.t === "deleteAvd"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 10, ok: false, error: "没有这个设备：B" });
+  await sleep(50);
+  assert.equal(c.msgs.some((m) => m.t === "avds"), false);
+});
+
+test("deleteAvd：正在开机的设备不删，也不去问 AvdOps", async (t) => {
+  const f = fakeAvd({});
+  const { connect } = await setup(t, null, async () => null, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  c.ws.send(JSON.stringify({ t: "start", name: "A" }));
+  await until(() => c.msgs.some((m) => m.t === "boot"));
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 11, name: "A" }));
+  await until(() => c.msgs.some((m) => m.t === "deleteAvd"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 11, ok: false, error: "这台设备正在启动，先关闭再删除" });
+  assert.equal(f.calls.includes("delete A"), false);
 });
 
 test("renameAvd：失败时回复原因，不广播 avds", async (t) => {

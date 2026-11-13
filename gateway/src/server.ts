@@ -81,6 +81,8 @@ export type AvdOps = {
   use(name: string): Promise<EmulatorSession | null>;
   /** 改显示名（name 是 id）；名字不合规、没有这台 AVD、写不了文件时抛错，错误信息给用户看。 */
   rename(name: string, displayName: string): Promise<void>;
+  /** 删掉这台 AVD（.ini 和数据目录）；没有这台、运行中、目录不归它时抛错，错误信息给用户看。 */
+  delete(name: string): Promise<void>;
 };
 
 /** 环境检查和安装，由 main.ts 接到 setup.ts / installer.ts。只有收到页面的 install 才安装。 */
@@ -899,6 +901,21 @@ export async function startServer(opts: {
           send(ws, { t: "renameAvd", rid: m.rid, ok: done === null, ...(done === null ? {} : { error: done }) });
           // 别的页面也要看到新名字
           if (done === null) avd.list().then((list) => broadcast({ t: "avds", list }), (e: Error) => log(`改名后读取 AVD 列表失败：${e.message}`));
+          break;
+        }
+        case "deleteAvd": {
+          if (!opts.avd) {
+            send(ws, { t: "deleteAvd", rid: m.rid, ok: false, error: "网关没有管理设备" });
+            break;
+          }
+          const avd = opts.avd;
+          // 开机任务进行中时发现文件可能还没写出来，AvdOps 看不出它在运行
+          const done = [...jobs].some((j) => j.name === m.name)
+            ? "这台设备正在启动，先关闭再删除"
+            : await avd.delete(m.name).then(() => null, (e: Error) => e.message);
+          log(done === null ? `已删除设备 ${m.name}` : `删除设备 ${m.name} 失败：${done}`);
+          send(ws, { t: "deleteAvd", rid: m.rid, ok: done === null, ...(done === null ? {} : { error: done }) });
+          if (done === null) avd.list().then((list) => broadcast({ t: "avds", list }), (e: Error) => log(`删除后读取 AVD 列表失败：${e.message}`));
           break;
         }
         case "inspect":

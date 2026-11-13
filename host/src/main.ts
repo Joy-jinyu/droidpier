@@ -640,6 +640,13 @@ export async function createHost(player: Player) {
           (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? `${e.message}，可能需要更新 droidpier` : e.message }),
         );
       }
+      // 同上；删得慢（大目录、avdmanager 起 Java）时页面先超时，网关删完照样广播新列表
+      if (name === "emu.deleteAvd") {
+        return conn.request({ t: "deleteAvd", name: needName(name, args) }).then(
+          (r) => ({ ok: r.ok, error: r.error }),
+          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? `${e.message}：可能还在删，稍后看设备列表；也可能需要更新 droidpier` : e.message }),
+        );
+      }
       if (name === "emu.status") {
         return {
           state, serial, upgrade, rev, rotation, ...stats, avds, boots: [...boots.values()].map((b) => b.last),

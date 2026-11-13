@@ -140,3 +140,12 @@ test("parseClientMsg 解析 renameAvd，字段不对时返回 null", () => {
   assert.deepEqual(parseClientMsg('{"t":"renameAvd","rid":3,"name":"A","displayName":"测试机","extra":1}'), { t: "renameAvd", rid: 3, name: "A", displayName: "测试机" });
   assert.equal(parseClientMsg('{"t":"renameAvd","rid":3,"name":"A"}'), null);
 });
+
+test("parseClientMsg 解析 deleteAvd；rid、name 不对或 name 不合 AVD 名规则时返回 null", () => {
+  assert.deepEqual(parseClientMsg('{"t":"deleteAvd","rid":4,"name":"Pixel_5_API_34","extra":1}'), { t: "deleteAvd", rid: 4, name: "Pixel_5_API_34" });
+  assert.equal(parseClientMsg('{"t":"deleteAvd","name":"A"}'), null);
+  assert.equal(parseClientMsg('{"t":"deleteAvd","rid":4}'), null);
+  for (const name of ["", "../A", "a/b", "-list", "a b", ".hidden"]) {
+    assert.equal(parseClientMsg(JSON.stringify({ t: "deleteAvd", rid: 4, name })), null, name);
+  }
+});

@@ -1,3 +1,5 @@
+import { avdNameError } from "./avd-spec.ts";
+
 /** 协议版本号。 */
 export const PROTOCOL_VERSION = 1;
 
@@ -226,6 +228,8 @@ export type ClientMsg =
   | { t: "navigate"; rid: number; socket: string; id: string; address: string }
   /** 改 AVD 的显示名（name 是 id）；回复同 rid 的 renameAvd，成功后网关给所有页面发新的 avds。 */
   | { t: "renameAvd"; rid: number; name: string; displayName: string }
+  /** 用户在确认框里确认过才发：删掉这台 AVD 的 .ini 和数据目录（系统镜像不动）；运行中、启动中的拒绝。回复同 rid 的 deleteAvd，成功后网关给所有页面发新的 avds。 */
+  | { t: "deleteAvd"; rid: number; name: string }
   /** 用户在页面确认框里确认过才发；ids 是要装的缺失项。 */
   | { t: "install"; ids: EnvItemId[] }
   /** 要创建设备对话框的目录。 */
@@ -272,6 +276,7 @@ export type ServerMsg =
   | { t: "inspect"; rid: number; error: string; code?: AdbErrorCode }
   | { t: "navigate"; rid: number; ok: boolean; href?: string; title?: string; bridge?: boolean; error?: string; code?: AdbErrorCode }
   | { t: "renameAvd"; rid: number; ok: boolean; error?: string }
+  | { t: "deleteAvd"; rid: number; ok: boolean; error?: string }
   /** hello 通过后（ready 之前）发一次，每次安装结束后再广播。 */
   | ({ t: "env" } & EnvReport)
   /** 每次安装进度更新都广播。 */
@@ -364,6 +369,10 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case "renameAvd":
       if (!isNum(o.rid) || !isStr(o.name) || !isStr(o.displayName)) return null;
       return { t: "renameAvd", rid: o.rid, name: o.name, displayName: o.displayName };
+    case "deleteAvd":
+      // name 拼进文件路径和 avdmanager 参数：不合 AVD 名规则的（../、- 开头）整条丢掉
+      if (!isNum(o.rid) || !isStr(o.name) || avdNameError(o.name, []) !== null) return null;
+      return { t: "deleteAvd", rid: o.rid, name: o.name };
     default:
       return null;
   }

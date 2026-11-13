@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { findOwnRunning } from "./discovery.ts";
 import { connectEmulator, type EmulatorSession } from "./emulator.ts";
 import { startServer } from "./server.ts";
-import { listAvds, renameAvd } from "./avd.ts";
+import { deleteAvd, listAvds, renameAvd } from "./avd.ts";
 import { startAvd, stopAvd } from "./lifecycle.ts";
 import { cachedSession } from "./session-cache.ts";
 import { avdHome, avdmanagerBin, serviceLogPath, cmdlineToolsManifestUrl, discoveryDir, emulatorBin, findJavaHome, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
@@ -147,7 +147,7 @@ const srv = await startServer({
     pollMs: 1000,
   }),
   // 还没装模拟器程序时没有 emulator -list-avds 可跑，设备列表就是空的
-  avd: { list: async () => (existsSync(emulatorBin()) ? listAvds() : []), start: (name) => startAvd(name), stop: (serial) => stopAvd(serial), use: getSession.use, rename: (name, displayName) => renameAvd(name, displayName) },
+  avd: { list: async () => (existsSync(emulatorBin()) ? listAvds() : []), start: (name) => startAvd(name), stop: (serial) => stopAvd(serial), use: getSession.use, rename: (name, displayName) => renameAvd(name, displayName), delete: (name) => deleteAvd(name) },
   setup: {
     check: () => checkEnv(realEnvDeps()),
     installer,

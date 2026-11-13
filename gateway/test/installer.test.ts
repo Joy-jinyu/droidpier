@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -21,13 +21,28 @@ const ZIPS: Record<string, Buffer> = {
   [`${BASE}emulator-darwin_aarch64-16740729.zip`]: zipOf("emulator", "emulator"),
   [`${BASE}sys-img/google_apis/arm64-v8a-34_r14.zip`]: zipOf("arm64-v8a", "system.img"),
 };
-/** 清单里的 sha1 换成假 zip 真正的 sha1；bad 里的包故意留着对不上的值。 */
+const sizeOf = (url: string) => `<size>${ZIPS[url].length}</size>`;
+/** 清单里的 sha1、大小换成假 zip 真正的值；bad 里的包故意留着对不上的 sha1。 */
 const repo = (bad: string[] = []) => REPO
   .replace(H("6"), bad.includes("platform-tools") ? H("0") : sha1(ZIPS[`${BASE}platform-tools_r37.0.1-darwin.zip`]))
-  .replace(H("3"), bad.includes("emulator") ? H("0") : sha1(ZIPS[`${BASE}emulator-darwin_aarch64-16740729.zip`]));
-const sysImg = () => SYS_IMG.replace(H("8"), sha1(ZIPS[`${BASE}sys-img/google_apis/arm64-v8a-34_r14.zip`]));
+  .replace("<size>16110554</size>", sizeOf(`${BASE}platform-tools_r37.0.1-darwin.zip`))
+  .replace(H("3"), bad.includes("emulator") ? H("0") : sha1(ZIPS[`${BASE}emulator-darwin_aarch64-16740729.zip`]))
+  .replace("<size>416113219</size>", sizeOf(`${BASE}emulator-darwin_aarch64-16740729.zip`));
+const sysImg = () => SYS_IMG
+  .replace(H("8"), sha1(ZIPS[`${BASE}sys-img/google_apis/arm64-v8a-34_r14.zip`]))
+  .replace("<size>1610393229</size>", sizeOf(`${BASE}sys-img/google_apis/arm64-v8a-34_r14.zip`));
 
-async function fakes(t: import("node:test").TestContext, opts: { bad?: string[]; manifests?: Record<string, string>; status?: number } = {}) {
+type FakeOpts = {
+  bad?: string[];
+  manifests?: Record<string, string>;
+  status?: number;
+  /** 换掉 zip 的正文（默认分两块给出假 zip）。 */
+  body?: (zip: Buffer) => AsyncIterable<Uint8Array>;
+  /** 开始下载 zip 前调用（这时临时目录已经建好）。 */
+  beforeZip?: (sdk: string) => Promise<void>;
+};
+
+async function fakes(t: import("node:test").TestContext, opts: FakeOpts = {}) {
   const root = await mkdtemp(join(tmpdir(), "emu-installer-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   // SDK 目录还不存在：安装时自己建
@@ -44,7 +59,9 @@ async function fakes(t: import("node:test").TestContext, opts: { bad?: string[];
       if (url in manifests) return { ok: true, status: 200, text: async () => manifests[url], body: null };
       const zip = ZIPS[url];
       if (!zip || opts.status) return { ok: false, status: opts.status ?? 404, text: async () => "", body: null };
-      return { ok: true, status: 200, text: async () => "", body: (async function* () { yield zip.subarray(0, 5); yield zip.subarray(5); })() };
+      await opts.beforeZip?.(sdk);
+      const body = opts.body?.(zip) ?? (async function* () { yield zip.subarray(0, 5); yield zip.subarray(5); })();
+      return { ok: true, status: 200, text: async () => "", body };
     },
     unzip: async (zip, dest) => {
       unzips.push(zip);
@@ -102,6 +119,46 @@ test("sha1 对不上：失败，什么都不解压，目标目录不存在", asy
   assert.deepEqual(f.unzips, []);
   assert.equal(existsSync(join(f.sdk, "platform-tools")), false);
   assert.deepEqual(await readdir(f.sdk), ["licenses"]);
+});
+
+test("写 zip 出错（比如磁盘满了）：这一项失败，网关不崩，临时目录收拾干净", async (t) => {
+  // 临时目录改成只读：建 package.zip 失败，和磁盘满时写失败走同一条路
+  const f = await fakes(t, {
+    beforeZip: async (sdk) => {
+      for (const d of await readdir(join(sdk, ".droidpier-tmp"))) await chmod(join(sdk, ".droidpier-tmp", d), 0o500);
+    },
+  });
+  const { ps } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
+  assert.match(lastOf(ps, "platform-tools")!.logTail, /EACCES|permission/i);
+  assert.deepEqual(f.unzips, []);
+  assert.deepEqual(await readdir(f.sdk), ["licenses"]);
+});
+
+test("下载到的比清单写的大：一超过就停，不解压", async (t) => {
+  let pulled = 0;
+  const f = await fakes(t, {
+    body: (zip) => (async function* () {
+      yield zip;
+      for (let i = 0; i < 100; i++) {
+        pulled++;
+        yield Buffer.from("x");
+      }
+    })(),
+  });
+  const { ps } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
+  assert.match(lastOf(ps, "platform-tools")!.logTail, /字节/);
+  assert.ok(pulled < 100, `读了 ${pulled} 块`);
+  assert.deepEqual(f.unzips, []);
+});
+
+test("下载到的比清单写的小：失败，不解压", async (t) => {
+  const f = await fakes(t, { body: (zip) => (async function* () { yield zip.subarray(0, zip.length - 1); })() });
+  const { ps } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
+  assert.match(lastOf(ps, "platform-tools")!.logTail, /字节/);
+  assert.deepEqual(f.unzips, []);
 });
 
 test("不同意许可证：失败，不下载，不写许可证文件", async (t) => {

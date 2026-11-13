@@ -3,6 +3,7 @@ import { createWriteStream } from "node:fs";
 import { access, mkdir, mkdtemp, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
+import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { manifestUrlFor, packageDir } from "./platform.ts";
 import { SYSTEM_IMAGE } from "./setup.ts";
@@ -71,27 +72,30 @@ export function createInstaller(deps: InstallerDeps): Installer {
     await writeFile(file, licenceFileText(await readFile(file, "utf8").catch(() => ""), pkg.licence.text));
   };
 
+  /** 下载到 zip：多过清单写的字节数就停，写盘出错（磁盘满）就失败；下完字节数和 sha1 都要对上。 */
   const download = async (id: string, url: string, pkg: RepoPackage, zip: string, emit: (p: Progress) => void) => {
     const res = await deps.fetch(url, abort.signal);
     if (!res.ok || !res.body) throw new StepError(`下载失败：HTTP ${res.status}`);
+    const body = res.body;
+    const want = pkg.archive.size;
     const hash = createHash("sha1");
-    const file = createWriteStream(zip);
     let got = 0;
     let lastPct = -1;
-    try {
-      for await (const chunk of res.body) {
-        hash.update(chunk);
+    async function* tap() {
+      for await (const chunk of body) {
         got += chunk.length;
-        if (!file.write(chunk)) await new Promise((r) => file.once("drain", r));
-        const pct = Math.min(100, Math.floor((got / pkg.archive.size) * 100));
+        if (got > want) throw new StepError(`下载到的超过清单写的 ${want} 字节，停止下载`);
+        hash.update(chunk);
+        const pct = Math.min(100, Math.floor((got / want) * 100));
         if (pct !== lastPct) {
           lastPct = pct;
           emit({ id, phase: "download", pct, logTail: `下载 ${url}` });
         }
+        yield chunk;
       }
-    } finally {
-      await new Promise((r) => file.end(r));
     }
+    await pipeline(tap(), createWriteStream(zip));
+    if (got !== want) throw new StepError(`只下载到 ${got} 字节，清单写的是 ${want} 字节，没有解压`);
     const sha1 = hash.digest("hex");
     if (sha1 !== pkg.archive.sha1) throw new StepError(`sha1 校验不通过（清单 ${pkg.archive.sha1}，下载到的 ${sha1}），没有解压`);
     return sha1;

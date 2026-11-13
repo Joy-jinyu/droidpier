@@ -22,11 +22,11 @@ import { createPending } from "./pending.ts";
 
 /**
  * 页面看到的连接状态。bad-origin 之后不再重连；
- * lna-denied（本地网络权限被拒）、lna-prompt（权限框还没点）、no-gateway（本机网关没开）照常每秒探测，连上就恢复。
+ * lna-denied（本地网络权限被拒）、lna-prompt（权限框还没点）、no-gateway（本机网关没开）、refused（网关在，但没接受这条 WebSocket）照常每秒探测，连上就恢复。
  */
 export type ConnState =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
-  | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway";
+  | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway" | "refused";
 
 /** 协议版本不兼容时的错误码。 */
 export type VersionErrorCode = "gateway-outdated" | "page-outdated";
@@ -66,6 +66,8 @@ export function createConnection(opts: {
   pageIsPublic: boolean;
   /** 查本地网络权限，用来细分 lna-denied；不给就不细分。 */
   localPermission?: () => Promise<LocalPermission>;
+  /** WebSocket 没连上时问网关的 HTTP 有没有回应（launch.ts 的 gatewayAnswers），有回应就是 refused；不给就不分。 */
+  gatewayAnswers?: () => Promise<boolean>;
   /** 标签页在后台时为真：这时断开了不重连，等 wake()。 */
   hidden: () => boolean;
   size: () => { width: number; height: number };
@@ -232,7 +234,22 @@ export function createConnection(opts: {
       }
       if (stopped) return;
       attempts++;
-      const f = classifyFailure({ opened, closeCode: e.code, pageIsPublic: opts.pageIsPublic, attempts });
+      // 网关在、只是拒绝了这条 WebSocket：显示 refused，照常重连
+      if (!opened && opts.gatewayAnswers) {
+        void opts.gatewayAnswers().then((up) => {
+          // 结果回来时已经重新连上（attempts 清零）就不再改状态
+          if (stopped || attempts === 0) return;
+          if (up) setState("refused");
+          else classify(e.code);
+        });
+        setTimeout(reconnect, RETRY_MS);
+        return;
+      }
+      classify(e.code);
+      setTimeout(reconnect, RETRY_MS);
+    };
+    const classify = (closeCode: number) => {
+      const f = classifyFailure({ opened, closeCode, pageIsPublic: opts.pageIsPublic, attempts });
       if (f === "old-gateway") {
         stopped = true;
         opts.onVersionError?.("gateway-outdated", INSTALL_CMD);
@@ -248,8 +265,7 @@ export function createConnection(opts: {
         opts.localPermission().then((p) => { if (attempts > 0 && !stopped) setState(refineLocalFailure(f, p)); });
       } else if (f !== "retry") setState(f);
       // 4004 前网关已发过 status（没有模拟器 / 模拟器已关闭），保留它；还没连上过就继续显示连接中
-      else if (everOpened && e.code !== CLOSE_NO_EMULATOR) setState("disconnected");
-      setTimeout(reconnect, RETRY_MS);
+      else if (everOpened && closeCode !== CLOSE_NO_EMULATOR) setState("disconnected");
     };
   };
 

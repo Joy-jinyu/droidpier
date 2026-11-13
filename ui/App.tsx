@@ -17,7 +17,7 @@ import { deleteBlocked } from "./avd-delete";
 type State =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
   | "gateway-outdated" | "page-outdated"
-  | "unsupported-browser" | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway";
+  | "unsupported-browser" | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway" | "refused";
 type Avd = { name: string; displayName?: string; width?: number; height?: number; apiLevel?: number; running: "no" | "grpc" | "no-grpc"; serial?: number };
 type Boot = { name: string; progress: string; error?: string; seconds: number };
 /** sticky：不自动消失，文字可选中复制，带关闭按钮。 */
@@ -121,6 +121,7 @@ const LABEL: Record<State, string> = {
   "lna-prompt": "等待允许访问本机",
   "bad-origin": "来源未被允许",
   "no-gateway": "还没连上本机的 Droidpier",
+  refused: "网关没有接受这个浏览器的连接",
 };
 
 // 连不上时画面上方的说明；带命令的两种（gateway-outdated、no-gateway）命令由 host 在 upgrade 里给
@@ -133,6 +134,8 @@ const PROBLEM: Partial<Record<State, string>> = {
   "bad-origin": "这个页面地址不在网关允许的来源里，请打开 https://droid.devpier.dev/app/",
   // 页面看不出装没装 droidpier；同一条命令没装时先装、装了直接启动
   "no-gateway": "还没连上本机的 Droidpier",
+  // 网关只收 Chrome / Edge 直接发起的连接（gateway/src/peer.ts）
+  refused: "网关没有接受这个浏览器的连接：请直接用 Chrome 或 Edge 打开，不要经过本机代理。正在重试…",
 };
 
 // 旧网关还会报 java、sdk、cmdline-tools，查不到时直接显示 id

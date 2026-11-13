@@ -5,7 +5,7 @@ import { createConnection, type BootMsg, type ConnState, type VersionErrorCode }
 import { createHeldKeys } from "./held-keys.ts";
 import { createPointerTracker } from "./pointer.ts";
 import { isDevtoolsSrc } from "./devtools-src.ts";
-import { gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
+import { gatewayAnswers, gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
 import { createRenderer } from "./renderer.ts";
 import { createUploads } from "./uploads.ts";
 import { parseZoom, ZOOM_STEPS } from "../../shared/zoom.ts";
@@ -160,6 +160,7 @@ export async function createHost(player: Player) {
     hidden: () => document.hidden,
     pageIsPublic: !isLoopbackHost(location.hostname),
     localPermission,
+    gatewayAnswers: () => gatewayAnswers(fetch, GATEWAY_PORT),
     size,
     onOpen: () => {
       lastSent = size();

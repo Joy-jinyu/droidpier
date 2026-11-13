@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyFailure, DEFAULT_GATEWAY_PORT, gatewayPort, isSupportedBrowser, parsePort, refineLocalFailure } from "../../host/src/launch.ts";
+import { classifyFailure, DEFAULT_GATEWAY_PORT, gatewayAnswers, gatewayPort, isSupportedBrowser, parsePort, refineLocalFailure } from "../../host/src/launch.ts";
 
 test("parsePort 读出 #port，旧链接里的口令不管", () => {
   assert.equal(parsePort("#port=7306"), 7306);
@@ -60,4 +60,18 @@ test("refineLocalFailure：按本地网络权限细分 lna-denied", () => {
   assert.equal(refineLocalFailure("lna-denied", "prompt"), "lna-prompt");
   assert.equal(refineLocalFailure("lna-denied", "granted"), "no-gateway");
   assert.equal(refineLocalFailure("lna-denied", null), "no-gateway");
+});
+
+test("gatewayAnswers：/healthz 有回应（no-cors）为 true；连不上、超时为 false", async () => {
+  const urls: string[] = [];
+  const ok = (async (url: string, init: RequestInit) => { urls.push(url); assert.equal(init.mode, "no-cors"); return new Response(null); }) as unknown as typeof fetch;
+  assert.equal(await gatewayAnswers(ok, 7306), true);
+  assert.deepEqual(urls, ["http://127.0.0.1:7306/healthz"]);
+  const down = (async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch;
+  assert.equal(await gatewayAnswers(down, 7306), false);
+  const hang = ((_u: string, init: RequestInit) => new Promise((_r, rej) => init.signal!.addEventListener("abort", () => rej(init.signal!.reason)))) as unknown as typeof fetch;
+  // AbortSignal.timeout 的定时器不占事件循环，测试里另挂一个
+  const keep = setTimeout(() => {}, 1000);
+  assert.equal(await gatewayAnswers(hang, 7306, 20), false);
+  clearTimeout(keep);
 });

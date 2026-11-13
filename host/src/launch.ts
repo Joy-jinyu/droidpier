@@ -45,6 +45,19 @@ export function classifyFailure(input: { opened: boolean; closeCode?: number; pa
   return "retry";
 }
 
+/**
+ * WebSocket 没连上时问一下网关的 /healthz：HTTP 有回应（no-cors 拿不到内容，但不会失败）说明网关在，只是没接受这条 WebSocket，
+ * 比如浏览器不是 Chrome / Edge 的网络进程、经过了本机代理（gateway/src/peer.ts）。超时、连不上都算没回应；超时要短于重连间隔（1 秒）。
+ */
+export async function gatewayAnswers(fetchFn: typeof fetch, port: number, timeoutMs = 800): Promise<boolean> {
+  try {
+    await fetchFn(`http://127.0.0.1:${port}/healthz`, { mode: "no-cors", cache: "no-store", signal: AbortSignal.timeout(timeoutMs), targetAddressSpace: "loopback" } as RequestInit);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** 本地网络权限的状态；查不到（浏览器不认这个权限名）是 null。 */
 export type LocalPermission = "denied" | "prompt" | "granted" | null;
 

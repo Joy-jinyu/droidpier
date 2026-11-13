@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bootLogReason, bootLogHint } from "../src/boot-log.ts";
+import { bootLogReason, bootLogHint, bootStuckDetail } from "../src/boot-log.ts";
 
 // 2026-11-12 在本机用 emulator 32.1.14 启动一个指向不存在系统镜像的临时 AVD 得到的输出（路径已换成占位）
 const MISSING_IMAGE = `WARNING | /sdk/system-images/android-99/google_apis/arm64-v8a/ is not a valid directory.
@@ -72,4 +72,41 @@ test("bootLogHint：磁盘空间不够", () => {
 
 test("bootLogHint：认不出时返回 null", () => {
   assert.equal(bootLogHint("INFO | hello"), null);
+});
+
+// 2026-11-13 本机 emulator 36.4.10 正常开机时日志里的几行
+const BOOTED = `INFO         | Loading snapshot 'default_boot'...
+WARNING      | Error -1 from the snapshot callback
+USER_INFO    | The emulator is starting from scratch. Reason: different renderer configured
+INFO         | Boot completed in 12455 ms
+ERROR        | bad color buffer handle 256
+`;
+
+test("bootStuckDetail：模拟器自己报了开机完成 → 是 adb 读不到，不拿 ERROR 噪音当原因", () => {
+  const d = bootStuckDetail(BOOTED, true);
+  assert.match(d, /模拟器已经开机/);
+  assert.match(d, /adb kill-server/);
+  assert.doesNotMatch(d, /bad color buffer/);
+});
+
+test("bootStuckDetail：还没问过 adb 时，不因为开机完成就怪 adb", () => {
+  assert.equal(bootStuckDetail(BOOTED, false), "日志最后一行：ERROR | bad color buffer handle 256");
+});
+
+test("bootStuckDetail：没开机完成但认得出常见问题 → 给中文建议", () => {
+  assert.match(bootStuckDetail(MISSING_IMAGE, true), /系统镜像/);
+});
+
+test("bootStuckDetail：都认不出 → 给日志最后一行，说明卡在哪", () => {
+  assert.equal(
+    bootStuckDetail("INFO | Started GRPC server\nINFO   |  Loading snapshot 'default_boot'...\n\n", true),
+    "日志最后一行：INFO | Loading snapshot 'default_boot'...",
+  );
+});
+
+test("bootStuckDetail：最后一行超过 300 字截断，空日志返回空串", () => {
+  const d = bootStuckDetail(`INFO | ${"x".repeat(500)}`, true);
+  assert.ok(d.length <= "日志最后一行：".length + 300, String(d.length));
+  assert.ok(d.endsWith("…"));
+  assert.equal(bootStuckDetail("\n \n", true), "");
 });

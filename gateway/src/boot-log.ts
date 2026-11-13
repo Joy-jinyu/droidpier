@@ -9,7 +9,10 @@ export function bootLogReason(log: string): string {
   const picked = key.length
     ? [...key.filter((l) => SEVERE.test(l)), ...key.filter((l) => !SEVERE.test(l))].slice(0, 2)
     : lines.slice(-2);
-  const text = [...new Set(picked)].join("; ");
+  return clip([...new Set(picked)].join("; "));
+}
+
+function clip(text: string): string {
   return text.length > MAX_REASON ? `${text.slice(0, MAX_REASON - 1)}…` : text;
 }
 
@@ -36,4 +39,21 @@ const HINTS: Array<[RegExp, string]> = [
 /** 日志里认得出的常见启动失败，翻成中文建议；认不出返回 null。 */
 export function bootLogHint(log: string): string | null {
   return HINTS.find(([re]) => re.test(log))?.[1] ?? null;
+}
+
+// 模拟器自己检测到开机完成时打的一行（emulator 36.4.10 二进制里的格式串是 "Boot completed in %lld ms"）
+const BOOTED = /Boot completed in \d+ ms/;
+const ADB_SILENT =
+  "模拟器已经开机，但 adb 一直读不到开机完成：在终端运行 adb kill-server（SDK 的 platform-tools 里）重启 adb 后再启动一次";
+
+/**
+ * 开机超时时说明卡在哪：问过 adb 而模拟器自己报了开机完成，就是 adb 读不到；否则用认得出的常见问题；都没有给日志最后一行。
+ * 不用 bootLogReason：正常开机的日志里也有 ERROR 行（如 bad color buffer handle），超时时拿它当原因会误导。
+ */
+export function bootStuckDetail(log: string, askedAdb: boolean): string {
+  if (askedAdb && BOOTED.test(log)) return ADB_SILENT;
+  const hint = bootLogHint(log);
+  if (hint) return hint;
+  const last = log.split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean).at(-1);
+  return last ? `日志最后一行：${clip(last)}` : "";
 }

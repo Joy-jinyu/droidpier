@@ -493,18 +493,6 @@ export async function createHost(player: Player) {
     e.dataTransfer!.dropEffect = "none";
   });
   window.addEventListener("drop", (e) => { if (hasFiles(e)) e.preventDefault(); });
-  // 不拖的人用按键选文件
-  const picker = document.createElement("input");
-  picker.type = "file";
-  picker.accept = ".apk";
-  picker.multiple = true;
-  picker.hidden = true;
-  picker.setAttribute("data-testid", "apk-picker");
-  picker.addEventListener("change", () => {
-    takeFiles([...(picker.files ?? [])]);
-    picker.value = "";
-  });
-  document.body.appendChild(picker);
 
   // 占位 View 由 nsh 渲染；出现后把画面和 DevTools 放进去，被重新渲染移走时放回
   // DevTools 前端（appspot）嵌在页面里，连的是 127.0.0.1 网关：Chrome 的本地网络访问检查要求 iframe 显式委托权限，
@@ -657,12 +645,6 @@ export async function createHost(player: Player) {
           state, serial, upgrade, rev, rotation, ...stats, avds, boots: [...boots.values()].map((b) => b.last),
           env, installs, license, uploads: uploads.list(),
         };
-      }
-      // 按键点击里调用：打开选文件框
-      if (name === "emu.pickApk") {
-        if (dropBlocked()) return { ok: false };
-        picker.click();
-        return { ok: true };
       }
       if (name === "emu.uploadsClear") {
         uploads.clear();

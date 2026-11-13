@@ -374,7 +374,6 @@ const ICON_PATHS = {
   recents: '<rect x="6.5" y="6.5" width="11" height="11" rx="2"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
-  install: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
   pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
   minus: '<path d="M5 12h14"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
@@ -965,8 +964,6 @@ function App() {
   const gw = (p: Promise<{ ok: boolean }>) =>
     p.then((r) => { if (!r.ok) showNotice({ text: "没有连上网关，操作没有发出", error: true }); });
 
-  const installBlocked = () =>
-    state() === "connected" ? undefined : state() === "rebooting" ? "模拟器正在重启" : "没有连接设备";
   const problemColor = () => (state() === "page-outdated" ? C.warn : C.danger);
   const bootingName = () => Object.values(boots()).find(isBooting);
   const currentAvd = () => (avds() ?? []).find((a) => a.running === "grpc" && a.serial === serial());
@@ -1149,8 +1146,6 @@ function App() {
                     <Key icon="rotateRight" label="向右旋转" tip="点过屏幕后按 ⌘→" onPress={() => act(host.call("emu.rotate", { dir: "right" }))} />
                     <Key icon="camera" label="截图" tip="点过屏幕后按 ⌘S" onPress={() => act(host.call("emu.screenshot", {}))} />
                     <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
-                    <Key icon="install" label="安装 APK" disabled={!!installBlocked()} tip={installBlocked() ?? "选 APK 安装，也可以直接把文件拖到屏幕上"}
-                      onPress={() => act(host.call("emu.pickApk", {}))} />
                     <If when={h5Key()}>
                       <View style={{ height: 1, marginHorizontal: 8, marginVertical: 2, backgroundColor: C.line }} />
                       <Key icon="code" label="H5" pressed={h5Open()} onPress={toggleH5} />

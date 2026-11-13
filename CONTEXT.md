@@ -48,8 +48,14 @@ _Avoid_: AVD name (ambiguous), display name
 token and AVD id. How the gateway finds running emulators.
 
 **Serial**:
-The emulator's console port (5554, 5556, ...); adb names the device `emulator-<serial>`.
-_Avoid_: port (the gRPC port is a different one), device id
+The emulator's console port (5554, 5556, ...); adb names the device `emulator-<serial>`. Only emulators have one;
+anything that must also work for a phone uses the Device id.
+_Avoid_: port (the gRPC port is a different one), device id (that is the adb name, below)
+
+**Device id**:
+The name adb gives a device and the gateway's key for it: `emulator-5554` for an emulator, the USB serial
+(`R5CR10WN52H`) or `host:port` for a phone. Sent to the page as `ready.deviceId`.
+_Avoid_: serial (that is the emulator's console port), udid
 
 **Running state**:
 What the device list knows about an AVD: `no` (not running), `grpc` (running with gRPC, the gateway can attach) or

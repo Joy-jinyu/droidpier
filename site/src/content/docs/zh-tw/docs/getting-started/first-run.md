@@ -1,10 +1,10 @@
 ---
 title: 首次執行
 description: 用一道命令啟動閘道，讓它檢查 Android SDK，在 Chrome 中允許本機網路存取，然後在瀏覽器中查看你的模擬器。
-sourceHash: 67f231cc69cd
+sourceHash: 7b613962f696
 ---
 
-在終端機中執行一道命令並保持該視窗開啟，開啟 `https://droid.devpier.dev/app/`，並在 Chrome 詢問時允許本機網路存取。
+在終端機中執行一條命令，開啟 `https://droid.devpier.dev/app/`，並在 Chrome 詢問時允許存取本機網路。
 
 ## 1. 啟動閘道
 
@@ -12,9 +12,9 @@ sourceHash: 67f231cc69cd
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-它會在需要時安裝或更新閘道，然後啟動它。請參閱[安裝](/zh-tw/docs/getting-started/install/)。安裝完成後，也可以用 `droidpier` 啟動它。
+它會在需要時安裝或更新閘道，然後啟動它。請參閱[安裝](/zh-tw/docs/getting-started/install/)。安裝完成後，也可以用 `droidpier start` 啟動它。
 
-閘道會在該終端機視窗中持續執行。使用頁面期間請保持該視窗開啟。
+閘道在背景執行，可以關閉終端機視窗。
 
 閘道預設監聽 `127.0.0.1`，連接埠 `7300`。如需使用其他連接埠，請參閱[命令列](/zh-tw/docs/reference/cli/)。
 
@@ -22,6 +22,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 
 <!-- verify: phase 3 -->
 啟動時，閘道會檢查 Android SDK、`cmdline-tools`、`emulator`、`platform-tools`、系統映像 `system-images;android-34;google_apis;arm64-v8a`，以及至少一個虛擬裝置（AVD）。如果缺少某項，它會在終端機中逐項列出，並附上手動安裝的命令，然後提示你到頁面上完成安裝。它不會在終端機中提問。
+
+閘道在背景執行時，這份清單寫在它的記錄檔裡。執行 `droidpier logs` 查看。
 
 <!-- verify: phase 3 -->
 頁面會顯示同樣的清單，並標出每項的下載大小：
@@ -78,7 +80,7 @@ https://droid.devpier.dev/app/#port=7301
 
 ## 停止
 
-在執行閘道的終端機中按 `Ctrl+C`，或關閉該視窗。正在執行的模擬器會繼續執行。下次用同一道命令或 `droidpier` 啟動閘道時，它會重新連接到這些模擬器。
+執行 `droidpier stop`。如果你是在終端機視窗中用 `droidpier` 啟動的閘道，就在那個視窗按 `Ctrl+C`。正在執行的模擬器會繼續執行。下次用同一條命令或 `droidpier start` 啟動閘道時，它會重新連線這些模擬器。
 
 ## 本機備用頁面
 

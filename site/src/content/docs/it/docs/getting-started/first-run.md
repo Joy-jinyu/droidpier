@@ -1,10 +1,10 @@
 ---
 title: Primo avvio
 description: Avvia il gateway con un solo comando, lascia che controlli l’Android SDK, consenti l’accesso alla rete locale in Chrome e vedi il tuo emulatore nel browser.
-sourceHash: 67f231cc69cd
+sourceHash: 7b613962f696
 ---
 
-Esegui un comando nel Terminale e lascia la finestra aperta, apri `https://droid.devpier.dev/app/` e consenti l’accesso alla rete locale quando Chrome lo chiede.
+Esegui un comando nel Terminale, apri `https://droid.devpier.dev/app/` e consenti l’accesso alla rete locale quando Chrome lo chiede.
 
 ## 1. Avvia il gateway
 
@@ -12,9 +12,9 @@ Esegui un comando nel Terminale e lascia la finestra aperta, apri `https://droid
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-Installa o aggiorna il gateway se serve, poi lo avvia. Vedi [Installazione](/it/docs/getting-started/install/). Dopo l’installazione, anche `droidpier` lo avvia.
+Installa o aggiorna il gateway se serve, poi lo avvia. Vedi [Installazione](/it/docs/getting-started/install/). Dopo l’installazione, anche `droidpier start` lo avvia.
 
-Il gateway resta in esecuzione in quella finestra del Terminale. Lasciala aperta mentre usi la pagina.
+Il gateway resta in esecuzione in background. Puoi chiudere la finestra del Terminale.
 
 Il gateway è in ascolto su `127.0.0.1`, sulla porta `7300` per impostazione predefinita. Per usare un’altra porta, vedi [Riga di comando](/it/docs/reference/cli/).
 
@@ -22,6 +22,8 @@ Il gateway è in ascolto su `127.0.0.1`, sulla porta `7300` per impostazione pre
 
 <!-- verify: phase 3 -->
 All’avvio, il gateway controlla che ci siano l’Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, l’immagine di sistema `system-images;android-34;google_apis;arm64-v8a` e almeno un dispositivo virtuale (AVD). Se manca qualcosa, elenca ogni elemento nel Terminale con un comando per installarlo a mano e ti chiede di completare la configurazione nella pagina. Non fa domande nel Terminale.
+
+Quando il gateway è in background, questo elenco finisce nel suo log. Esegui `droidpier logs` per vederlo.
 
 <!-- verify: phase 3 -->
 La pagina mostra lo stesso elenco, con la dimensione del download di ogni elemento:
@@ -78,7 +80,7 @@ Fai clic sullo schermo per dargli il focus della tastiera. Poi:
 
 ## Arresto
 
-Premi `Ctrl+C` nel Terminale in cui è in esecuzione il gateway, oppure chiudi quella finestra. Gli emulatori in esecuzione continuano a funzionare. Al successivo avvio, con lo stesso comando o con `droidpier`, il gateway si riconnette a essi.
+Esegui `droidpier stop`. Se hai avviato il gateway con `droidpier` in una finestra del Terminale, premi invece `Ctrl+C` lì. Gli emulatori in esecuzione continuano a funzionare. La prossima volta che avvii il gateway, con lo stesso comando o con `droidpier start`, si ricollega a loro.
 
 ## La pagina locale di riserva
 

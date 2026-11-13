@@ -1,10 +1,10 @@
 ---
 title: 첫 실행
 description: 명령 하나로 게이트웨이를 시작하고, Android SDK를 확인하게 하고, Chrome에서 로컬 네트워크 접근을 허용한 다음, 브라우저에서 에뮬레이터를 확인합니다.
-sourceHash: 67f231cc69cd
+sourceHash: 7b613962f696
 ---
 
-터미널에서 명령 하나를 실행하고 그 창을 열어 둔 채, `https://droid.devpier.dev/app/`을 연 다음, Chrome이 물으면 로컬 네트워크 접근을 허용하세요.
+터미널에서 명령 하나를 실행하고 `https://droid.devpier.dev/app/` 를 연 뒤, Chrome 이 물으면 로컬 네트워크 접근을 허용하세요.
 
 ## 1. 게이트웨이 시작
 
@@ -12,9 +12,9 @@ sourceHash: 67f231cc69cd
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-필요하면 게이트웨이를 설치하거나 업데이트한 뒤 시작합니다. [설치](/ko/docs/getting-started/install/)를 참고하세요. 설치한 뒤에는 `droidpier`로도 시작할 수 있습니다.
+필요하면 게이트웨이를 설치하거나 업데이트한 뒤 시작합니다. [설치](/ko/docs/getting-started/install/)를 참고하세요. 설치한 뒤에는 `droidpier start`로도 시작할 수 있습니다.
 
-게이트웨이는 그 터미널 창에서 계속 실행됩니다. 페이지를 사용하는 동안 창을 열어 두세요.
+게이트웨이는 백그라운드에서 실행됩니다. 터미널 창은 닫아도 됩니다.
 
 게이트웨이는 기본적으로 `127.0.0.1`의 `7300` 포트에서 수신합니다. 다른 포트를 사용하려면 [명령줄](/ko/docs/reference/cli/)을 참고하세요.
 
@@ -22,6 +22,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 
 <!-- verify: phase 3 -->
 시작할 때 게이트웨이는 Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, 시스템 이미지 `system-images;android-34;google_apis;arm64-v8a`, 그리고 가상 기기(AVD)가 하나 이상 있는지 확인합니다. 빠진 것이 있으면 터미널에 항목마다 직접 설치하는 명령과 함께 출력하고, 페이지에서 설정을 마치라고 안내합니다. 터미널에서 질문하지 않습니다.
+
+게이트웨이가 백그라운드에서 실행 중이면 이 목록은 로그에 기록됩니다. `droidpier logs`로 확인하세요.
 
 <!-- verify: phase 3 -->
 페이지에도 같은 목록이 항목별 다운로드 크기와 함께 표시됩니다:
@@ -78,7 +80,7 @@ gRPC가 활성화된 에뮬레이터가 이미 실행 중이면 페이지에 그
 
 ## 중지
 
-게이트웨이가 실행 중인 터미널에서 `Ctrl+C`를 누르거나 그 창을 닫으세요. 실행 중인 에뮬레이터는 계속 실행됩니다. 다음에 같은 명령이나 `droidpier`로 게이트웨이를 시작하면 다시 연결됩니다.
+`droidpier stop`을 실행하세요. 터미널 창에서 `droidpier` 로 게이트웨이를 시작했다면 그 창에서 `Ctrl+C` 를 누르세요. 실행 중인 에뮬레이터는 계속 실행됩니다. 다음에 같은 명령이나 `droidpier start`로 게이트웨이를 시작하면 다시 연결됩니다.
 
 ## 로컬 대체 페이지
 

@@ -3,7 +3,7 @@ title: First run
 description: Start the gateway with one command, let it check the Android SDK, allow local network access in Chrome, and see your emulator in the browser.
 ---
 
-Run one command in Terminal and keep the window open, open `https://droid.devpier.dev/app/`, and allow local network access when Chrome asks.
+Run one command in Terminal, open `https://droid.devpier.dev/app/`, and allow local network access when Chrome asks.
 
 ## 1. Start the gateway
 
@@ -11,9 +11,9 @@ Run one command in Terminal and keep the window open, open `https://droid.devpie
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-This installs the gateway if needed, or updates it, and starts it. See [Install](/docs/getting-started/install/). After the install, `droidpier` starts it too.
+This installs the gateway if needed, or updates it, and starts it. See [Install](/docs/getting-started/install/). After the install, `droidpier start` starts it too.
 
-The gateway keeps running in that Terminal window. Keep the window open while you use the page.
+The gateway runs in the background. You can close the Terminal window.
 
 The gateway listens on `127.0.0.1`, port `7300` by default. To use another port, see [Command line](/docs/reference/cli/).
 
@@ -21,6 +21,8 @@ The gateway listens on `127.0.0.1`, port `7300` by default. To use another port,
 
 <!-- verify: phase 3 -->
 On start, the gateway checks for the Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, the system image `system-images;android-34;google_apis;arm64-v8a`, and at least one virtual device (AVD). If something is missing, it lists each item in Terminal with a command to install it by hand, and tells you to finish the setup on the page. It does not ask anything in Terminal.
+
+When the gateway runs in the background, this list goes to its log. Run `droidpier logs` to see it.
 
 <!-- verify: phase 3 -->
 The page shows the same list, with the download size of each item:
@@ -77,7 +79,7 @@ Click the screen to give it keyboard focus. Then:
 
 ## Stop
 
-Press `Ctrl+C` in the Terminal where the gateway runs, or close that window. Running emulators keep running. The next time you start the gateway, with the same command or with `droidpier`, it connects to them again.
+Run `droidpier stop`. If you started the gateway with `droidpier` in a Terminal window, press `Ctrl+C` there instead. Running emulators keep running. The next time you start the gateway, with the same command or with `droidpier start`, it connects to them again.
 
 ## The local fallback page
 

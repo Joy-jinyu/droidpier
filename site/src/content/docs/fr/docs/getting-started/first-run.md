@@ -1,10 +1,10 @@
 ---
 title: Premier lancement
 description: Démarrez la passerelle en une commande, laissez-la vérifier l’Android SDK, autorisez l’accès au réseau local dans Chrome et voyez votre émulateur.
-sourceHash: 67f231cc69cd
+sourceHash: 7b613962f696
 ---
 
-Exécutez une commande dans Terminal et laissez la fenêtre ouverte, ouvrez `https://droid.devpier.dev/app/` et autorisez l’accès au réseau local quand Chrome le demande.
+Exécutez une commande dans Terminal, ouvrez `https://droid.devpier.dev/app/` et autorisez l’accès au réseau local quand Chrome le demande.
 
 ## 1. Démarrer la passerelle
 
@@ -12,9 +12,9 @@ Exécutez une commande dans Terminal et laissez la fenêtre ouverte, ouvrez `htt
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-Elle installe ou met à jour la passerelle si nécessaire, puis la démarre. Voir [Installation](/fr/docs/getting-started/install/). Après l’installation, `droidpier` la démarre aussi.
+Elle installe ou met à jour la passerelle si nécessaire, puis la démarre. Voir [Installation](/fr/docs/getting-started/install/). Après l’installation, `droidpier start` la démarre aussi.
 
-La passerelle continue de tourner dans cette fenêtre Terminal. Laissez la fenêtre ouverte pendant que vous utilisez la page.
+La passerelle tourne en arrière-plan. Vous pouvez fermer la fenêtre Terminal.
 
 La passerelle écoute sur `127.0.0.1`, port `7300` par défaut. Pour utiliser un autre port, voir [Ligne de commande](/fr/docs/reference/cli/).
 
@@ -22,6 +22,8 @@ La passerelle écoute sur `127.0.0.1`, port `7300` par défaut. Pour utiliser un
 
 <!-- verify: phase 3 -->
 Au démarrage, la passerelle vérifie la présence de l’Android SDK, de `cmdline-tools`, `emulator`, `platform-tools`, de l’image système `system-images;android-34;google_apis;arm64-v8a` et d’au moins un appareil virtuel (AVD). S’il manque quelque chose, elle liste chaque élément dans Terminal avec une commande pour l’installer à la main, et vous invite à terminer la configuration sur la page. Elle ne pose aucune question dans Terminal.
+
+Quand la passerelle tourne en arrière-plan, cette liste va dans son journal. Lancez `droidpier logs` pour la voir.
 
 <!-- verify: phase 3 -->
 La page affiche la même liste, avec la taille de téléchargement de chaque élément :
@@ -78,7 +80,7 @@ Cliquez sur l’écran pour lui donner le focus clavier. Ensuite :
 
 ## Arrêter
 
-Appuyez sur `Ctrl+C` dans le Terminal où tourne la passerelle, ou fermez cette fenêtre. Les émulateurs en cours d’exécution continuent de tourner. Au prochain démarrage de la passerelle, avec la même commande ou avec `droidpier`, elle s’y reconnecte.
+Lancez `droidpier stop`. Si vous avez démarré la passerelle avec `droidpier` dans une fenêtre Terminal, appuyez plutôt sur `Ctrl+C` dans cette fenêtre. Les émulateurs en cours continuent de tourner. La prochaine fois que vous démarrez la passerelle, avec la même commande ou avec `droidpier start`, elle s’y reconnecte.
 
 ## La page de secours locale
 

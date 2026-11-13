@@ -1,10 +1,10 @@
 ---
 title: Erster Start
 description: Starten Sie das Gateway mit einem Befehl, lassen Sie es das Android SDK prüfen, erlauben Sie den Zugriff auf das lokale Netzwerk in Chrome und sehen Sie Ihren Emulator.
-sourceHash: 67f231cc69cd
+sourceHash: 7b613962f696
 ---
 
-Führen Sie einen Befehl im Terminal aus und lassen Sie das Fenster geöffnet, öffnen Sie `https://droid.devpier.dev/app/` und erlauben Sie den Zugriff auf das lokale Netzwerk, wenn Chrome danach fragt.
+Führen Sie einen Befehl im Terminal aus, öffnen Sie `https://droid.devpier.dev/app/` und erlauben Sie den Zugriff auf das lokale Netzwerk, wenn Chrome fragt.
 
 ## 1. Gateway starten
 
@@ -12,9 +12,9 @@ Führen Sie einen Befehl im Terminal aus und lassen Sie das Fenster geöffnet, �
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-Er installiert oder aktualisiert das Gateway bei Bedarf und startet es. Siehe [Installation](/de/docs/getting-started/install/). Nach der Installation startet es auch `droidpier`.
+Er installiert oder aktualisiert das Gateway bei Bedarf und startet es. Siehe [Installation](/de/docs/getting-started/install/). Nach der Installation startet es auch `droidpier start`.
 
-Das Gateway läuft in diesem Terminal-Fenster weiter. Lassen Sie das Fenster geöffnet, solange Sie die Seite verwenden.
+Das Gateway läuft im Hintergrund. Sie können das Terminal-Fenster schließen.
 
 Das Gateway lauscht auf `127.0.0.1`, standardmäßig auf Port `7300`. Wie Sie einen anderen Port verwenden, steht unter [Befehlszeile](/de/docs/reference/cli/).
 
@@ -22,6 +22,8 @@ Das Gateway lauscht auf `127.0.0.1`, standardmäßig auf Port `7300`. Wie Sie ei
 
 <!-- verify: phase 3 -->
 Beim Start prüft das Gateway, ob das Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, das Systemabbild `system-images;android-34;google_apis;arm64-v8a` und mindestens ein virtuelles Gerät (AVD) vorhanden sind. Fehlt etwas, listet es jedes Element im Terminal mit einem Befehl zur manuellen Installation auf und bittet Sie, die Einrichtung auf der Seite abzuschließen. Im Terminal stellt es keine Fragen.
+
+Läuft das Gateway im Hintergrund, steht diese Liste in seinem Log. Mit `droidpier logs` sehen Sie sie.
 
 <!-- verify: phase 3 -->
 Die Seite zeigt dieselbe Liste, mit der Downloadgröße jedes Elements:
@@ -78,7 +80,7 @@ Klicken Sie auf den Bildschirm, damit er den Tastaturfokus erhält. Dann:
 
 ## Stoppen
 
-Drücken Sie `Ctrl+C` in dem Terminal, in dem das Gateway läuft, oder schließen Sie dieses Fenster. Laufende Emulatoren laufen weiter. Wenn Sie das Gateway das nächste Mal starten, mit demselben Befehl oder mit `droidpier`, verbindet es sich wieder mit ihnen.
+Führen Sie `droidpier stop` aus. Haben Sie das Gateway mit `droidpier` in einem Terminal-Fenster gestartet, drücken Sie dort stattdessen `Ctrl+C`. Laufende Emulatoren laufen weiter. Wenn Sie das Gateway das nächste Mal starten, mit demselben Befehl oder mit `droidpier start`, verbindet es sich wieder mit ihnen.
 
 ## Die lokale Ersatzseite
 

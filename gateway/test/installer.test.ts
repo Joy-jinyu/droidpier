@@ -323,6 +323,7 @@ test("fetchWithIdle：响应头到了但正文停住，读正文时失败", asyn
   await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
   t.after(() => { srv.closeAllConnections(); srv.close(); });
   const port = (srv.address() as { port: number }).port;
-  const r = await fetchWithIdle(`http://127.0.0.1:${port}/x`, 100);
-  await assert.rejects(r.text(), /100 毫秒没有收到数据|abort/i);
+  // 时限要留够连接和等响应头的时间：全部测试并行跑时这段超过过 100 毫秒，没到正文就先超时（2026-11-13 实测）
+  const r = await fetchWithIdle(`http://127.0.0.1:${port}/x`, 1000);
+  await assert.rejects(r.text(), /1000 毫秒没有收到数据|abort/i);
 });

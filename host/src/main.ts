@@ -8,6 +8,7 @@ import { isDevtoolsSrc } from "./devtools-src.ts";
 import { gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
 import { createRenderer } from "./renderer.ts";
 import { createUploads } from "./uploads.ts";
+import { parseTheme, THEMES } from "../../shared/theme.ts";
 import { registerTools } from "./webmcp.ts";
 import { INSTALL_CMD, INSTALL_IDS, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
 
@@ -32,6 +33,8 @@ async function localPermission(): Promise<LocalPermission> {
   return null;
 }
 const GATEWAY_PORT = resolvePort();
+// 页面外观存在这台浏览器里；存储不可用（隐私模式等）时每次都跟随系统
+const THEME_KEY = "droidpier.theme";
 // 还不知道设备尺寸、容器也没量出来时，hello 用这个尺寸（网关会夹到设备尺寸内）
 const FALLBACK_CSS = { width: 540, height: 1170 };
 const RESIZE_DEBOUNCE_MS = 150;
@@ -677,6 +680,23 @@ export async function createHost(player: Player) {
         const id = (args as { id?: unknown } | undefined)?.id;
         if (typeof id !== "number") throw new Error(`${name} 需要 id`);
         return ctl({ t: name === "emu.acceptLicenses" ? "acceptLicenses" : "rejectLicenses", id });
+      }
+      if (name === "emu.theme") {
+        try {
+          return parseTheme(localStorage.getItem(THEME_KEY));
+        } catch {
+          return parseTheme(null);
+        }
+      }
+      if (name === "emu.setTheme") {
+        const theme = (args as { theme?: unknown } | undefined)?.theme;
+        if (!THEMES.includes(theme as never)) throw new Error("emu.setTheme 需要 theme：system、light 或 dark");
+        try {
+          localStorage.setItem(THEME_KEY, theme as string);
+          return { ok: true };
+        } catch {
+          return { ok: false };
+        }
       }
       throw new Error(`no host function ${name}`);
     },

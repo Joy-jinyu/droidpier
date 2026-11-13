@@ -1,10 +1,11 @@
-import { cleanup, effect, host, Image, type JSX, mount, Scroll, signal, Text, View } from "nsh";
+import { cleanup, colorScheme, effect, host, Image, type JSX, mount, Scroll, setColorScheme, signal, Text, View } from "nsh";
 import { Dialog, Input, Radio, RadioGroup, Select, Tooltip } from "nsh/base";
 import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
 import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, ramMbFor } from "../shared/avd-spec";
 import { ADB_UNRESPONSIVE, NEEDS_JAVA, type Rotation } from "../shared/protocol";
+import { parseTheme, type Theme } from "../shared/theme";
 import { deviceFrame } from "../shared/screen";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
@@ -47,8 +48,8 @@ type Upload = {
 };
 type Confirm = { kind: "install"; ids: EnvId[] } | { kind: "avd"; avd: NewAvd };
 
-// shadcn/ui 设计系统深色模式（Zinc 灰阶 + 品牌紫），紫色只给选中状态和主操作
-const C = {
+// shadcn/ui 设计系统（Zinc 灰阶 + 品牌紫），紫色只给选中状态和主操作
+const DARK = {
   bg: "#09090b",
   surface: "#111113",
   panel: "#18181b",
@@ -65,8 +66,40 @@ const C = {
   accent: "#7544f2",
   accentSoft: "rgba(139,102,246,0.16)",
   accentText: "#c4b2fb",
+  // 紫底上的文字
+  onAccent: "#fafafa",
   overlay: "#18181bf2",
+  // 没在运行的设备前面的圆点
+  idle: "#52525b",
+  primaryHover: "#6435e0",
+  // 拖文件到设备上时盖在画面上的底色
+  dragShade: "rgba(9,9,11,0.82)",
 };
+const LIGHT: typeof DARK = {
+  bg: "#f4f4f5",
+  surface: "#ffffff",
+  panel: "#fafafa",
+  hover: "#e4e4e7",
+  lineSoft: "#e4e4e7",
+  line: "#e4e4e7",
+  lineStrong: "#d4d4d8",
+  text: "#09090b",
+  keyText: "#3f3f46",
+  muted: "#71717a",
+  warn: "#b45309",
+  danger: "#dc2626",
+  ok: "#16a34a",
+  accent: "#7544f2",
+  accentSoft: "rgba(117,68,242,0.12)",
+  accentText: "#5b2fd6",
+  onAccent: "#fafafa",
+  overlay: "#fffffff2",
+  idle: "#a1a1aa",
+  primaryHover: "#6435e0",
+  dragShade: "rgba(250,250,250,0.85)",
+};
+// 外观换了颜色跟着换：每次读 C.x 都按当前外观取，读的地方都在 JSX 表达式里，会重新求值
+const C = new Proxy(DARK, { get: (_, key: keyof typeof DARK) => (colorScheme() === "light" ? LIGHT : DARK)[key] });
 
 const LABEL: Record<State, string> = {
   connecting: "连接中…",
@@ -158,12 +191,12 @@ function Btn(props: { label: string; onPress: () => void; kind?: "danger" | "pri
   const primary = () => props.kind === "primary";
   return (
     <View onPress={props.onPress} role="button" accessibilityLabel={props.label} disabled={props.disabled}
-      hoverStyle={{ backgroundColor: primary() ? "#6435e0" : C.hover }} focusStyle={{ borderColor: C.muted }}
+      hoverStyle={{ backgroundColor: primary() ? C.primaryHover : C.hover }} focusStyle={{ borderColor: C.muted }}
       style={{
         height: 32, justifyContent: "center", backgroundColor: primary() ? C.accent : C.panel, borderRadius: 8, paddingHorizontal: 12,
         borderWidth: 1, borderColor: primary() ? C.accent : C.line, opacity: props.disabled ? 0.4 : 1,
       }}>
-      <Text style={{ color: props.kind === "danger" ? C.danger : C.text, fontSize: 13, fontWeight: primary() ? "600" : "500" }}>{props.label}</Text>
+      <Text style={{ color: props.kind === "danger" ? C.danger : primary() ? C.onAccent : C.text, fontSize: 13, fontWeight: primary() ? "600" : "500" }}>{props.label}</Text>
     </View>
   );
 }
@@ -336,6 +369,9 @@ const ICON_PATHS = {
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
   install: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
 };
 type IconName = keyof typeof ICON_PATHS;
 const iconSrc = (name: IconName) =>
@@ -392,6 +428,31 @@ function KeyGroup(props: { label: string; children: JSX.Element; row?: boolean; 
     <View role="group" accessibilityLabel={props.label}
       style={{ flexDirection: props.row ? "row" : "column", gap: props.row ? 20 : 4, padding: 6, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, ...props.style }}>
       {props.children}
+    </View>
+  );
+}
+
+const THEME_OPTIONS: { theme: Theme; icon: IconName; label: string }[] = [
+  { theme: "system", icon: "monitor", label: "跟随系统" },
+  { theme: "light", icon: "sun", label: "浅色" },
+  { theme: "dark", icon: "moon", label: "深色" },
+];
+
+/** 页面外观三选一：跟随系统、浅色、深色。 */
+function ThemePicker(props: { value: Theme; onPick: (t: Theme) => void }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 6 }}>
+      <Text style={{ flex: 1, color: C.muted, fontSize: 12, fontWeight: "600" }}>外观</Text>
+      <RadioGroup accessibilityLabel="外观" style={{ flexDirection: "row", gap: 2 }}>
+        <Each of={THEME_OPTIONS} key={(o) => o.theme}>{(o) => (
+          <Radio checked={props.value === o().theme} onChange={() => props.onPick(o().theme)} accessibilityLabel={o().label}
+            tooltip={<Tip label={o().label} />}
+            style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: "transparent" }}
+            hoverStyle={{ backgroundColor: C.hover }} checkedStyle={{ backgroundColor: C.accentSoft }} focusStyle={{ borderColor: C.muted }}>
+            <Icon name={o().icon} size={16} tint={props.value === o().theme ? C.accentText : C.muted} />
+          </Radio>
+        )}</Each>
+      </RadioGroup>
     </View>
   );
 }
@@ -640,6 +701,21 @@ function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; o
 }
 
 function App() {
+  // 外观：先按系统，读到这台浏览器存的选择后换过去
+  const theme = signal<Theme>("system");
+  // 存着的选择读回来之前用户已经选过：以用户这次选的为准
+  let picked = false;
+  const pickTheme = (t: Theme) => {
+    picked = true;
+    theme.set(t);
+    setColorScheme(t);
+    host.call("emu.setTheme", { theme: t });
+  };
+  host.call("emu.theme", {}).then((t: unknown) => {
+    if (picked) return;
+    theme.set(parseTheme(t));
+    setColorScheme(theme());
+  });
   const state = signal<State>("connecting");
   const serial = signal(0);
   const fps = signal(0);
@@ -931,7 +1007,7 @@ function App() {
     return (
       <View style={{ gap: 6, padding: 12, borderRadius: 12, backgroundColor: current() ? C.panel : "transparent", borderWidth: 1, borderColor: current() ? C.lineStrong : C.line }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a().running === "no" ? "#52525b" : statusColor() }} />
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a().running === "no" ? C.idle : statusColor() }} />
           <Text style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: current() ? "600" : "500", numberOfLines: 1 }}>{a().name}</Text>
         </View>
         <Text style={{ color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{spec()}</Text>
@@ -967,6 +1043,8 @@ function App() {
             <Btn label="新建设备" disabled={setupBusy() || !env()} onPress={openCreate} />
           </If>
         </If>
+        <View style={{ flex: 1 }} />
+        <ThemePicker value={theme()} onPick={pickTheme} />
       </View>
       <View style={{ flex: 1, minWidth: 0, marginVertical: 8, marginRight: 8, borderRadius: 12, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.surface, overflow: "hidden" }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 12, paddingHorizontal: 20, borderBottomWidth: 1, borderColor: C.lineSoft }}>
@@ -1007,7 +1085,7 @@ function App() {
                     <View role="status" style={{
                       position: "absolute", top: BEZEL - 1, left: BEZEL - 1, right: BEZEL - 1, bottom: BEZEL - 1, pointerEvents: "none",
                       alignItems: "center", justifyContent: "center", gap: 6, padding: 24, borderRadius: 34, borderWidth: 2,
-                      borderColor: drag().blocked ? C.danger : C.accent, backgroundColor: "rgba(9,9,11,0.82)",
+                      borderColor: drag().blocked ? C.danger : C.accent, backgroundColor: C.dragShade,
                     }}>
                       <Text style={{ color: drag().blocked ? C.danger : C.text, fontSize: 15, fontWeight: "600", textAlign: "center" }}>
                         {drag().blocked ? `不能安装：${drag().blocked}` : `松开以安装到 ${currentAvd()?.name ?? "这台设备"}`}

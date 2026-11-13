@@ -1,7 +1,7 @@
 ---
 title: Fehlerbehebung
 description: Häufige Probleme beheben - Chrome hat den Zugriff auf das lokale Netzwerk blockiert, Port bereits belegt, kein Emulator gefunden, die Seite verbindet sich nicht, Versionskonflikt.
-sourceHash: 711f2e4dd61a
+sourceHash: 0b338512d1e9
 ---
 
 ## Chrome hat den Zugriff auf das lokale Netzwerk blockiert {#chrome-blocked-local-network-access}
@@ -21,7 +21,7 @@ Wenn Sie sich weiterhin nicht verbinden können, verwenden Sie die [lokale Ersat
 
 Das Gateway lauscht standardmäßig auf Port `7300`.
 
-Wenn Sie den Befehl erneut ausführen, während das Gateway noch läuft, startet kein zweites. Es meldet, dass droidpier bereits auf Port `7300` läuft, und öffnet die Seite. Verwenden Sie diese Seite, oder stoppen Sie das laufende Gateway zuerst mit `Ctrl+C`.
+Läuft das Gateway im Hintergrund, startet ein erneuter Aufruf des Befehls es neu. Läuft ein Gateway in einem Terminal-Fenster, startet der Befehl kein zweites, sondern meldet, dass droidpier bereits auf Port `7300` läuft. Stoppen Sie dieses mit `Ctrl+C` und führen Sie den Befehl erneut aus.
 
 Verwendet ein anderes Programm den Port, meldet das Gateway das, schlägt einen anderen Port vor und beendet sich. Finden Sie das Programm:
 
@@ -50,7 +50,7 @@ Wenn die Seite meldet, dass kein laufender Emulator gefunden wurde:
 <!-- verify: phase 2 -->
 Sie können auch ein Gerät aus der Liste in der Seite starten. Siehe [Geräte](/de/docs/guides/devices/).
 
-Das Gateway läuft weiter, wenn kein Emulator gefunden wird, und gibt den Grund im Terminal aus.
+Das Gateway läuft weiter, wenn kein Emulator gefunden wird, und gibt den Grund aus: im Terminal oder, wenn es im Hintergrund läuft, in seinem Log (`droidpier logs`).
 
 <!-- verify: phase 3 -->
 Wenn das Gateway meldet, dass das Android SDK, `emulator`, `platform-tools` oder das Systemabbild fehlt, folgen Sie der Lösung, die es ausgibt. Siehe [Erster Start](/de/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -73,7 +73,7 @@ Um die Tools stattdessen manuell zu installieren, laden Sie Googles Befehlszeile
 <!-- verify: phase 3 -->
 Die Seite prüft einmal pro Sekunde, ob das Gateway da ist, und verbindet sich, sobald es antwortet. Wenn sie weiter wartet:
 
-- Prüfen Sie, ob das Terminal-Fenster, in dem Sie den Befehl ausgeführt haben, noch geöffnet ist. Wenn Sie das Fenster schließen oder `Ctrl+C` drücken, wird das Gateway gestoppt. Führen Sie den Befehl erneut aus, um es zu starten.
+- Prüfen Sie mit `droidpier status`, ob das Gateway läuft. Falls nicht, führen Sie `droidpier start` aus. `droidpier logs` zeigt, warum es gestoppt ist.
 - Prüfen Sie, ob Chrome den Zugriff auf das lokale Netzwerk für `droid.devpier.dev` erlaubt. Siehe [Chrome hat den Zugriff auf das lokale Netzwerk blockiert](#chrome-blocked-local-network-access).
 - Wenn Sie das Gateway mit `--port` gestartet haben, öffnen Sie die ausgegebene Adresse, die auf `#port=<port>` endet.
 - Holen Sie den Tab in den Vordergrund. Solange der Tab im Hintergrund ist, prüft die Seite nicht.

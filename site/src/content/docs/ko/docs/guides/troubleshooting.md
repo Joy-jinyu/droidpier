@@ -1,7 +1,7 @@
 ---
 title: 문제 해결
 description: 자주 발생하는 문제 해결 - Chrome의 로컬 네트워크 접근 차단, 이미 사용 중인 포트, 에뮬레이터를 찾을 수 없음, 페이지가 연결되지 않음, 버전 불일치.
-sourceHash: 711f2e4dd61a
+sourceHash: 0b338512d1e9
 ---
 
 ## Chrome이 로컬 네트워크 접근을 차단함 {#chrome-blocked-local-network-access}
@@ -21,7 +21,7 @@ sourceHash: 711f2e4dd61a
 
 게이트웨이는 기본적으로 `7300` 포트에서 수신합니다.
 
-게이트웨이가 실행 중일 때 명령을 다시 실행하면 두 번째 게이트웨이는 시작되지 않습니다. 대신 droidpier가 이미 `7300` 포트에서 실행 중이라고 알리고 페이지를 엽니다. 그 페이지를 사용하거나, 먼저 `Ctrl+C`로 실행 중인 게이트웨이를 중지하세요.
+게이트웨이가 백그라운드에서 실행 중이면 명령을 다시 실행할 때 다시 시작됩니다. 터미널 창에서 게이트웨이가 실행 중이면 두 번째는 시작하지 않고, droidpier 가 이미 포트 `7300` 에서 실행 중이라고 알립니다. 그 게이트웨이를 `Ctrl+C` 로 중지한 뒤 명령을 다시 실행하세요.
 
 다른 프로그램이 포트를 사용 중이면 게이트웨이는 그렇다고 알리고, 다른 포트를 제안한 뒤 종료합니다. 해당 프로그램을 찾으세요:
 
@@ -50,7 +50,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 <!-- verify: phase 2 -->
 페이지의 목록에서 기기를 시작할 수도 있습니다. [기기](/ko/docs/guides/devices/)를 참고하세요.
 
-에뮬레이터를 찾지 못해도 게이트웨이는 계속 실행되며, 터미널에 이유를 출력합니다.
+에뮬레이터를 찾지 못해도 게이트웨이는 계속 실행되며 이유를 출력합니다. 터미널에, 백그라운드에서 실행 중이면 로그에 남깁니다 (`droidpier logs`).
 
 <!-- verify: phase 3 -->
 게이트웨이가 Android SDK, `emulator`, `platform-tools` 또는 시스템 이미지가 없다고 보고하면, 출력된 해결 방법을 따르세요. [첫 실행](/ko/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)을 참고하세요.
@@ -73,7 +73,7 @@ Android Studio로 설치한 SDK에는 `sdkmanager`와 `avdmanager`를 제공하�
 <!-- verify: phase 3 -->
 페이지는 1초마다 게이트웨이를 확인하고, 게이트웨이가 응답하는 즉시 연결합니다. 계속 기다리기만 한다면:
 
-- 명령을 실행한 터미널 창이 아직 열려 있는지 확인하세요. 창을 닫거나 `Ctrl+C`를 누르면 게이트웨이가 중지됩니다. 명령을 다시 실행하면 시작됩니다.
+- `droidpier status`로 게이트웨이가 실행 중인지 확인하세요. 실행 중이 아니면 `droidpier start`를 실행하세요. 멈춘 이유는 `droidpier logs`에서 볼 수 있습니다.
 - Chrome이 `droid.devpier.dev`에 로컬 네트워크 접근을 허용하는지 확인하세요. [Chrome이 로컬 네트워크 접근을 차단함](#chrome-blocked-local-network-access)을 참고하세요.
 - `--port`로 게이트웨이를 시작했다면, 게이트웨이가 출력한 주소(`#port=<port>`로 끝남)를 여세요.
 - 탭을 앞으로 가져오세요. 탭이 백그라운드에 있는 동안 페이지는 확인하지 않습니다.

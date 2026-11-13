@@ -1,7 +1,7 @@
 ---
 title: Dépannage
 description: Résoudre les problèmes courants - Chrome a bloqué l’accès au réseau local, port déjà utilisé, aucun émulateur trouvé, la page ne se connecte pas, versions incompatibles.
-sourceHash: 711f2e4dd61a
+sourceHash: 0b338512d1e9
 ---
 
 ## Chrome a bloqué l’accès au réseau local {#chrome-blocked-local-network-access}
@@ -21,7 +21,7 @@ Si vous ne parvenez toujours pas à vous connecter, utilisez la [page de secours
 
 La passerelle écoute par défaut sur le port `7300`.
 
-Si vous relancez la commande alors que la passerelle tourne encore, une deuxième ne démarre pas. Elle indique que droidpier tourne déjà sur le port `7300` et ouvre la page. Utilisez cette page, ou arrêtez d’abord la passerelle en cours avec `Ctrl+C`.
+Si la passerelle tourne en arrière-plan, relancer la commande la redémarre. Si une passerelle tourne dans une fenêtre Terminal, la commande n’en démarre pas une seconde : elle indique que droidpier tourne déjà sur le port `7300`. Arrêtez celle-ci avec `Ctrl+C`, puis relancez la commande.
 
 Si un autre programme utilise le port, la passerelle le signale, propose un autre port et s’arrête. Trouvez ce programme :
 
@@ -50,7 +50,7 @@ Si la page indique qu’aucun émulateur en cours d’exécution n’a été tro
 <!-- verify: phase 2 -->
 Vous pouvez aussi démarrer un appareil depuis la liste dans la page. Voir [Appareils](/fr/docs/guides/devices/).
 
-La passerelle continue de tourner quand aucun émulateur n’est trouvé, et affiche la raison dans Terminal.
+La passerelle continue de tourner quand aucun émulateur n’est trouvé et en indique la raison : dans Terminal, ou dans son journal quand elle tourne en arrière-plan (`droidpier logs`).
 
 <!-- verify: phase 3 -->
 Si la passerelle signale que l’Android SDK, `emulator`, `platform-tools` ou l’image système sont manquants, suivez la solution qu’elle affiche. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -73,7 +73,7 @@ Pour installer les outils à la main, téléchargez les outils en ligne de comma
 <!-- verify: phase 3 -->
 La page vérifie une fois par seconde si la passerelle est là et se connecte dès qu’elle répond. Si elle continue d’attendre :
 
-- Vérifiez que la fenêtre Terminal où vous avez lancé la commande est toujours ouverte. Fermer la fenêtre ou appuyer sur `Ctrl+C` arrête la passerelle. Relancez la commande pour la démarrer.
+- Lancez `droidpier status` pour vérifier que la passerelle tourne. Sinon, lancez `droidpier start`. `droidpier logs` montre pourquoi elle s’est arrêtée.
 - Vérifiez que Chrome autorise l’accès au réseau local pour `droid.devpier.dev`. Voir [Chrome a bloqué l’accès au réseau local](#chrome-blocked-local-network-access).
 - Si vous avez démarré la passerelle avec `--port`, ouvrez l’adresse qu’elle a affichée, qui se termine par `#port=<port>`.
 - Mettez l’onglet au premier plan. La page ne vérifie pas tant que l’onglet est en arrière-plan.

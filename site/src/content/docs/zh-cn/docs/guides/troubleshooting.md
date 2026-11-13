@@ -1,7 +1,7 @@
 ---
 title: 故障排除
 description: 解决常见问题——Chrome 阻止本地网络访问、端口被占用、未找到模拟器、页面无法连接、版本不匹配。
-sourceHash: 711f2e4dd61a
+sourceHash: 0b338512d1e9
 ---
 
 ## Chrome 阻止了本地网络访问 {#chrome-blocked-local-network-access}
@@ -21,7 +21,7 @@ sourceHash: 711f2e4dd61a
 
 网关默认监听端口 `7300`。
 
-如果网关仍在运行时你再次运行命令，它不会启动第二个，而是提示 droidpier 已经在端口 `7300` 上运行，并打开页面。直接使用该页面即可；或者先按 `Ctrl+C` 停止正在运行的网关。
+如果网关在后台运行，再次运行这条命令会重启它。如果有网关在某个终端窗口中运行，这条命令不会再启动第二个，而是说明 droidpier 已在端口 `7300` 上运行。先按 `Ctrl+C` 停止那个，再运行这条命令。
 
 如果端口被别的程序占用，网关会说明这一点，建议换一个端口，然后退出。查找该程序：
 
@@ -50,7 +50,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 <!-- verify: phase 2 -->
 你也可以从页面的列表中启动设备。请参阅[设备](/zh-cn/docs/guides/devices/)。
 
-未找到模拟器时，网关会继续运行并在终端中打印原因。
+找不到模拟器时，网关会继续运行，并打印原因：打印在终端里，后台运行时写在日志里（`droidpier logs`）。
 
 <!-- verify: phase 3 -->
 如果网关报告 Android SDK、`emulator`、`platform-tools` 或系统镜像缺失，请按照它打印的修复方法操作。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
@@ -73,7 +73,7 @@ Android Studio 安装的 SDK 可能不包含 `cmdline-tools`（提供 `sdkmanage
 <!-- verify: phase 3 -->
 页面每秒检查一次网关，网关一响应就会连接。如果页面一直在等待：
 
-- 检查你运行命令的那个终端窗口是否还开着。关闭该窗口或按 `Ctrl+C` 会停止网关。再次运行命令即可启动它。
+- 运行 `droidpier status` 确认网关在运行。没有运行就运行 `droidpier start`；`droidpier logs` 可以看到它停止的原因。
 - 检查 Chrome 是否允许 `droid.devpier.dev` 访问本地网络。请参阅 [Chrome 阻止了本地网络访问](#chrome-blocked-local-network-access)。
 - 如果你使用 `--port` 启动了网关，请打开它打印的地址，该地址以 `#port=<port>` 结尾。
 - 将该标签页切换到前台。标签页在后台时，页面不会检查。

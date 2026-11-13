@@ -20,7 +20,7 @@ If you still cannot connect, use the [local fallback page](#use-the-local-fallba
 
 The gateway listens on port `7300` by default.
 
-If you run the command again while the gateway is still running, it does not start a second one. It says droidpier is already running on port `7300` and opens the page. Use that page, or stop the running gateway with `Ctrl+C` first.
+If the gateway runs in the background, running the command again restarts it. If a gateway runs in a Terminal window, the command does not start a second one: it says droidpier is already running on port `7300`. Stop that one with `Ctrl+C`, then run the command again.
 
 If another program uses the port, the gateway says so, suggests another port, and exits. Find the program:
 
@@ -49,7 +49,7 @@ If the page says no running emulator was found:
 <!-- verify: phase 2 -->
 You can also start a device from the list in the page. See [Devices](/docs/guides/devices/).
 
-The gateway keeps running when no emulator is found, and prints the reason in Terminal.
+The gateway keeps running when no emulator is found, and prints the reason: in Terminal, or in its log when it runs in the background (`droidpier logs`).
 
 <!-- verify: phase 3 -->
 If the gateway reports that the Android SDK, `emulator`, `platform-tools` or the system image is missing, follow the fix it prints. See [First run](/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -72,7 +72,7 @@ To install the tools by hand instead, download Google's command line tools from 
 <!-- verify: phase 3 -->
 The page checks for the gateway once a second and connects as soon as it answers. If it keeps waiting:
 
-- Check that the Terminal window where you ran the command is still open. Closing the window or pressing `Ctrl+C` stops the gateway. Run the command again to start it.
+- Run `droidpier status` to check that the gateway runs. If it does not, run `droidpier start`. `droidpier logs` shows why it stopped.
 - Check that Chrome allows local network access for `droid.devpier.dev`. See [Chrome blocked local network access](#chrome-blocked-local-network-access).
 - If you started the gateway with `--port`, open the address it printed, which ends in `#port=<port>`.
 - Bring the tab to the front. The page does not check while the tab is in the background.

@@ -1,7 +1,7 @@
 ---
 title: 疑難排解
 description: 解決常見問題——Chrome 封鎖本機網路存取、連接埠被佔用、未找到模擬器、頁面無法連線、版本不符。
-sourceHash: 711f2e4dd61a
+sourceHash: 0b338512d1e9
 ---
 
 ## Chrome 封鎖了本機網路存取 {#chrome-blocked-local-network-access}
@@ -21,7 +21,7 @@ sourceHash: 711f2e4dd61a
 
 閘道預設監聽連接埠 `7300`。
 
-如果閘道仍在執行時你再次執行命令，它不會啟動第二個，而是提示 droidpier 已經在連接埠 `7300` 上執行，並開啟頁面。直接使用該頁面即可；或者先按 `Ctrl+C` 停止正在執行的閘道。
+如果閘道在背景執行，再次執行這條命令會重新啟動它。如果有閘道在某個終端機視窗中執行，這條命令不會再啟動第二個，而是說明 droidpier 已在連接埠 `7300` 上執行。先按 `Ctrl+C` 停止那個，再執行這條命令。
 
 如果連接埠被別的程式佔用，閘道會說明這一點，建議換一個連接埠，然後結束。查找該程式：
 
@@ -50,7 +50,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 <!-- verify: phase 2 -->
 你也可以從頁面的清單中啟動裝置。請參閱[裝置](/zh-tw/docs/guides/devices/)。
 
-未找到模擬器時，閘道會繼續執行並在終端機中列印原因。
+找不到模擬器時，閘道會繼續執行，並列印原因：列印在終端機裡，背景執行時寫在記錄檔裡（`droidpier logs`）。
 
 <!-- verify: phase 3 -->
 如果閘道回報 Android SDK、`emulator`、`platform-tools` 或系統映像缺失，請按照它列印的修復方法操作。請參閱[首次執行](/zh-tw/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
@@ -73,7 +73,7 @@ Android Studio 安裝的 SDK 可能不包含 `cmdline-tools`（提供 `sdkmanage
 <!-- verify: phase 3 -->
 頁面每秒檢查一次閘道，閘道一回應就會連線。如果頁面一直在等待：
 
-- 檢查你執行命令的那個終端機視窗是否還開著。關閉該視窗或按 `Ctrl+C` 會停止閘道。再次執行命令即可啟動它。
+- 執行 `droidpier status` 確認閘道在執行。沒有執行就執行 `droidpier start`；`droidpier logs` 可以看到它停止的原因。
 - 檢查 Chrome 是否允許 `droid.devpier.dev` 存取本機網路。請參閱 [Chrome 封鎖了本機網路存取](#chrome-blocked-local-network-access)。
 - 如果你使用 `--port` 啟動了閘道，請開啟它列印的位址，該位址以 `#port=<port>` 結尾。
 - 將該分頁切換到前景。分頁在背景時，頁面不會檢查。

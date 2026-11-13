@@ -1,7 +1,7 @@
 ---
 title: Risoluzione dei problemi
 description: Risolvi i problemi comuni - Chrome ha bloccato l’accesso alla rete locale, porta già in uso, nessun emulatore trovato, la pagina non si connette, versioni non corrispondenti.
-sourceHash: 711f2e4dd61a
+sourceHash: 0b338512d1e9
 ---
 
 ## Chrome ha bloccato l’accesso alla rete locale {#chrome-blocked-local-network-access}
@@ -21,7 +21,7 @@ Se ancora non riesci a connetterti, usa la [pagina locale di riserva](#use-the-l
 
 Il gateway è in ascolto sulla porta `7300` per impostazione predefinita.
 
-Se esegui di nuovo il comando mentre il gateway è ancora in esecuzione, non se ne avvia un secondo. Ti segnala che droidpier è già in esecuzione sulla porta `7300` e apre la pagina. Usa quella pagina, oppure arresta prima il gateway in esecuzione con `Ctrl+C`.
+Se il gateway è in background, eseguire di nuovo il comando lo riavvia. Se un gateway è in esecuzione in una finestra del Terminale, il comando non ne avvia un secondo: segnala che droidpier è già in esecuzione sulla porta `7300`. Arresta quello con `Ctrl+C`, poi esegui di nuovo il comando.
 
 Se un altro programma usa la porta, il gateway lo segnala, suggerisce un’altra porta e termina. Trova il programma:
 
@@ -50,7 +50,7 @@ Se la pagina dice che non è stato trovato nessun emulatore in esecuzione:
 <!-- verify: phase 2 -->
 Puoi anche avviare un dispositivo dall’elenco nella pagina. Vedi [Dispositivi](/it/docs/guides/devices/).
 
-Il gateway continua a funzionare quando non trova nessun emulatore, e stampa il motivo nel Terminale.
+Il gateway resta in esecuzione quando non trova emulatori e ne indica il motivo: nel Terminale, o nel suo log quando è in background (`droidpier logs`).
 
 <!-- verify: phase 3 -->
 Se il gateway segnala che mancano l’Android SDK, `emulator`, `platform-tools` o l’immagine di sistema, segui la soluzione che stampa. Vedi [Primo avvio](/it/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
@@ -73,7 +73,7 @@ Per installare gli strumenti a mano, scarica gli strumenti da riga di comando di
 <!-- verify: phase 3 -->
 La pagina cerca il gateway una volta al secondo e si connette non appena risponde. Se continua ad attendere:
 
-- Controlla che la finestra del Terminale in cui hai eseguito il comando sia ancora aperta. Chiudere la finestra o premere `Ctrl+C` arresta il gateway. Esegui di nuovo il comando per avviarlo.
+- Esegui `droidpier status` per verificare che il gateway sia in esecuzione. Se non lo è, esegui `droidpier start`. `droidpier logs` mostra perché si è fermato.
 - Controlla che Chrome consenta l’accesso alla rete locale per `droid.devpier.dev`. Vedi [Chrome ha bloccato l’accesso alla rete locale](#chrome-blocked-local-network-access).
 - Se hai avviato il gateway con `--port`, apri l’indirizzo che ha stampato, che termina con `#port=<port>`.
 - Porta la scheda in primo piano. La pagina non controlla mentre la scheda è in background.

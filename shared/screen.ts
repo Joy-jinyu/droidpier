@@ -14,11 +14,14 @@ export function fitSize(box: Size, device: Size, rotation: Rotation): Size {
   };
 }
 
-/** 画在屏幕外面的机身：屏幕区（四边各去掉 bezel）按转过之后的宽高比、整个机身放进容器时的尺寸，取整。 */
-export function deviceFrame(box: Size, device: Size, rotation: Rotation, bezel: number): Size {
+/**
+ * 画在屏幕外面的机身：屏幕区（四边各去掉 bezel）按转过之后的宽高比、整个机身放进容器时的尺寸，取整。
+ * zoom 只缩放屏幕区，机身边框宽度不变，屏幕区保持设备的宽高比；大于 1 时会超出容器。
+ */
+export function deviceFrame(box: Size, device: Size, rotation: Rotation, bezel: number, zoom = 1): Size {
   const inner = fitSize({ width: box.width - 2 * bezel, height: box.height - 2 * bezel }, device, rotation);
   if (!inner.width || !inner.height) return { width: 0, height: 0 };
-  return { width: inner.width + 2 * bezel, height: inner.height + 2 * bezel };
+  return { width: Math.round(inner.width * zoom) + 2 * bezel, height: Math.round(inner.height * zoom) + 2 * bezel };
 }
 
 /** 帧从模拟器产生到现在过了多少毫秒。tsMs 是 u32 毫秒（会回绕）；本机时钟略慢于帧时间戳时返回 0。 */

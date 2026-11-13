@@ -8,6 +8,7 @@ import { isDevtoolsSrc } from "./devtools-src.ts";
 import { gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
 import { createRenderer } from "./renderer.ts";
 import { createUploads } from "./uploads.ts";
+import { parseZoom, ZOOM_STEPS } from "../../shared/zoom.ts";
 import { INSTALL_CMD, INSTALL_IDS, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
 
 // 以前记端口和启动口令的键，都不用了，清掉
@@ -31,6 +32,8 @@ async function localPermission(): Promise<LocalPermission> {
   return null;
 }
 const GATEWAY_PORT = resolvePort();
+// 设备画面的缩放存在这台浏览器里；存储不可用（隐私模式等）时每次都适应窗口
+const ZOOM_KEY = "droidpier.zoom";
 // 还不知道设备尺寸、容器也没量出来时，hello 用这个尺寸（网关会夹到设备尺寸内）
 const FALLBACK_CSS = { width: 540, height: 1170 };
 const RESIZE_DEBOUNCE_MS = 150;
@@ -354,6 +357,8 @@ export async function createHost(player: Player) {
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
+    // 画面上的滚轮只给设备：nsh 在根元素上自己滚动滚动视图、不看 preventDefault，不拦住的话放大后设备区会跟着滚
+    e.stopPropagation();
     if (pointerIsDown || !device.width) return;
     // deltaMode 转换：PIXEL(0) 不变；LINE(1) ×40px；PAGE(2) × canvas CSS 高度
     let dy = e.deltaY;
@@ -627,6 +632,23 @@ export async function createHost(player: Player) {
         const id = (args as { id?: unknown } | undefined)?.id;
         if (typeof id !== "number") throw new Error(`${name} 需要 id`);
         return ctl({ t: name === "emu.acceptLicenses" ? "acceptLicenses" : "rejectLicenses", id });
+      }
+      if (name === "emu.zoom") {
+        try {
+          return parseZoom(localStorage.getItem(ZOOM_KEY));
+        } catch {
+          return parseZoom(null);
+        }
+      }
+      if (name === "emu.setZoom") {
+        const zoom = (args as { zoom?: unknown } | undefined)?.zoom;
+        if (!ZOOM_STEPS.includes(zoom as number)) throw new Error(`emu.setZoom 需要 zoom：${ZOOM_STEPS.join("、")} 之一`);
+        try {
+          localStorage.setItem(ZOOM_KEY, String(zoom));
+          return { ok: true };
+        } catch {
+          return { ok: false };
+        }
       }
       throw new Error(`no host function ${name}`);
     },

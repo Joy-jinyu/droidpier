@@ -6,6 +6,7 @@ import { gbText, spaceCheck } from "../shared/disk-space";
 import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, ramMbFor } from "../shared/avd-spec";
 import { ADB_UNRESPONSIVE, NEEDS_JAVA, type Rotation } from "../shared/protocol";
 import { deviceFrame } from "../shared/screen";
+import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
 import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
@@ -333,6 +334,8 @@ const ICON_PATHS = {
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
   install: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
 };
 type IconName = keyof typeof ICON_PATHS;
 const iconSrc = (name: IconName) =>
@@ -389,6 +392,23 @@ function KeyGroup(props: { label: string; children: JSX.Element; row?: boolean; 
     <View role="group" accessibilityLabel={props.label}
       style={{ flexDirection: props.row ? "row" : "column", gap: props.row ? 20 : 4, padding: 6, borderRadius: 14, borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, ...props.style }}>
       {props.children}
+    </View>
+  );
+}
+
+/** 设备画面缩放：缩小、当前比例（点一下回到适应窗口）、放大。 */
+function ZoomControl(props: { zoom: number; onZoom: (z: number) => void }) {
+  const percent = () => `${Math.round(props.zoom * 100)}%`;
+  return (
+    <View role="group" accessibilityLabel="画面缩放" style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+      <IconBtn icon="minus" label="缩小" disabled={props.zoom === ZOOM_STEPS[0]} onPress={() => props.onZoom(stepZoom(props.zoom, -1))} />
+      <View onPress={() => props.onZoom(1)} role="button" accessibilityLabel={`缩放 ${percent()}，适应窗口`}
+        tooltip={<Tip label="适应窗口" />}
+        hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }}
+        style={{ minWidth: 48, height: 32, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: "transparent" }}>
+        <Text style={{ color: C.muted, fontSize: 12 }}>{percent()}</Text>
+      </View>
+      <IconBtn icon="plus" label="放大" disabled={props.zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1]} onPress={() => props.onZoom(stepZoom(props.zoom, 1))} />
     </View>
   );
 }
@@ -861,13 +881,20 @@ function App() {
   const currentAvd = () => (avds() ?? []).find((a) => a.running === "grpc" && a.serial === serial());
   // 设备框的宽高比：当前设备的分辨率，横屏时对调；不知道分辨率时按 1080×2340
   // 机身大小：放进按键之间剩下的地方，屏幕区按当前设备转过之后的宽高比；不知道分辨率时按 1080×2340
+  // 画面缩放：1 是适应窗口；读到这台浏览器存的值后换过去
+  const zoom = signal(1);
+  host.call("emu.zoom", {}).then((z: unknown) => zoom.set(parseZoom(z)));
+  const setZoom = (z: number) => {
+    zoom.set(z);
+    host.call("emu.setZoom", { zoom: z });
+  };
   const deviceArea = signal({ width: 0, height: 0 });
   const sideKeys = signal({ left: 0, right: 0 });
   const frame = () => {
     const a = currentAvd();
     const area = deviceArea();
     const box = { width: area.width - sideKeys().left - sideKeys().right - 2 * DEVICE_GAP, height: area.height };
-    return deviceFrame(box, { width: a?.width ?? 1080, height: a?.height ?? 2340 }, rotation() as Rotation, BEZEL);
+    return deviceFrame(box, { width: a?.width ?? 1080, height: a?.height ?? 2340 }, rotation() as Rotation, BEZEL, zoom());
   };
   const toggleH5 = () => {
     if (h5Open()) closeDevtools();
@@ -971,6 +998,8 @@ function App() {
             </If>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <ZoomControl zoom={zoom()} onZoom={setZoom} />
+            <View style={{ width: 1, height: 16, marginHorizontal: 6, backgroundColor: C.line }} />
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: state() === "connected" ? C.ok : C.warn }} />
             <Text style={{ color: state() === "connected" ? C.muted : C.warn, fontSize: 12 }}>{statusText()}</Text>
           </View>
@@ -980,6 +1009,9 @@ function App() {
           <View style={{ flex: 1, minHeight: 0, alignItems: "center", justifyContent: "center", gap: 16, paddingVertical: 24, paddingHorizontal: 16 }}>
             <View onLayout={({ bounds }) => deviceArea.set({ width: bounds.size.width, height: bounds.size.height })}
               style={{ flex: 1, minHeight: 0, alignSelf: "stretch", alignItems: "center", justifyContent: "center" }}>
+              {/* 放大到超出这块区域时两个方向都能滚动；没超出时居中 */}
+              <Scroll style={{ flex: 1, alignSelf: "stretch" }} contentStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
+              <Scroll horizontal style={{ alignSelf: "stretch" }} contentStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
               <View style={{ flexDirection: "row", gap: DEVICE_GAP }}>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), left: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96 }}>
                   <KeyGroup label="工具">
@@ -1021,6 +1053,8 @@ function App() {
                   </KeyGroup>
                 </View>
               </View>
+              </Scroll>
+              </Scroll>
             </View>
             <KeyGroup label="系统导航" row>
               <Key icon="back" label="返回" onPress={() => key("GoBack")} />

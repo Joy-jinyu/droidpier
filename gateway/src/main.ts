@@ -10,7 +10,7 @@ import { avdHome, serviceLogPath, discoveryDir, emulatorBin, openBrowser, sdkRoo
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
-import { createInstaller, fetchWithIdle, realInstallerDeps } from "./installer.ts";
+import { createInstaller, fetchWithIdle, realInstallerDeps, requireRepoUrl } from "./installer.ts";
 import { buildCatalog, realCatalogDeps } from "./catalog.ts";
 import { createWebViews, defaultFetchJson, findFreePort, makeAdbExec, releasePort } from "./webviews.ts";
 import { createReverses } from "./reverse.ts";
@@ -124,6 +124,7 @@ const catalogDeps = realCatalogDeps({
   manifestUrl: SYS_IMG_MANIFEST_URL,
   fetchText: async (url) => {
     const r = await fetchWithIdle(url, 60_000);
+    requireRepoUrl(r.url, "系统镜像清单跳转后");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.text();
   },

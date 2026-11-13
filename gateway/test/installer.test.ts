@@ -38,6 +38,8 @@ type FakeOpts = {
   status?: number;
   /** 换掉 zip 的正文（默认分两块给出假 zip）。 */
   body?: (zip: Buffer) => AsyncIterable<Uint8Array>;
+  /** 请求地址 → 跳转后的最终地址。 */
+  redirect?: Record<string, string>;
   /** 开始下载 zip 前调用（这时临时目录已经建好）。 */
   beforeZip?: (sdk: string) => Promise<void>;
 };
@@ -56,12 +58,13 @@ async function fakes(t: import("node:test").TestContext, opts: FakeOpts = {}) {
     avdHome,
     fetch: async (url) => {
       fetches.push(url);
-      if (url in manifests) return { ok: true, status: 200, text: async () => manifests[url], body: null };
+      const final = opts.redirect?.[url] ?? url;
+      if (url in manifests) return { ok: true, status: 200, url: final, text: async () => manifests[url], body: null };
       const zip = ZIPS[url];
-      if (!zip || opts.status) return { ok: false, status: opts.status ?? 404, text: async () => "", body: null };
+      if (!zip || opts.status) return { ok: false, status: opts.status ?? 404, url: final, text: async () => "", body: null };
       await opts.beforeZip?.(sdk);
       const body = opts.body?.(zip) ?? (async function* () { yield zip.subarray(0, 5); yield zip.subarray(5); })();
-      return { ok: true, status: 200, text: async () => "", body };
+      return { ok: true, status: 200, url: final, text: async () => "", body };
     },
     unzip: async (zip, dest) => {
       unzips.push(zip);
@@ -258,6 +261,36 @@ test("下载地址不是 https：不下载", async (t) => {
   assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
   assert.match(lastOf(ps, "platform-tools")!.logTail, /https/);
   assert.deepEqual(f.fetches, [REPO_URL]);
+});
+
+test("清单里写的下载地址不在 dl.google.com：不下载", async (t) => {
+  const f = await fakes(t, { manifests: { [REPO_URL]: repo().replace("platform-tools_r37.0.1-darwin.zip", "https://dl.example/p.zip") } });
+  const { ps } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
+  assert.match(lastOf(ps, "platform-tools")!.logTail, /dl\.google\.com/);
+  assert.deepEqual(f.fetches, [REPO_URL]);
+});
+
+test("清单或 zip 被跳转到别的主机：不用它", async (t) => {
+  const zipUrl = `${BASE}platform-tools_r37.0.1-darwin.zip`;
+  const f = await fakes(t, { redirect: { [zipUrl]: "https://mirror.example/p.zip" } });
+  const { ps } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
+  assert.match(lastOf(ps, "platform-tools")!.logTail, /mirror\.example/);
+  assert.deepEqual(f.unzips, []);
+  const g = await fakes(t, { redirect: { [REPO_URL]: "http://dl.google.com/android/repository/repository2-3.xml" } });
+  const r = await runWith(g.deps, ["platform-tools"]);
+  assert.equal(lastOf(r.ps, "platform-tools")?.phase, "failed");
+  assert.deepEqual(r.ls, []);
+});
+
+test("许可证 id 不像文件名（比如 ../x）：不问也不写许可证文件", async (t) => {
+  const f = await fakes(t, { manifests: { [REPO_URL]: repo().replaceAll('"android-sdk-license"', '"../../evil"') } });
+  const { ps, ls } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "failed");
+  assert.match(lastOf(ps, "platform-tools")!.logTail, /许可证/);
+  assert.deepEqual(ls, []);
+  assert.equal(existsSync(f.sdk), false);
 });
 
 test("清单里没有这个包或读清单失败：失败并说明", async (t) => {

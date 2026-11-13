@@ -14,7 +14,8 @@ import { INSTALL_IDS, type AvdSpec, type InstallProgress, type Licence } from ".
 export type Progress = InstallProgress;
 export type { Licence };
 
-type FetchResult = { ok: boolean; status: number; text(): Promise<string>; body: AsyncIterable<Uint8Array> | null };
+/** url：跳转后最终的地址。 */
+type FetchResult = { ok: boolean; status: number; url: string; text(): Promise<string>; body: AsyncIterable<Uint8Array> | null };
 
 export type InstallerDeps = {
   sdkRoot: string;
@@ -44,6 +45,16 @@ export type Installer = {
 class StepError extends Error {}
 
 const PACKAGES: Record<string, string> = { emulator: "emulator", "platform-tools": "platform-tools" };
+/** 清单和 zip 只从 Google 的 SDK 仓库下（platform.ts 的清单地址都在这台主机上）。 */
+const REPO_HOST = "dl.google.com";
+/** 许可证 id 要用作 <sdk>/licenses/ 下的文件名：只许字母数字和 . _ -，不许以 . 开头（排除 . 和 ..）。 */
+const LICENCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** 地址必须是 https://dl.google.com/…，否则这一项失败。 */
+export function requireRepoUrl(href: string, what: string): void {
+  const u = new URL(href);
+  if (u.protocol !== "https:" || u.hostname !== REPO_HOST) throw new StepError(`${what}不在 https://${REPO_HOST} 上，不用它：${href}`);
+}
 const exists = (p: string) => access(p).then(() => true, () => false);
 
 /**
@@ -78,6 +89,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
 
   /** 许可证：已经同意过（licenses/<id> 里有它的哈希）就不问；问了且同意后照 sdkmanager 的格式记下。 */
   const ensureLicence = async (id: string, pkg: RepoPackage, emit: (p: Progress) => void, onLicense?: (l: Licence) => void) => {
+    if (!LICENCE_ID.test(pkg.licence.id)) throw new StepError(`清单里的许可证 id 不能用作文件名：${pkg.licence.id}`);
     const file = join(deps.sdkRoot, "licenses", pkg.licence.id);
     const before = await readFile(file, "utf8").catch(() => "");
     if (isLicenceAccepted(before, pkg.licence.text)) return;
@@ -90,6 +102,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
   /** 下载到 zip：多过清单写的字节数就停，写盘出错（磁盘满）就失败；下完字节数和 sha1 都要对上。 */
   const download = async (id: string, url: string, pkg: RepoPackage, zip: string, emit: (p: Progress) => void) => {
     const res = await deps.fetch(url, abort.signal);
+    requireRepoUrl(res.url, "下载地址跳转后");
     if (!res.ok || !res.body) throw new StepError(`下载失败：HTTP ${res.status}`);
     const body = res.body;
     const want = pkg.archive.size;
@@ -117,7 +130,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
   };
 
   /**
-   * 装一个 SDK 包：读清单 → 许可证 → 下载（只走 https）→ 校验 sha1 → 解压到临时目录 → 写 package.xml → 换到 <sdk>/<包目录>。
+   * 装一个 SDK 包：读清单 → 许可证 → 下载（只从 https://dl.google.com，跳转后也是）→ 校验 sha1 → 解压到临时目录 → 写 package.xml → 换到 <sdk>/<包目录>。
    * 临时目录在 SDK 里（和目标同一块盘，rename 是原子的），结束后删掉；已有的目标目录（残缺的）先挪进临时目录，换成功后随临时目录删掉。
    */
   const installPackage = async (id: string, pkgPath: string, emit: (p: Progress) => void, onLicense?: (l: Licence) => void) => {
@@ -125,11 +138,12 @@ export function createInstaller(deps: InstallerDeps): Installer {
     if (!manifestUrl) throw new StepError(`不认识的包：${pkgPath}`);
     emit({ id, phase: "download", pct: 0, logTail: `读取 ${manifestUrl}` });
     const res = await deps.fetch(manifestUrl, abort.signal);
+    requireRepoUrl(res.url, "清单地址跳转后");
     if (!res.ok) throw new StepError(`读取清单失败：HTTP ${res.status}`);
     const pkg = findPackage(await res.text(), pkgPath);
     if (!pkg) throw new StepError(`清单里没有 macOS arm64 能用的 ${pkgPath} 稳定版`);
     const url = new URL(pkg.archive.url, manifestUrl);
-    if (url.protocol !== "https:") throw new StepError(`下载地址不是 https，不下载：${url.href}`);
+    requireRepoUrl(url.href, "下载地址");
     await ensureLicence(id, pkg, emit, onLicense);
     const target = packageDir(deps.sdkRoot, pkgPath);
     const tmpRoot = join(deps.sdkRoot, ".droidpier-tmp");
@@ -253,6 +267,7 @@ export async function fetchWithIdle(url: string, idleMs: number, outer?: AbortSi
   return {
     ok: r.ok,
     status: r.status,
+    url: r.url,
     body,
     text: async () => {
       const parts: Uint8Array[] = [];

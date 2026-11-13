@@ -87,3 +87,14 @@ test("deviceFrame：结果取整、不超出容器；容器放不下边框或尺
   assert.deepEqual(deviceFrame({ width: 20, height: 500 }, dev, 0, 11), { width: 0, height: 0 });
   assert.deepEqual(deviceFrame({ width: 500, height: 500 }, { width: 0, height: 0 }, 0, 11), { width: 0, height: 0 });
 });
+
+test("deviceFrame：zoom 缩放屏幕区，边框宽度不变，屏幕区还是设备的宽高比", () => {
+  const box = { width: 1000, height: 800 };
+  const fit = deviceFrame(box, dev, 0, 11);
+  const big = deviceFrame(box, dev, 0, 11, 2);
+  assert.equal(big.height - 22, (fit.height - 22) * 2);
+  assert.ok(Math.abs((big.width - 22) / (big.height - 22) - 1080 / 2340) < 0.01);
+  const small = deviceFrame(box, dev, 0, 11, 0.5);
+  assert.equal(small.height - 22, Math.round((fit.height - 22) * 0.5));
+  assert.deepEqual(deviceFrame(box, dev, 0, 11, 1), fit);
+});

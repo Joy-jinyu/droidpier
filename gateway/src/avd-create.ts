@@ -1,5 +1,6 @@
 import { access, mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
+import { androidUserHome } from "./platform.ts";
 import type { AvdSpec, DeviceModel } from "../../shared/protocol.ts";
 
 /** 创建设备对话框里的一个机型和它的屏幕：分辨率（像素）、密度（dpi）。 */
@@ -106,10 +107,12 @@ function configIni(spec: AvdSpec, model: DeviceDef, image: { dir: string; tag: s
 const exists = (p: string) => access(p).then(() => true, () => false);
 
 /**
- * 不用 avdmanager 建一台 AVD：写 <avdHome>/<name>.avd/config.ini 和 <avdHome>/<name>.ini（path、target，和 avdmanager 一样）。
- * 先在临时目录写好再换过去，出错不会留下半台设备；同名的 .ini 或 .avd 已存在时不动它们。名字的规则由调用方（avdNameError）查。
+ * 不用 avdmanager 建一台 AVD：写 <avdHome>/<name>.avd/config.ini 和 <avdHome>/<name>.ini（path、target，和 avdmanager 一样；
+ * AVD 目录在 Android 用户目录 userHome 里时，像 Android Studio 一样再写相对它的 path.rel）。
+ * .avd 先在临时目录写好再换过去，.ini 只新建不覆盖，出错不会留下半台设备；同名的 .ini 或 .avd 已存在时不动它们。
+ * 名字的规则由调用方（avdNameError）查。
  */
-export async function writeAvd(spec: AvdSpec, avdHome: string): Promise<void> {
+export async function writeAvd(spec: AvdSpec, avdHome: string, userHome = androidUserHome()): Promise<void> {
   const model = DEVICE_MODELS.find((d) => d.id === spec.device);
   if (!model) throw new Error(`没有这个机型：${spec.device}`);
   const m = /^system-images;(android-[^;]+);([^;]+);([^;]+)$/.exec(spec.image);
@@ -119,21 +122,19 @@ export async function writeAvd(spec: AvdSpec, avdHome: string): Promise<void> {
   const iniPath = join(avdHome, `${spec.name}.ini`);
   await mkdir(avdHome, { recursive: true });
   if ((await exists(avdDir)) || (await exists(iniPath))) throw new Error(`已有设备文件 ${spec.name}.ini 或 ${spec.name}.avd`);
-  const suffix = `.droidpier-${process.pid}-${Date.now()}`;
-  const tmpDir = join(avdHome, `.${spec.name}.avd${suffix}`);
-  const tmpIni = join(avdHome, `.${spec.name}.ini${suffix}`);
+  const tmpDir = join(avdHome, `.${spec.name}.avd.droidpier-${process.pid}-${Date.now()}`);
+  const rel = relative(userHome, avdDir);
+  const relLine = rel && !rel.startsWith("..") && !isAbsolute(rel) ? `path.rel=${rel}\n` : "";
   let moved = false;
   try {
     await mkdir(tmpDir);
     await writeFile(join(tmpDir, "config.ini"), configIni(spec, model, { dir: `system-images/${api}/${tag}/${abi}`, tag, abi, api }));
-    // target 用镜像目录名（android-34、android-36.1），见 avd.ts 的 repairAvdTarget
-    await writeFile(tmpIni, `avd.ini.encoding=UTF-8\npath=${avdDir}\ntarget=${api}\n`);
     await rename(tmpDir, avdDir);
     moved = true;
-    await rename(tmpIni, iniPath);
+    // target 用镜像目录名（android-34、android-36.1），见 avd.ts 的 repairAvdTarget
+    await writeFile(iniPath, `avd.ini.encoding=UTF-8\npath=${avdDir}\n${relLine}target=${api}\n`, { flag: "wx" });
   } catch (e) {
     await rm(moved ? avdDir : tmpDir, { recursive: true, force: true });
-    await rm(tmpIni, { force: true });
     throw e;
   }
 }

@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DEVICE_MODELS, writeAvd } from "../src/avd-create.ts";
 import { parseAvdConfig } from "../src/avd.ts";
 
@@ -17,9 +17,10 @@ const SPEC = { name: "Pixel_5_API_34", device: "pixel_5", image: "system-images;
 
 test("建设备：写 <name>.ini 和 <name>.avd/config.ini，格式照 avdmanager（AVD 目录不存在时先建）", async (t) => {
   const h = await home(t);
-  await writeAvd(SPEC, h);
+  // h 是 <Android 用户目录>/avd：和 Android Studio 一样再写一个相对用户目录的 path.rel
+  await writeAvd(SPEC, h, dirname(h));
   const ini = await readFile(join(h, "Pixel_5_API_34.ini"), "utf8");
-  assert.equal(ini, `avd.ini.encoding=UTF-8\npath=${join(h, "Pixel_5_API_34.avd")}\ntarget=android-34\n`);
+  assert.equal(ini, `avd.ini.encoding=UTF-8\npath=${join(h, "Pixel_5_API_34.avd")}\npath.rel=avd/Pixel_5_API_34.avd\ntarget=android-34\n`);
   const config = await readFile(join(h, "Pixel_5_API_34.avd/config.ini"), "utf8");
   const c = kv(config);
   assert.equal(c.get("AvdId"), "Pixel_5_API_34");
@@ -40,6 +41,21 @@ test("建设备：写 <name>.ini 和 <name>.avd/config.ini，格式照 avdmanage
   assert.deepEqual(parseAvdConfig(config), { displayName: "Pixel 5 API 34", width: 1080, height: 2340, ramMb: 4096, apiLevel: 34, abi: "arm64-v8a" });
   assert.equal(c.get("hw.lcd.density"), "440");
   assert.deepEqual((await readdir(h)).sort(), ["Pixel_5_API_34.avd", "Pixel_5_API_34.ini"]);
+});
+
+test("AVD 目录不在 Android 用户目录里（ANDROID_AVD_HOME 指到别处）：不写 path.rel", async (t) => {
+  const h = await home(t);
+  await writeAvd(SPEC, h, join(dirname(h), "user"));
+  assert.doesNotMatch(await readFile(join(h, "Pixel_5_API_34.ini"), "utf8"), /path\.rel/);
+});
+
+test("<name>.ini 是个指向不存在文件的符号链接（检查时看着像没有）：不覆盖它，也不留下 .avd", async (t) => {
+  const h = await home(t);
+  await mkdir(h, { recursive: true });
+  await symlink(join(h, "nowhere.ini"), join(h, "Pixel_5_API_34.ini"));
+  await assert.rejects(writeAvd(SPEC, h, dirname(h)), /EEXIST/);
+  assert.equal(await readlink(join(h, "Pixel_5_API_34.ini")), join(h, "nowhere.ini"));
+  assert.deepEqual(await readdir(h), ["Pixel_5_API_34.ini"]);
 });
 
 test("带小版本的镜像写 target=android-36.1（不是 avdmanager 写坏的 android-0）；Play 商店镜像打开 PlayStore.enabled", async (t) => {

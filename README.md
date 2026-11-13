@@ -47,6 +47,7 @@ Chrome / Edge                    your Mac
 
 ```sh
 droidpier [--port <port>] [--local] [--no-open]
+droidpier --version | --help
 ```
 
 | Option | Effect |
@@ -54,6 +55,10 @@ droidpier [--port <port>] [--local] [--no-open]
 | `--port <port>` | Listen on another port (default `7300`). The page address then ends in `#port=<port>`. |
 | `--local` | Open the page the gateway serves itself, `http://127.0.0.1:<port>/app/`. |
 | `--no-open` | Do not open the browser; just print the address. |
+| `--version` | Print the version (the build time of the release binary) and exit. |
+| `-h`, `--help` | Print the options and exit. |
+
+An unknown option or a stray argument makes `droidpier` exit with a message instead of being ignored.
 
 More in the [command line reference](https://droid.devpier.dev/docs/reference/cli/) and [troubleshooting](https://droid.devpier.dev/docs/guides/troubleshooting/).
 

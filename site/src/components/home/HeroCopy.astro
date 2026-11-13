@@ -28,7 +28,7 @@ const actions = hero?.actions ?? [];
         <a href={link} class:list={["emu-btn", variant === "primary" && "emu-btn--primary"]} {...attrs}>
           {text}
           {icon?.type === "icon" && (
-            <span data-flip-rtl={icon.name === "right-arrow" ? "" : undefined}>
+            <span class="emu-btn__icon" data-flip-rtl={icon.name === "right-arrow" ? "" : undefined}>
               <Icon name={icon.name} />
             </span>
           )}

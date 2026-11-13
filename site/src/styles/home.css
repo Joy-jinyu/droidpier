@@ -106,9 +106,13 @@
   flex: none;
 }
 
+/* 图标外层也用 flex 居中：普通块里的 svg 落在文字基线上，会比文字偏上 3–4px（2026-11-13 实测） */
+.emu-btn__icon {
+  display: inline-flex;
+}
+
 /* 箭头在悬停时往前挪一点；RTL 下箭头本身是翻转的，挪动方向也跟着反过来 */
 .emu-btn [data-flip-rtl] {
-  display: inline-flex;
   transition: translate 0.2s var(--emu-ease);
 }
 .emu-btn:hover [data-flip-rtl] {

@@ -17,7 +17,7 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
 }
 
 test("avdHome：ANDROID_AVD_HOME 是空字符串时当没设，用 ~/.android/avd", () => {
-  withEnv({ ANDROID_AVD_HOME: "" }, () => {
+  withEnv({ ANDROID_AVD_HOME: "", ANDROID_USER_HOME: undefined }, () => {
     assert.equal(avdHome(), join(homedir(), ".android/avd"));
     assert.equal(explicitAvdHome(), undefined);
   });
@@ -25,6 +25,12 @@ test("avdHome：ANDROID_AVD_HOME 是空字符串时当没设，用 ~/.android/av
     assert.equal(avdHome(), "/x/avd");
     assert.equal(explicitAvdHome(), "/x/avd");
   });
+});
+
+test("avdHome：和模拟器一样，没设 ANDROID_AVD_HOME 时用 ANDROID_USER_HOME/avd，再其次 ~/.android/avd", () => {
+  withEnv({ ANDROID_AVD_HOME: undefined, ANDROID_USER_HOME: "/u/.android" }, () => assert.equal(avdHome(), "/u/.android/avd"));
+  withEnv({ ANDROID_AVD_HOME: "", ANDROID_USER_HOME: "" }, () => assert.equal(avdHome(), join(homedir(), ".android/avd")));
+  withEnv({ ANDROID_AVD_HOME: "/x/avd", ANDROID_USER_HOME: "/u/.android" }, () => assert.equal(avdHome(), "/x/avd"));
 });
 
 test("androidUserHome：ANDROID_USER_HOME 非空时用它，否则 ~/.android", () => {

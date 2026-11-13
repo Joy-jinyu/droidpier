@@ -125,6 +125,15 @@ test("start：shell 里设了 ANDROID_HOME / ANDROID_AVD_HOME 时带进 plist（
   assert.match(f.files[PLIST], /<key>ANDROID_AVD_HOME<\/key>\s*<string>\/opt\/avd<\/string>/);
 });
 
+test("start：ANDROID_USER_HOME 也带进 plist；下次 start 没设时沿用上次存的", async () => {
+  const f = fake({ env: { ANDROID_USER_HOME: "/opt/android-user" } });
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  assert.match(f.files[PLIST], /<key>ANDROID_USER_HOME<\/key>\s*<string>\/opt\/android-user<\/string>/);
+  delete f.deps.env.ANDROID_USER_HOME;
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  assert.match(f.files[PLIST], /<key>ANDROID_USER_HOME<\/key>\s*<string>\/opt\/android-user<\/string>/);
+});
+
 test("start：已在运行且配置没变时 kickstart -k 重启（更新后换上新文件）", async () => {
   const f = fake();
   await serviceStart(f.deps, { args: ["--port", "7310"], noOpen: true });

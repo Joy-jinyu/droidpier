@@ -13,8 +13,8 @@ export { SERVICE_LABEL };
 /** launchd 不读 shell 配置，只给这个 PATH；网关用到的系统命令都在里面。 */
 const SERVICE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
-/** 带进 plist 的环境变量：SDK、AVD 放在非默认位置的用户靠它们。这次运行 start 时没设就沿用上次存的。 */
-const PASSED_ENV = ["ANDROID_HOME", "ANDROID_AVD_HOME"];
+/** 带进 plist 的环境变量：SDK、AVD、Android 用户目录放在非默认位置的用户靠它们。这次运行 start 时没设就沿用上次存的。 */
+const PASSED_ENV = ["ANDROID_HOME", "ANDROID_AVD_HOME", "ANDROID_USER_HOME"];
 
 const LAUNCHCTL = "/bin/launchctl";
 

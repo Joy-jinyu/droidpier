@@ -95,9 +95,9 @@ export function explicitAvdHome(): string | undefined {
   return process.env.ANDROID_AVD_HOME || undefined;
 }
 
-/** AVD 主目录：优先 ANDROID_AVD_HOME，其次 ~/.android/avd。 */
+/** AVD 主目录，和模拟器找 AVD 的顺序一样：ANDROID_AVD_HOME（非空），其次 <Android 用户目录>/avd。 */
 export function avdHome(): string {
-  return explicitAvdHome() ?? join(homedir(), ".android/avd");
+  return explicitAvdHome() ?? join(androidUserHome(), "avd");
 }
 
 /** Android 用户目录：ANDROID_USER_HOME（非空），其次 ~/.android。AVD .ini 里的 path.rel 相对它。 */

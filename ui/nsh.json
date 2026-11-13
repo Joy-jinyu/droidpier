@@ -3,7 +3,8 @@
   "id": "dev.devpier.droidpier",
   "icon": "./icon.png",
   "capabilities": {
-    "host": ["emu.*"]
+    "host": ["emu.*"],
+    "openUrl": { "schemes": ["https"] }
   },
   "web": {
     "host": "./host.js",

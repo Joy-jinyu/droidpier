@@ -5,3 +5,6 @@ spike/out/
 .DS_Store
 ui/host.js
 dist/
+site/dist/
+site/.astro/
+site/node_modules/

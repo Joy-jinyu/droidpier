@@ -1,0 +1,100 @@
+---
+// PAGE_TITLE_ID 在 starlight 内部是 "_top"（见 dist/constants.js）
+const PAGE_TITLE_ID = "_top";
+
+const { entry } = Astro.locals.starlightRoute;
+const label = Astro.locals.t("page.copyMarkdown");
+const labelCopied = Astro.locals.t("page.copyMarkdown.copied");
+const labelFailed = Astro.locals.t("page.copyMarkdown.failed");
+
+// 构造本页对应的 .md 路径：/<entry.id>.md
+// entry.id 形如 "docs/getting-started/install" 或 "zh-cn/docs/getting-started/install"
+const mdUrl = `/${entry.id}.md`;
+---
+
+<h1 id={PAGE_TITLE_ID}>{entry.data.title}</h1>
+<button
+  data-copy-md={mdUrl}
+  data-copied={labelCopied}
+  data-failed={labelFailed}
+  type="button"
+  class="sl-copy-md-btn"
+>
+  {label}
+</button>
+
+<script>
+  document.addEventListener("click", (e) => {
+    const btn = (e.target as Element).closest("[data-copy-md]") as HTMLButtonElement | null;
+    if (!btn) return;
+
+    const url = btn.dataset.copyMd!;
+    const originalText = btn.textContent ?? "";
+    const copiedText = btn.dataset.copied ?? "Copied!";
+    const failedText = btn.dataset.failed ?? "Copy failed";
+
+    const text = fetch(url).then((r) => {
+      if (!r.ok) throw new Error("fetch failed");
+      return r.text();
+    });
+    // 失败由下面的 done 统一处理；这里只防止 write 没消费 text 时出现未处理的 rejection
+    text.catch(() => {});
+
+    // Safari 只在点击处理函数同步执行时放行剪贴板写入，等 fetch 回来再 writeText 会被拒。
+    // 所以必须当场调用 clipboard.write，把还没取到的内容作为 Promise 交给 ClipboardItem。
+    let done: Promise<unknown>;
+    try {
+      done =
+        typeof ClipboardItem === "function" && navigator.clipboard.write
+          ? navigator.clipboard.write([
+              new ClipboardItem({
+                "text/plain": text.then((t) => new Blob([t], { type: "text/plain" })),
+              }),
+            ])
+          : text.then((t) => navigator.clipboard.writeText(t));
+    } catch (err) {
+      done = Promise.reject(err);
+    }
+
+    done
+      .then(() => {
+        btn.textContent = copiedText;
+        setTimeout(() => { btn.textContent = originalText; }, 2000);
+      })
+      .catch(() => {
+        btn.textContent = failedText;
+        setTimeout(() => { btn.textContent = originalText; }, 2000);
+      });
+  });
+</script>
+
+<style>
+  @layer starlight.core {
+    h1 {
+      margin-top: 1rem;
+      font-size: var(--sl-text-h1);
+      line-height: var(--sl-line-height-headings);
+      font-weight: 600;
+      color: var(--sl-color-white);
+    }
+  }
+
+  .sl-copy-md-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-block-start: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    font-size: var(--sl-text-xs);
+    border: 0;
+    border-radius: 0.375rem;
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-gray-3);
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+
+  .sl-copy-md-btn:hover {
+    color: var(--sl-color-white);
+  }
+</style>

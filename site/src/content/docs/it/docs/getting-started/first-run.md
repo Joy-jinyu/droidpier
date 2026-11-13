@@ -1,0 +1,91 @@
+---
+title: Primo avvio
+description: Avvia il gateway con un solo comando, lascia che controlli l’Android SDK, consenti l’accesso alla rete locale in Chrome e vedi il tuo emulatore nel browser.
+sourceHash: 67f231cc69cd
+---
+
+Esegui un comando nel Terminale e lascia la finestra aperta, apri `https://droid.devpier.dev/app/` e consenti l’accesso alla rete locale quando Chrome lo chiede.
+
+## 1. Avvia il gateway
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | sh
+```
+
+Installa o aggiorna il gateway se serve, poi lo avvia. Vedi [Installazione](/it/docs/getting-started/install/). Dopo l’installazione, anche `droidpier` lo avvia.
+
+Il gateway resta in esecuzione in quella finestra del Terminale. Lasciala aperta mentre usi la pagina.
+
+Il gateway è in ascolto su `127.0.0.1`, sulla porta `7300` per impostazione predefinita. Per usare un’altra porta, vedi [Riga di comando](/it/docs/reference/cli/).
+
+## 2. Lascia che controlli il tuo Android SDK {#2-let-it-check-your-android-sdk}
+
+<!-- verify: phase 3 -->
+All’avvio, il gateway controlla che ci siano l’Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, l’immagine di sistema `system-images;android-34;google_apis;arm64-v8a` e almeno un dispositivo virtuale (AVD). Se manca qualcosa, elenca ogni elemento nel Terminale con un comando per installarlo a mano e ti chiede di completare la configurazione nella pagina. Non fa domande nel Terminale.
+
+<!-- verify: phase 3 -->
+La pagina mostra lo stesso elenco, con la dimensione del download di ogni elemento:
+
+| Mancante | Cosa fai nella pagina |
+|---|---|
+| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, immagine di sistema | Installa un elemento con il pulsante accanto, oppure installali tutti insieme. |
+| Nessun AVD | Crea un dispositivo: scegli un modello di dispositivo e una versione di Android. |
+| Java, quando un elemento ne ha bisogno | Installa Android Studio, che include Java, oppure JDK 17 o successivo, poi riapri la pagina. Il gateway non installa Java. |
+
+<!-- verify: phase 3 -->
+Non viene scaricato né creato nulla finché non confermi nella pagina. Prima di iniziare, la pagina mostra cosa scaricherà, dove lo installerà e quanto spazio su disco serve. Durante l’installazione, la pagina mostra per intero ogni licenza di Google, e un elemento viene installato solo se accetti. Gli strumenti da riga di comando dalla versione 23 in poi possono accettare le licenze senza chiedere; la pagina te lo segnala prima che tu confermi.
+
+Ad esempio, per installare manualmente l’immagine di sistema:
+
+```sh
+sdkmanager "system-images;android-34;google_apis;arm64-v8a"
+```
+
+## 3. Apri la pagina {#3-open-the-page}
+
+<!-- verify: phase 3 -->
+Apri `https://droid.devpier.dev/app/` in Chrome o Edge. Quando il gateway si avvia, stampa anche questo indirizzo e lo apre nel tuo browser predefinito. Se il tuo browser predefinito non è Chrome o Edge, apri tu stesso l’indirizzo in Chrome o Edge.
+
+La pagina si connette da sola. Finché nessun gateway risponde, controlla una volta al secondo e si connette non appena il gateway si avvia, senza ricaricare. Non controlla mentre la scheda è in background.
+
+Se il gateway non usa la porta `7300`, l’indirizzo che stampa termina con `#port=<port>`:
+
+```text
+https://droid.devpier.dev/app/#port=7301
+```
+
+Apri quell’indirizzo, così la pagina trova la porta giusta.
+
+## 4. Consenti l’accesso alla rete locale {#4-allow-local-network-access}
+
+<!-- verify: phase 3 -->
+La prima volta che la pagina si connette al gateway sul tuo Mac, Chrome mostra una richiesta di autorizzazione che chiede se `droid.devpier.dev` può accedere alla tua rete locale. Fai clic su **Consenti**. Chrome ricorda la scelta per il sito.
+
+Se l’hai negato, vedi [Risoluzione dei problemi](/it/docs/guides/troubleshooting/#chrome-blocked-local-network-access).
+
+## 5. Usa l’emulatore
+
+Se è già in esecuzione un emulatore con gRPC, la pagina mostra il suo schermo.
+
+<!-- verify: phase 2 -->
+Altrimenti scegli un dispositivo nell’elenco e avvialo. Vedi [Dispositivi](/it/docs/guides/devices/).
+
+Fai clic sullo schermo per dargli il focus della tastiera. Poi:
+
+- Fai clic per toccare; trascina per fare uno swipe.
+- Scrivi con la tastiera del tuo Mac. Vedi [Tastiera e input](/it/docs/guides/keyboard-and-input/).
+- Usa i pulsanti Indietro, Home e App recenti sopra lo schermo.
+
+## Arresto
+
+Premi `Ctrl+C` nel Terminale in cui è in esecuzione il gateway, oppure chiudi quella finestra. Gli emulatori in esecuzione continuano a funzionare. Al successivo avvio, con lo stesso comando o con `droidpier`, il gateway si riconnette a essi.
+
+## La pagina locale di riserva
+
+Il gateway serve anche la stessa pagina all’indirizzo `http://127.0.0.1:7300/app/` (o sulla porta che hai scelto). Usala se la pagina pubblica non si carica o non riesce a connettersi.
+
+Per fare in modo che il gateway apra la pagina locale invece di quella pubblica, avvialo con `--local`:
+
+```sh
+droidpier --local
+```

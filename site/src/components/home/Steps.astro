@@ -1,0 +1,371 @@
+---
+/**
+ * 三步开始。带 command 的那一步显示终端块：随滚动逐字打出，可一键复制。
+ * 复制写入的永远是完整命令（data-command），与打字进度无关。
+ */
+import "../../styles/home.css";
+
+interface Step {
+  title: string;
+  body: string;
+  command?: string;
+  link?: { text: string; href: string };
+}
+
+interface Action {
+  text: string;
+  href: string;
+  variant?: "primary" | "secondary";
+}
+
+interface Props {
+  eyebrow: string;
+  heading: string;
+  steps: Step[];
+  copyLabel: string;
+  copiedLabel: string;
+  failedLabel: string;
+  actions: Action[];
+}
+
+const { eyebrow, heading, steps, copyLabel, copiedLabel, failedLabel, actions } = Astro.props;
+---
+
+<section class="emu-section emu-steps not-content">
+  <header class="emu-section-head" data-reveal>
+    <span class="emu-eyebrow">{eyebrow}</span>
+    <h2>{heading}</h2>
+  </header>
+
+  <ol class="emu-steps__list">
+    {
+      steps.map((step, i) => (
+        <li data-reveal style={`--i:${i}`}>
+          <span class="emu-steps__num" aria-hidden="true">
+            {i + 1}
+          </span>
+          <div class="emu-steps__body">
+            <h3>{step.title}</h3>
+            <p>{step.body}</p>
+            {step.command && (
+              <div class="emu-steps__cmd">
+              <div class="emu-steps__term">
+                {/* 打字效果改写的是 aria-hidden 那一份；读屏和选中复制用的是旁边那份完整命令 */}
+                <pre dir="ltr" tabindex="0"><span class="prompt" aria-hidden="true">$ </span><code><span data-type aria-hidden="true">{step.command}</span><span class="emu-sr">{step.command}</span></code><span class="caret" aria-hidden="true" /></pre>
+                <button
+                  type="button"
+                  class="emu-steps__copy"
+                  data-copy-command={step.command}
+                  data-copied={copiedLabel}
+                  data-failed={failedLabel}
+                  title={copyLabel}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="8" y="8" width="12" height="12" rx="2" />
+                    <path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
+                  </svg>
+                  <span class="emu-sr">{copyLabel}</span>
+                </button>
+              </div>
+              <p class="emu-steps__status" role="status" aria-live="polite" data-copy-status />
+              </div>
+            )}
+            {step.link && (
+              <a class="emu-link emu-steps__link" href={step.link.href}>
+                {step.link.text}
+              </a>
+            )}
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+
+  <div class="emu-actions emu-steps__actions" data-reveal>
+    {
+      actions.map((a) => (
+        <a class:list={["emu-btn", a.variant === "primary" && "emu-btn--primary"]} href={a.href}>
+          {a.text}
+        </a>
+      ))
+    }
+  </div>
+</section>
+
+<script>
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("[data-copy-command]")) {
+    // 只用一个 live 区域播报结果；按钮文字保持不变，避免读两遍
+    const status = btn.closest(".emu-steps__cmd")?.querySelector<HTMLElement>("[data-copy-status]");
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    btn.addEventListener("click", async () => {
+      let ok = true;
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copyCommand!);
+      } catch {
+        ok = false;
+      }
+      const msg = ok ? btn.dataset.copied! : btn.dataset.failed!;
+      const state = ok ? "copied" : "failed";
+      clearTimeout(timer);
+      if (!status) return;
+      // 先清空再写入，连续点击也会重新播报
+      status.textContent = "";
+      delete status.dataset.state;
+      timer = setTimeout(() => {
+        status.textContent = msg;
+        status.dataset.state = state;
+        timer = setTimeout(() => {
+          status.textContent = "";
+          delete status.dataset.state;
+        }, 2500);
+      }, 60);
+    });
+  }
+</script>
+
+<style>
+  /* 宽屏下标题在左、步骤在右，标题跟着滚动停在上方 */
+  @media (min-width: 64rem) {
+    .emu-steps {
+      display: grid;
+      grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+      column-gap: clamp(2rem, 5vw, 5rem);
+      align-items: start;
+    }
+    .emu-steps > :global(.emu-section-head) {
+      position: sticky;
+      top: calc(var(--sl-nav-height, 4rem) + 2rem);
+    }
+    .emu-steps__actions {
+      grid-column: 2;
+    }
+  }
+
+  .emu-steps__list {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .emu-steps__list li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+    gap: 1.25rem;
+    padding-block-end: 2.5rem;
+  }
+
+  /* 步骤之间的细连线 */
+  .emu-steps__list li:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    inset-block: 2.75rem 0.5rem;
+    inset-inline-start: calc(1.125rem - 0.5px);
+    inline-size: 1px;
+    background: var(--emu-line);
+  }
+
+  .emu-steps__num {
+    display: grid;
+    place-items: center;
+    inline-size: 2.25rem;
+    block-size: 2.25rem;
+    border-radius: 50%;
+    font-family: var(--sl-font-mono);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--emu-text);
+    background: var(--emu-surface-2);
+  }
+
+  .emu-steps__body {
+    display: grid;
+    gap: 0.6rem;
+    min-inline-size: 0;
+    max-inline-size: 44rem;
+    padding-block-start: 0.2rem;
+  }
+
+  .emu-steps__body h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--emu-text);
+  }
+
+  .emu-steps__body p {
+    margin: 0;
+    line-height: 1.6;
+    color: var(--emu-muted);
+  }
+
+  /* 命令块：无边框、中性浅底；复制按钮绝对定位在右上角，右侧留出位置 */
+  .emu-steps__term {
+    position: relative;
+    min-inline-size: 0;
+    border-radius: 0.5rem;
+    background: var(--emu-surface);
+  }
+
+  .emu-steps__term pre {
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0.85rem 2.5rem 0.85rem 1rem;
+    font-family: var(--sl-font-mono);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--emu-text);
+    /* 命令不折行，窄屏下在命令块内横向滚动。
+       relative：让绝对定位的读屏副本以 pre 为包含块，否则它跟着行尾跑到滚动区外，撑出页面横向滚动 */
+    position: relative;
+    white-space: pre;
+    overflow-x: auto;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: inherit;
+  }
+
+  .emu-steps__term .prompt {
+    color: var(--emu-muted);
+    user-select: none;
+  }
+
+  .caret {
+    display: inline-block;
+    inline-size: 0.55em;
+    block-size: 1.1em;
+    margin-inline-start: 1px;
+    vertical-align: text-bottom;
+    background: var(--emu-accent);
+    opacity: 0;
+  }
+
+  :global(.emu-motion:not(.emu-paused)) .emu-steps li.is-in .caret {
+    opacity: 1;
+    animation: emu-caret 1s steps(2, jump-none) 6;
+    animation-fill-mode: forwards;
+  }
+
+  @keyframes emu-caret {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  .emu-steps__copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    inline-size: 22px;
+    block-size: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    /* 和命令块同色：窄屏下命令横向滚到按钮底下时，被按钮盖住而不是叠在一起 */
+    background: var(--emu-surface);
+    color: var(--emu-muted);
+    cursor: pointer;
+    transition:
+      color 0.2s,
+      background-color 0.2s;
+  }
+  /* 22px 的按钮在触屏上太小：用透明的伪元素把可点区域扩到 40px，外观不变 */
+  .emu-steps__copy::after {
+    content: "";
+    position: absolute;
+    inset: -9px;
+  }
+  .emu-steps__copy:hover {
+    color: var(--emu-text);
+    background: var(--emu-surface-2);
+  }
+  .emu-steps__copy:focus-visible {
+    outline: 2px solid var(--emu-accent);
+    outline-offset: 1px;
+  }
+  .emu-steps__term pre:focus-visible {
+    outline: 2px solid var(--emu-accent);
+    outline-offset: 2px;
+  }
+
+  .emu-steps__copy svg {
+    inline-size: 14px;
+    block-size: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+  }
+
+  /* 复制结果显示在复制按钮左边，压在命令块上（同色底遮住滚到下面的命令），不占命令块下方的位置 */
+  .emu-steps__status {
+    position: absolute;
+    inset-block: 0;
+    right: 32px;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding-inline: 0.5rem 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--emu-muted);
+    background: var(--emu-surface);
+  }
+  .emu-steps__status:empty {
+    padding: 0;
+  }
+  .emu-steps__status[data-state="copied"] {
+    color: var(--emu-accent);
+  }
+  .emu-steps__status[data-state="copied"]::before {
+    content: "✓ ";
+  }
+  /* 失败不只靠颜色：文字本身是 “Copy failed”，再加前缀符号和下划线 */
+  .emu-steps__status[data-state="failed"] {
+    color: var(--emu-text);
+    text-decoration: underline wavy var(--emu-muted);
+    text-underline-offset: 0.25em;
+  }
+  .emu-steps__status[data-state="failed"]::before {
+    content: "✕ ";
+  }
+
+  .emu-steps__cmd {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    margin-block: 0.4rem 0.2rem;
+  }
+
+  .emu-steps__link {
+    justify-self: start;
+  }
+
+  .emu-steps__actions {
+    margin-block-start: 0.5rem;
+    padding-inline-start: 3.5rem;
+  }
+
+  .emu-sr {
+    user-select: none;
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 30rem) {
+    .emu-steps__actions {
+      padding-inline-start: 0;
+    }
+  }
+</style>

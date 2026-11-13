@@ -1,0 +1,39 @@
+---
+/**
+ * 首页主标语：h1、副标题和按钮。文案来自页面 frontmatter 的 hero（title / tagline / actions），
+ * 这样首页只有这一个 h1，翻译时改 frontmatter 即可。布局和载入动画由外层 PhoneDemo 负责。
+ */
+import { Icon } from "@astrojs/starlight/components";
+
+// llms-full.txt 等非 Starlight 页面也会渲染正文，那里没有 starlightRoute（读取会抛错）：
+// 这时什么都不输出，和主标语原本不在正文里的效果一致
+let data: { title: string; hero?: { title?: string; tagline?: string; actions?: any[] } } | undefined;
+try {
+  data = Astro.locals.starlightRoute.entry.data;
+} catch {
+  data = undefined;
+}
+const hero = data?.hero;
+const title = hero?.title ?? data?.title;
+const tagline = hero?.tagline;
+const actions = hero?.actions ?? [];
+---
+
+{title && <h1 class="emu-hero__title" data-enter style="--e:0" set:html={title} />}
+{tagline && <p class="emu-hero__tagline" data-hero-tagline data-enter style="--e:1" set:html={tagline} />}
+{
+  actions.length > 0 && (
+    <div class="emu-actions emu-hero__actions" data-enter style="--e:2">
+      {actions.map(({ text, link, variant, icon, attrs }) => (
+        <a href={link} class:list={["emu-btn", variant === "primary" && "emu-btn--primary"]} {...attrs}>
+          {text}
+          {icon?.type === "icon" && (
+            <span data-flip-rtl={icon.name === "right-arrow" ? "" : undefined}>
+              <Icon name={icon.name} />
+            </span>
+          )}
+        </a>
+      ))}
+    </div>
+  )
+}

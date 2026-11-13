@@ -1,0 +1,100 @@
+---
+/** 为什么用它：每行一个可以核实的事实，左边是数字或关键词，右边是说明和出处。 */
+import "../../styles/home.css";
+
+interface Fact {
+  /** 左侧大字，比如 “127.0.0.1” */
+  figure: string;
+  title: string;
+  body: string;
+  source?: { text: string; href: string };
+}
+
+interface Props {
+  eyebrow: string;
+  heading: string;
+  facts: Fact[];
+}
+
+const { eyebrow, heading, facts } = Astro.props;
+---
+
+<section class="emu-section emu-why not-content">
+  <header class="emu-section-head" data-reveal>
+    <span class="emu-eyebrow">{eyebrow}</span>
+    <h2>{heading}</h2>
+  </header>
+
+  <ol class="emu-why__list">
+    {
+      facts.map((f) => (
+        <li data-reveal>
+          <span class="emu-why__figure" dir="ltr">
+            {f.figure}
+          </span>
+          <div class="emu-why__text">
+            <h3>{f.title}</h3>
+            <p>{f.body}</p>
+            {f.source && (
+              <a class="emu-link emu-why__source" href={f.source.href}>
+                {f.source.text}
+              </a>
+            )}
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+</section>
+
+<style>
+  /* 两列事实：大号关键字 + 说明，彼此靠留白分开，不画分隔线 */
+  .emu-why__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: clamp(2.5rem, 5vw, 4rem) clamp(2rem, 5vw, 4.5rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .emu-why__list li {
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+  }
+
+  .emu-why__figure {
+    justify-self: start;
+    font-size: clamp(2.5rem, 5.5vw, 3.75rem);
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1;
+    color: var(--emu-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .emu-why__text {
+    display: grid;
+    gap: 0.45rem;
+    max-inline-size: 32rem;
+  }
+
+  .emu-why__text h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--emu-text);
+  }
+
+  .emu-why__text p {
+    margin: 0;
+    line-height: 1.6;
+    color: var(--emu-muted);
+  }
+
+  .emu-why__source {
+    justify-self: start;
+    margin-block-start: 0.25rem;
+  }
+</style>

@@ -1,0 +1,126 @@
+# 官网、/app/ 页面和网关下载包一起构建，main 上合并后部署到 Cloudflare Pages（droid.devpier.dev）。
+# PR 上只构建不部署，拿不到部署用的密钥。部署步骤和手动部署的对照见 docs/deploy.md。
+name: pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      rebuild_binary:
+        description: "强制重新构建网关下载包"
+        type: boolean
+        default: false
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # 本地一直用的 nsh 是 v0.4.0 之前 32 个提交，选最接近的发行版；升级单独提 PR，PR 上的构建先验一遍
+  NSH_VERSION: v0.4.0
+  DEPLOY: ${{ github.event_name != 'pull_request' }}
+
+jobs:
+  build:
+    # 网关下载包是 darwin-arm64 的单文件程序，nsh 用 macOS arm64 发行版：都在 Apple Silicon 机器上构建
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 8.8.0
+
+      - name: 安装 nsh
+        run: |
+          base="https://github.com/longbridge/nsh/releases/download/$NSH_VERSION"
+          curl -fsSL --retry 3 --proto '=https' -o "$RUNNER_TEMP/nsh.tgz" "$base/nsh-macos-arm64.tar.gz"
+          curl -fsSL --retry 3 --proto '=https' -o "$RUNNER_TEMP/nsh.tgz.sha256" "$base/nsh-macos-arm64.tar.gz.sha256"
+          want=$(awk '{print $1}' "$RUNNER_TEMP/nsh.tgz.sha256")
+          got=$(shasum -a 256 "$RUNNER_TEMP/nsh.tgz" | awk '{print $1}')
+          [ "$want" = "$got" ] || { echo "nsh 发行包校验不通过：$got ≠ $want"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/nsh" && tar -xzf "$RUNNER_TEMP/nsh.tgz" -C "$RUNNER_TEMP/nsh"
+          echo "NSH=$RUNNER_TEMP/nsh/nsh/bin/nsh" >> "$GITHUB_ENV"
+
+      - run: pnpm install --frozen-lockfile
+      - run: npm test
+
+      - name: 构建 /app/ 页面
+        run: bun run build:ui
+
+      # 下载包的 sha256 一变，用户每次运行安装命令都会重新下载约 18 MiB：只在网关源码变了时重建，否则沿用线上那份
+      # （它内嵌的 --local 页面会旧一些，协议没变所以照常可用）。“网关源码”的指纹随下载包一起发布在
+      # download/droidpier-darwin-arm64.source，和线上的比而不是和上一次推送比：中间有运行被跳过也不会用错包
+      - name: 判断要不要重建网关下载包
+        id: binary
+        env:
+          FORCE: ${{ inputs.rebuild_binary }}
+        run: |
+          source=$(git ls-tree -r HEAD -- gateway shared scripts/build-binary.ts scripts/scrub-paths.ts package.json pnpm-lock.yaml | shasum -a 256 | cut -c1-64)
+          live=$(curl -fsSL --retry 3 --proto '=https' "https://droid.devpier.dev/download/droidpier-darwin-arm64.source" 2>/dev/null || true)
+          rebuild=true
+          if [ "$DEPLOY" = true ] && [ "$FORCE" != true ] && [ "$source" = "$live" ]; then rebuild=false; fi
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "rebuild=$rebuild" >> "$GITHUB_OUTPUT"
+          echo "网关源码指纹 $source，线上 ${live:-（没有）}，重建：$rebuild"
+
+      - name: 构建网关下载包
+        if: steps.binary.outputs.rebuild == 'true'
+        run: bun scripts/build-binary.ts
+
+      - name: 沿用线上的网关下载包
+        if: steps.binary.outputs.rebuild != 'true'
+        run: |
+          mkdir -p dist && cd dist
+          f=droidpier-darwin-arm64.tar.xz
+          curl -fsSL --retry 3 --proto '=https' -o "$f" "https://droid.devpier.dev/download/$f"
+          curl -fsSL --retry 3 --proto '=https' -o "$f.sha256" "https://droid.devpier.dev/download/$f.sha256"
+          shasum -a 256 -c "$f.sha256"
+
+      - name: 构建官网
+        working-directory: site
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          node --test tests/*.test.ts
+
+      - name: 拼部署目录
+        env:
+          SOURCE: ${{ steps.binary.outputs.source }}
+        run: |
+          node scripts/build-pages.ts site/dist
+          echo "$SOURCE" > dist/pages/download/droidpier-darwin-arm64.source
+
+      # 不能出现在公开产物里的词（本机路径、内部域名等）放在仓库密钥 PRIVACY_PATTERNS 里，一行一个正则，
+      # 不写进仓库；部署时没配这个密钥就不部署
+      - name: 扫描私密信息
+        if: env.DEPLOY == 'true'
+        env:
+          PRIVACY_PATTERNS: ${{ secrets.PRIVACY_PATTERNS }}
+        run: |
+          [ -n "$PRIVACY_PATTERNS" ] || { echo "没有配置 PRIVACY_PATTERNS 密钥，不部署"; exit 1; }
+          # 密钥可能是在 Windows 上录入的：去掉 \r，不然每个正则末尾多一个 \r，什么都匹配不上
+          printf '%s\n' "$PRIVACY_PATTERNS" | tr -d '\r' | sed '/^[[:space:]]*$/d' > "$RUNNER_TEMP/patterns"
+          [ -s "$RUNNER_TEMP/patterns" ] || { echo "PRIVACY_PATTERNS 里没有有效的行，不部署"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/bin" && tar -xJf dist/pages/download/droidpier-darwin-arm64.tar.xz -C "$RUNNER_TEMP/bin"
+          if grep -a -r -i -l -E -f "$RUNNER_TEMP/patterns" dist/pages "$RUNNER_TEMP/bin"; then
+            echo "上面的文件里有不该公开的内容，不部署"; exit 1
+          fi
+
+      - name: 部署到 Cloudflare Pages
+        if: env.DEPLOY == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler@4.161.0 pages deploy dist/pages --project-name android-emu-web --branch main --commit-hash "$GITHUB_SHA"

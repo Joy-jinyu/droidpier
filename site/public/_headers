@@ -1,0 +1,20 @@
+# Cloudflare Pages 响应头规则。本地 e2e 用 tests/serve-with-headers.ts 按同样语义模拟。
+# script-src 带 'unsafe-inline'：Starlight 输出 is:inline 脚本，Astro 自带的 CSP 哈希不覆盖它们，且只能写进 <meta>（理由见 .superpowers/sdd/2026-11-11-site/progress.md 的 Task 7 Ruling）。
+# 'wasm-unsafe-eval'：Pagefind 搜索要编译 WebAssembly，没有它搜索直接失败。
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# 模拟器页面换成自己的 CSP（nsh 页面的 <meta> CSP 也同时生效，两者取交集）。
+# 它在 Chrome 里实际需要：内联脚本和 blob: 模块脚本、编译 wasm、内联样式、blob: 图片；
+# connect-src 的本机列表照抄 nsh 页面 <meta>，用来连本机网关。
+# frame-src：页面内嵌 Chrome 官方 DevTools 前端（appspot），不放行就被拦。以后若加 Permissions-Policy，要保留对它的 local-network-access / local-network / loopback-network 委托。
+# /app/ 单独写一条：Cloudflare 文档没写明 /app/* 是否匹配 /app/。两条都匹配时按顺序先删后加，结果仍只有一份。
+/app/
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*; frame-src https://chrome-devtools-frontend.appspot.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+
+/app/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*; frame-src https://chrome-devtools-frontend.appspot.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'

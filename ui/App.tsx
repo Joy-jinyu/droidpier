@@ -1,5 +1,5 @@
 import { cleanup, colorScheme, effect, host, Image, type JSX, mount, Scroll, setColorScheme, signal, Text, View } from "nsh";
-import { Dialog, Input, Radio, RadioGroup, Select, Tooltip } from "nsh/base";
+import { Dialog, Input, Link, Radio, RadioGroup, Select, Tooltip } from "nsh/base";
 import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
@@ -48,6 +48,9 @@ type Upload = {
   state: "waiting" | "uploading" | "installing" | "pushing" | "done" | "failed"; received: number; error?: string;
 };
 type Confirm = { kind: "install"; ids: EnvId[] } | { kind: "avd"; avd: NewAvd };
+
+// 侧栏顶上回官网的链接；本机网关托管的页面也指向公网官网
+const SITE_URL = "https://droid.devpier.dev/";
 
 // shadcn/ui 设计系统（Zinc 灰阶 + 品牌紫），紫色只给选中状态和主操作
 const DARK = {
@@ -1094,6 +1097,13 @@ function App() {
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: C.bg }}>
       <View role="navigation" accessibilityLabel="设备列表"
         style={{ width: 248, paddingVertical: 16, paddingHorizontal: 12, gap: 8, backgroundColor: C.bg }}>
+        {/* Link 不认 hoverStyle / focusStyle，状态样式只能写 class，跟不了页面的浅色 / 深色切换：悬停用变淡，焦点框用两种外观下都看得见的 zinc-400 */}
+        <Link href={SITE_URL} accessibilityLabel="Droidpier 官网首页"
+          style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingHorizontal: 6, paddingVertical: 4, marginBottom: 8, borderRadius: 6 }}
+          class="hover:opacity-80 focus:outline-2 focus:outline-zinc-400">
+          <Text style={{ color: C.text, fontSize: 14, fontWeight: "bold" }}>Droidpier</Text>
+          <Text style={{ color: C.muted, fontSize: 12 }}>官网 ↗</Text>
+        </Link>
         <Text style={{ color: C.muted, fontSize: 12, fontWeight: "600", paddingHorizontal: 6, paddingBottom: 4 }}>设备</Text>
         <If when={avds() !== null} else={<Text style={{ color: C.muted, fontSize: 13 }}>正在读取设备列表…</Text>}>
           <If when={(avds() ?? []).length > 0} else={

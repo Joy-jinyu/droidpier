@@ -1,0 +1,144 @@
+---
+title: Droidpier
+description: Android エミュレーターをブラウザでスムーズに動かす。
+template: splash
+hero:
+  title: Android エミュレーターをブラウザでスムーズに動かす。
+  tagline: コマンド一つでインストール完了。Android Studio 不要。
+  actions:
+    - text: はじめる
+      link: /ja/docs/getting-started/install/
+      variant: primary
+      icon: right-arrow
+    - text: エミュレーターを開く
+      link: /app/
+      variant: secondary
+      icon: laptop
+    - text: GitHub
+      link: https://github.com/twosugar/droidpier
+      variant: minimal
+      icon: github
+markdownSummary: |
+  Droidpier は、公式の Android エミュレーターをあなた自身の Mac 上で動かし、Chrome または Edge のタブに表示します。小さなローカルプログラム（ゲートウェイ）が 127.0.0.1 経由でエミュレーターの画面をページに送り、タップ・スワイプ・キー入力を返します。
+
+  必要なもの：Apple Silicon Mac、Chrome または Edge、arm64 システムイメージ入りの Android エミュレーター。[動作要件](/ja/docs/getting-started/requirements/)を参照してください。
+
+  2 ステップで始められます：
+
+  1. ターミナルで次のコマンドを実行し、そのウィンドウは開いたままにします：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。droidpier をインストール（または更新）して起動します。停止するには Ctrl+C を押します。
+  2. https://droid.devpier.dev/app/ を開きます。ページは自動で接続します。初回は、ページがローカルネットワークにアクセスしてよいか Chrome に尋ねられたら、「許可」をクリックします。
+
+  詳細な手順は[インストール](/ja/docs/getting-started/install/)を参照してください。
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
+sourceHash: 094dc0ddb433
+---
+
+import PhoneDemo from "../../../components/home/PhoneDemo.astro";
+import ArchFlow from "../../../components/home/ArchFlow.astro";
+import Features from "../../../components/home/Features.astro";
+import Why from "../../../components/home/Why.astro";
+import Compare from "../../../components/home/Compare.astro";
+import Steps from "../../../components/home/Steps.astro";
+import MotionToggle from "../../../components/home/MotionToggle.astro";
+
+<MotionToggle label="アニメーションを一時停止" pressedLabel="アニメーション停止中" />
+
+<PhoneDemo
+  eyebrow="ライブデモ"
+  heading="ブラウザのタブで動くエミュレーター"
+  body="画面を選ぶか、横にスワイプしてください。Mac 上でのクリックとドラッグがすべて実際のエミュレーターに伝わります。"
+  address="droid.devpier.dev/app/"
+  listLabel="デモ画面"
+  navLabels={["戻る", "ホーム", "履歴"]}
+  clips={[
+    { id: "home", label: "ホーム画面", src: "/media/screen-1.webp" },
+    { id: "settings", label: "設定を開く", src: "/media/screen-2.webp" },
+    { id: "scroll", label: "リストをスクロール", src: "/media/screen-3.webp" },
+  ]}
+/>
+
+<ArchFlow
+  eyebrow="仕組み"
+  heading="3 つのプログラム、すべて Mac 上で"
+  body="ゲートウェイは gRPC と共有メモリを使って公式 Android エミュレーターからフレームを読み取り、127.0.0.1 上の WebSocket でページに送ります。タップ・スワイプ・キー入力は同じ経路で返ります。"
+  nodes={[
+    { name: "ブラウザ", detail: "Chrome または Edge のタブ" },
+    { name: "ゲートウェイ", detail: "droidpier（127.0.0.1 上）" },
+    { name: "エミュレーター", detail: "公式 Android エミュレーター" },
+  ]}
+  lanes={[
+    "画面フレーム：生の RGBA を共有メモリ経由で、次に WebSocket で転送",
+    "タップ・スワイプ・キー：WebSocket 経由で、次に gRPC で転送",
+  ]}
+  metrics={[
+    { value: "60", unit: "fps", label: "フレームレートの中央値" },
+    { value: "20", unit: "ms", label: "タップ遅延 p50" },
+    { value: "30", unit: "ms", label: "タップ遅延 p90" },
+  ]}
+  conditions="M4 搭載 Mac、Pixel 5 API 34 仮想デバイス（1080×2340）、Chrome 157、rgba-mmap フレーム転送方式で、16 回連続スワイプと 30 回タップにより計測。実際の値は Mac・デバイス・ブラウザによって異なります。"
+  source={{ text: "実測パフォーマンス", href: "/ja/docs/getting-started/requirements/#measured-performance" }}
+/>
+
+{/* <!-- verify: phase 2 --> */}
+<Features
+  eyebrow="機能紹介"
+  heading="エミュレーターウィンドウで使えるすべての機能"
+  items={[
+    { title: "フル解像度の画面", body: "フレームはキャンバスサイズにディスプレイのピクセル比を掛けた解像度で取得されます。Retina ディスプレイでは 1080×2340 となり、ぼやけた縮小コピーにはなりません。", href: "/ja/docs/getting-started/first-run/" },
+    { title: "タップ・スワイプ・キー入力", body: "クリックでタップ、ドラッグでスワイプ、Mac のキーボードで入力できます。戻る・ホーム・履歴ボタンは画面上部にあります。", href: "/ja/docs/guides/keyboard-and-input/" },
+    { title: "双方向クリップボード", body: "Cmd+V で Mac の内容をペースト。Android 内でコピーしたテキストが Mac のクリップボードに同期されます。日本語などの非 ASCII テキストはクリップボード経由で転送されます。", href: "/ja/docs/guides/clipboard/" },
+    { title: "デバイスの起動・停止", body: "Android 仮想デバイスを一覧表示し、起動・停止したり、すでに起動中のエミュレーターを引き継いだりできます。", href: "/ja/docs/guides/devices/" },
+    { title: "回転・音量・スクリーンショット", body: "回転・音量・電源のデバイスボタンを備えます。スクリーンショットはフル解像度の PNG ファイルとして保存されます。", href: "/ja/docs/guides/screenshots/" },
+    { title: "スクロールホイール対応", body: "マウスホイールとトラックパッドのスクロールがデバイス上の短いスワイプに変換されるため、長いリストを思い通りにスクロールできます。", href: "/ja/docs/guides/keyboard-and-input/" },
+  ]}
+/>
+
+{/* <!-- verify: phase 3 --> */}
+<Why
+  eyebrow="使う理由"
+  heading="確認できる事実"
+  facts={[
+    { figure: "127.0.0.1", title: "フレームは Mac の外に出ない", body: "ゲートウェイはループバックアドレスのみをリッスンします。他のコンピューターからはアクセスできず、フレームがインターネットを通ることもありません。", source: { text: "セキュリティ", href: "/ja/docs/reference/security/" } },
+    { figure: "SDK", title: "公式 Android エミュレーター", body: "Google のエミュレーターと Android SDK のシステムイメージを使用します。Android Studio と同じものです。すでに SDK がある場合、ゲートウェイはそれを使用します。", source: { text: "動作要件", href: "/ja/docs/getting-started/requirements/" } },
+    { figure: "1.24×", title: "CPU 使用率は scrcpy と近い水準", body: "M4 搭載 Mac（Pixel 5 API 34 仮想デバイス、1080×2340、Chrome 157、rgba-mmap 転送）で 16 回連続スワイプを計測したところ、エミュレーター・ゲートウェイ・Chrome の合計 CPU 使用率は 257% でした。同条件の scrcpy は 208% でした。", source: { text: "実測パフォーマンス", href: "/ja/docs/getting-started/requirements/#measured-performance" } },
+    { figure: "MIT", title: "オープンソース", body: "ゲートウェイとページのすべてのコードが MIT ライセンスで GitHub 上に公開されています。", source: { text: "github.com/twosugar/droidpier", href: "https://github.com/twosugar/droidpier" } },
+  ]}
+/>
+
+<Compare
+  eyebrow="比較"
+  heading="他のエミュレーター表示方法との違い"
+  body="確認できる違いのみを記載します。各ツールにはそれぞれの得意分野があります。"
+  corner="質問"
+  columns={["Droidpier", "Android Studio エミュレーター", "scrcpy", "クラウドエミュレーター（例: Appetize）"]}
+  rows={[
+    { label: "Android の実行場所", cells: ["Mac 上の公式エミュレーター", "Mac 上の公式エミュレーター", "接続したデバイスまたはエミュレーター", "ベンダーのサーバー"] },
+    { label: "表示場所", cells: ["Chrome または Edge のタブ", "Android Studio の実行デバイスウィンドウ、またはエミュレーター自身のウィンドウ", "デスクトップアプリのウィンドウ", "ブラウザのタブ"] },
+    { label: "Android Studio が必要か", cells: ["不要（ゲートウェイ・エミュレーター・システムイメージが必要）", "必要（実行デバイスビューに使用）", "不要", "不要"] },
+    { label: "フレームの転送方法", cells: ["生の RGBA フレームを 127.0.0.1 経由で転送", "エミュレーターウィンドウまたは Android Studio（ともに Mac 上）", "H.264 動画", "動画をインターネット経由で転送"] },
+    { label: "料金", cells: ["無料・MIT ライセンス", "無料", "無料・Apache-2.0 ライセンス", "有料プラン"] },
+  ]}
+/>
+
+{/* <!-- 待第 3 阶段 Task 5 确认 --> */}
+{/* <!-- verify: phase 3 --> */}
+<Steps
+  eyebrow="はじめる"
+  heading="2 ステップで最初のフレームを表示"
+  copyLabel="コピー"
+  copiedLabel="コピーしました"
+  failedLabel="コピーに失敗しました"
+  steps={[
+    { title: "コマンドを 1 つ実行", body: "ターミナルでこのコマンドを実行し、そのウィンドウは開いたままにします。~/.local/bin に droidpier をインストール（または更新）して起動します。停止するには Ctrl+C を押します。", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "インストールガイド", href: "/ja/docs/getting-started/install/" } },
+    { title: "ページを開く", body: "Chrome で https://droid.devpier.dev/app/ を開きます。ページは自動で接続します。初回は、ページがローカルネットワークにアクセスしてよいか Chrome に尋ねられたら、「許可」をクリックします。", link: { text: "ローカルネットワークアクセス", href: "/ja/docs/getting-started/first-run/#4-allow-local-network-access" } },
+  ]}
+  actions={[
+    { text: "ドキュメントを読む", href: "/ja/docs/getting-started/requirements/", variant: "primary" },
+    { text: "GitHub でスターを付ける", href: "https://github.com/twosugar/droidpier" },
+  ]}
+/>

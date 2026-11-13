@@ -1,0 +1,180 @@
+/* 全站颜色和字体，覆盖 Starlight 的 --sl-color-*。
+   规则：表面之间靠底色深浅区分，默认不画边框；强调色只给主标题强调、主按钮、选中态和关键数字，
+   代码块、徽标、卡片等次要容器一律用中性灰。 */
+
+/* 暗色（默认） */
+:root {
+  --emu-bg: #0b0e11;
+  /* 卡片、代码块等次要容器的底色 */
+  --emu-surface: #171c22;
+  /* 悬停、选中等再浅一级的底色 */
+  --emu-surface-2: #20272e;
+  --emu-text: #e8edf0;
+  /* 次要文字：在 bg 上 7.7:1，在 surface-2 上 6.0:1 */
+  --emu-muted: #9ba5ae;
+  /* 只给极少数必须有线的地方（步骤连线、进度条底槽） */
+  --emu-line: #232a31;
+  /* 强调色：在 bg 上 7.9:1，在 surface-2 上 6.2:1 */
+  --emu-accent: #00b8b8;
+  /* 强调色实心按钮上的文字：7.0:1 */
+  --emu-on-accent: #03201f;
+  /* 光晕用的颜色，两个主题都是亮青色 */
+  --emu-glow: #00b8b8;
+
+  --sl-color-accent: var(--emu-accent);
+  --sl-color-accent-high: #5fd8d6;
+  --sl-color-accent-low: #0b3434;
+  --sl-color-text-accent: var(--emu-accent);
+  --sl-color-bg: var(--emu-bg);
+  --sl-color-bg-sidebar: var(--emu-bg);
+  --sl-color-bg-inline-code: var(--emu-surface-2);
+  --sl-color-hairline: var(--emu-line);
+  --sl-color-hairline-light: var(--emu-line);
+  /* 页头、侧栏、目录栏的分隔线：不画，靠留白分开 */
+  --sl-color-hairline-shade: transparent;
+  --sl-color-text: var(--emu-text);
+  --sl-color-text-invert: var(--emu-on-accent);
+  --sl-color-gray-1: var(--emu-text);
+  --sl-color-gray-2: #c9d0d6;
+  --sl-color-gray-3: var(--emu-muted);
+  --sl-color-gray-4: #5b656e;
+  --sl-color-gray-5: var(--emu-line);
+  --sl-color-gray-6: var(--emu-surface);
+  --sl-color-gray-7: var(--emu-surface);
+  --sl-color-black: var(--emu-bg);
+  --sl-color-white: var(--emu-text);
+
+  --sl-font: "Onest Variable", system-ui, sans-serif;
+  --sl-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+}
+
+/* 亮色 */
+:root[data-theme="light"] {
+  --emu-bg: #f6f8f8;
+  --emu-surface: #e4eaea;
+  --emu-surface-2: #d9e1e1;
+  --emu-text: #0e1417;
+  /* 在 bg 上 6.7:1，在 surface-2 上 5.3:1 */
+  --emu-muted: #4e5a61;
+  --emu-line: #d3dcdc;
+  /* 亮色下用深一档的青色：在 bg 上 5.8:1，在 surface 上 5.0:1，在 surface-2 上 4.6:1；白字压在上面 6.1:1 */
+  --emu-accent: #006d70;
+  --emu-on-accent: #ffffff;
+  --emu-glow: #00b8b8;
+
+  --sl-color-accent: var(--emu-accent);
+  --sl-color-accent-high: #004f51;
+  --sl-color-accent-low: #cfe6e6;
+  --sl-color-text-accent: var(--emu-accent);
+  --sl-color-bg: var(--emu-bg);
+  --sl-color-bg-sidebar: var(--emu-bg);
+  --sl-color-bg-inline-code: var(--emu-surface-2);
+  --sl-color-hairline: var(--emu-line);
+  --sl-color-hairline-light: var(--emu-line);
+  --sl-color-hairline-shade: transparent;
+  --sl-color-text: var(--emu-text);
+  --sl-color-text-invert: var(--emu-on-accent);
+  --sl-color-gray-1: var(--emu-text);
+  --sl-color-gray-2: #26323a;
+  --sl-color-gray-3: var(--emu-muted);
+  --sl-color-gray-4: #8d999f;
+  --sl-color-gray-5: var(--emu-line);
+  --sl-color-gray-6: var(--emu-surface);
+  --sl-color-gray-7: var(--emu-surface);
+  /* Starlight 的 white/black 是“对比度最高的文字色 / 最低的底色”，亮色下要反过来：white 是深色文字 */
+  --sl-color-black: var(--emu-bg);
+  --sl-color-white: var(--emu-text);
+}
+
+/* 阿拉伯文、天城文是连写文字。等宽字体里没有这些字形，Chrome（macOS 上由 CoreText 按等宽主字体挑回退）会落到 Courier New，
+   阿拉伯字母被拆开；字距也会拆开连写。所以这两种语言在等宽栈里、通用 monospace 之前，显式列出各系统自带的阿拉伯文 / 天城文字体
+   （拉丁字母仍由前面的等宽字体渲染），并去掉所有字距。:lang 只匹配这两种语言的内容，ar 站点里的英文回退页不受影响 */
+:root:is(:lang(ar), :lang(hi)) {
+  --sl-font-mono: "JetBrains Mono Variable", ui-monospace, Consolas, "Geeza Pro", "Kohinoor Devanagari", "Segoe UI",
+    "Nirmala UI", "Noto Sans Arabic", "Noto Sans Devanagari", monospace;
+}
+:is(:lang(ar), :lang(hi)) * {
+  letter-spacing: normal !important;
+}
+
+/* 代码永远是从左到右：否则 RTL 页面里代码块从右端开始显示，窄屏下命令开头被截掉 */
+.sl-markdown-content :is(pre, code, kbd, samp) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ---------- Starlight 外壳 ---------- */
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 文档页标题和正文标题：紧一点的字距，只对拉丁文生效（ar/hi 由上面的规则清零） */
+.sl-markdown-content :is(h1, h2, h3):not(:where(.not-content *)),
+h1#_top {
+  letter-spacing: -0.02em;
+  font-weight: 620;
+}
+
+/* 文档页标题区和正文之间原本有一道分隔线，改成只靠留白 */
+.content-panel + .content-panel {
+  border-top: 0 !important;
+}
+
+/* 侧栏当前页：不再用强调色实心块，改成浅一级底色 + 强调色文字 */
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:hover,
+.sidebar-content a[aria-current="page"]:focus {
+  background-color: var(--emu-surface);
+  color: var(--emu-accent);
+  font-weight: 600;
+}
+
+/* 页头的搜索框：去边框，用浅一级底色 */
+site-search button[data-open-modal] {
+  border: 0;
+  background-color: var(--emu-surface);
+  border-radius: 7px;
+}
+
+/* 正文表格：不画竖线，只留很淡的横向分隔 */
+.sl-markdown-content :is(th, td) {
+  border-inline: 0;
+}
+
+/* 提示框（aside）：去掉左侧色条外的整圈底色描边感，保持 Starlight 自带的类型色，只把圆角统一 */
+.starlight-aside {
+  border-radius: 0.5rem;
+}
+
+/* 页头：半透明叠在内容上，背后模糊；不画底线 */
+:root {
+  --sl-color-bg-nav: color-mix(in srgb, var(--emu-bg) 78%, transparent);
+}
+header.header {
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+
+/* 右侧目录栏、侧栏子目录的竖线、页头社交图标后的竖线：不画，靠留白和缩进分层 */
+.right-sidebar {
+  border-inline-start: 0 !important;
+}
+.sidebar-content ul ul li {
+  border-inline-start: 0 !important;
+}
+.social-icons::after {
+  border-inline-end: 0 !important;
+}
+
+/* 代码块（Expressive Code）：去掉外框和标题栏下的分隔线，标题栏和代码区同一层中性底色 */
+.sl-markdown-content .expressive-code {
+  --ec-brdRad: 0.5rem;
+  --ec-brdCol: transparent;
+  --ec-frm-trmTtbBg: var(--sl-color-gray-6);
+  --ec-frm-trmTtbBrdBtmCol: transparent;
+  --ec-frm-edTabBarBg: var(--sl-color-gray-6);
+  --ec-frm-edTabBarBrdCol: transparent;
+  --ec-frm-edTabBarBrdBtmCol: transparent;
+  --ec-frm-edActTabBrdCol: transparent;
+}

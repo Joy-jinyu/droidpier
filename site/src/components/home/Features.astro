@@ -1,0 +1,159 @@
+---
+/** 能做什么：功能卡片网格，随滚动依次出现。 */
+import "../../styles/home.css";
+
+interface Item {
+  title: string;
+  body: string;
+  /** 对应文档页，可选 */
+  href?: string;
+}
+
+interface Props {
+  eyebrow: string;
+  heading: string;
+  items: Item[];
+}
+
+const { eyebrow, heading, items } = Astro.props;
+const pad = (n: number) => String(n + 1).padStart(2, "0");
+---
+
+<section class="emu-section emu-features not-content">
+  <header class="emu-section-head" data-reveal>
+    <span class="emu-eyebrow">{eyebrow}</span>
+    <h2>{heading}</h2>
+  </header>
+
+  <ul class="emu-features__grid">
+    {
+      items.map((item, i) => {
+        const Tag = item.href ? "a" : "div";
+        return (
+          <li data-reveal style={`--i:${i % 3}`}>
+            <Tag class="emu-features__card" href={item.href}>
+              <span class="emu-features__top" aria-hidden="true">
+                <span class="emu-features__index">{pad(i)}</span>
+                {item.href && (
+                  <svg class="emu-features__go" viewBox="0 0 24 24">
+                    <path d="M7 17L17 7M9 7h8v8" />
+                  </svg>
+                )}
+              </span>
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </Tag>
+          </li>
+        );
+      })
+    }
+  </ul>
+</section>
+
+<style>
+  /* 无边框的块：一层浅底色，悬停时浮起一点、底色再浅一级，右上角的箭头滑进来 */
+  .emu-features__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .emu-features__grid li {
+    display: grid;
+  }
+
+  .emu-features__card {
+    display: grid;
+    align-content: start;
+    gap: 0.65rem;
+    padding: 1.6rem 1.6rem 1.9rem;
+    border-radius: 0.875rem;
+    color: inherit;
+    text-decoration: none;
+    background: var(--emu-surface);
+    transition:
+      background-color 0.25s,
+      translate 0.3s var(--emu-ease),
+      box-shadow 0.3s;
+  }
+
+  a.emu-features__card:hover,
+  a.emu-features__card:focus-visible {
+    background: var(--emu-surface-2);
+    translate: 0 -3px;
+    box-shadow: 0 18px 40px -28px rgb(0 0 0 / 0.6);
+  }
+  a.emu-features__card:focus-visible {
+    outline: 2px solid var(--emu-accent);
+    outline-offset: 2px;
+  }
+
+  .emu-features__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-block-end: clamp(0.25rem, 2vw, 1.25rem);
+  }
+
+  /* 序号是这一块里唯一的强调色 */
+  .emu-features__index {
+    font-family: var(--sl-font-mono);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--emu-accent);
+  }
+
+  .emu-features__go {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+    fill: none;
+    stroke: var(--emu-muted);
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+    translate: -4px 4px;
+    transition:
+      opacity 0.25s,
+      translate 0.3s var(--emu-ease),
+      stroke 0.25s;
+  }
+  .emu-features__go:dir(rtl) {
+    transform: scaleX(-1);
+  }
+  a.emu-features__card:hover .emu-features__go,
+  a.emu-features__card:focus-visible .emu-features__go {
+    opacity: 1;
+    translate: 0 0;
+    stroke: var(--emu-text);
+  }
+
+  .emu-features__card h3 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--emu-text);
+  }
+
+  .emu-features__card p {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--emu-muted);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .emu-features__card,
+    .emu-features__go {
+      transition: none;
+    }
+    a.emu-features__card:hover,
+    a.emu-features__card:focus-visible {
+      translate: none;
+    }
+  }
+</style>

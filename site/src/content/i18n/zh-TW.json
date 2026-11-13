@@ -1,0 +1,6 @@
+{
+  "site.footer.license": "依 <a href=\"https://github.com/twosugar/droidpier\" target=\"_blank\" rel=\"noopener noreferrer\">MIT 授權條款</a> 發布。",
+  "page.copyMarkdown": "複製為 Markdown",
+  "page.copyMarkdown.copied": "已複製！",
+  "page.copyMarkdown.failed": "複製失敗"
+}

@@ -1,0 +1,6 @@
+{
+  "site.footer.license": "<a href=\"https://github.com/twosugar/droidpier\" target=\"_blank\" rel=\"noopener noreferrer\">MIT 라이선스</a>로 배포됩니다.",
+  "page.copyMarkdown": "Markdown으로 복사",
+  "page.copyMarkdown.copied": "복사했습니다!",
+  "page.copyMarkdown.failed": "복사하지 못했습니다"
+}

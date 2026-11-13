@@ -1,0 +1,144 @@
+---
+title: Droidpier
+description: Der Android-Emulator, flüssig in Ihrem Browser.
+template: splash
+hero:
+  title: Der Android-Emulator, flüssig in Ihrem Browser.
+  tagline: Ein Befehl zur Installation. Kein Android Studio nötig.
+  actions:
+    - text: Loslegen
+      link: /de/docs/getting-started/install/
+      variant: primary
+      icon: right-arrow
+    - text: Emulator öffnen
+      link: /app/
+      variant: secondary
+      icon: laptop
+    - text: GitHub
+      link: https://github.com/twosugar/droidpier
+      variant: minimal
+      icon: github
+markdownSummary: |
+  Droidpier zeigt den offiziellen Android-Emulator, der auf Ihrem eigenen Mac läuft, in einem Chrome- oder Edge-Tab. Ein kleines lokales Programm, das Gateway, sendet den Bildschirm des Emulators über 127.0.0.1 an die Seite und schickt Ihre Taps, Wischgesten und Tastatureingaben zurück.
+
+  Voraussetzungen: ein Mac mit Apple Silicon, Chrome oder Edge sowie der Android-Emulator mit einem arm64-Systemabbild. Siehe [Voraussetzungen](/de/docs/getting-started/requirements/).
+
+  In zwei Schritten loslegen:
+
+  1. Führen Sie dies im Terminal aus und lassen Sie das Fenster geöffnet: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. Der Befehl installiert oder aktualisiert droidpier und startet es. Mit Ctrl+C beenden Sie es.
+  2. Öffnen Sie https://droid.devpier.dev/app/. Die Seite verbindet sich von selbst. Wenn Chrome beim ersten Mal fragt, ob die Seite auf Ihr lokales Netzwerk zugreifen darf, klicken Sie auf Zulassen.
+
+  Alle Schritte: [Installation](/de/docs/getting-started/install/).
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
+sourceHash: 094dc0ddb433
+---
+
+import PhoneDemo from "../../../components/home/PhoneDemo.astro";
+import ArchFlow from "../../../components/home/ArchFlow.astro";
+import Features from "../../../components/home/Features.astro";
+import Why from "../../../components/home/Why.astro";
+import Compare from "../../../components/home/Compare.astro";
+import Steps from "../../../components/home/Steps.astro";
+import MotionToggle from "../../../components/home/MotionToggle.astro";
+
+<MotionToggle label="Animationen pausieren" pressedLabel="Animationen pausiert" />
+
+<PhoneDemo
+  eyebrow="Live-Demo"
+  heading="Ihr Emulator in einem Browser-Tab"
+  body="Wählen Sie einen Bildschirm oder wischen Sie seitwärts. Auf Ihrem Mac geht jeder Klick und jedes Ziehen an den echten Emulator."
+  address="droid.devpier.dev/app/"
+  listLabel="Demo-Bildschirme"
+  navLabels={["Zurück", "Startbildschirm", "Letzte Apps"]}
+  clips={[
+    { id: "home", label: "Startbildschirm", src: "/media/screen-1.webp" },
+    { id: "settings", label: "Einstellungen öffnen", src: "/media/screen-2.webp" },
+    { id: "scroll", label: "Eine Liste scrollen", src: "/media/screen-3.webp" },
+  ]}
+/>
+
+<ArchFlow
+  eyebrow="So funktioniert es"
+  heading="Drei Programme, alle auf Ihrem Mac"
+  body="Das Gateway liest Frames aus dem offiziellen Android-Emulator über gRPC und Shared Memory und sendet sie über einen WebSocket auf 127.0.0.1 an die Seite. Taps, Wischgesten und Tastatureingaben nehmen denselben Weg zurück."
+  nodes={[
+    { name: "Browser", detail: "Chrome- oder Edge-Tab" },
+    { name: "Gateway", detail: "droidpier auf 127.0.0.1" },
+    { name: "Emulator", detail: "Offizieller Android-Emulator" },
+  ]}
+  lanes={[
+    "Bildschirm-Frames: rohes RGBA über Shared Memory, dann WebSocket",
+    "Taps, Wischgesten und Tasten: WebSocket, dann gRPC",
+  ]}
+  metrics={[
+    { value: "60", unit: "fps", label: "Median der Bildrate" },
+    { value: "20", unit: "ms", label: "Tap-Latenz p50" },
+    { value: "30", unit: "ms", label: "Tap-Latenz p90" },
+  ]}
+  conditions="Gemessen auf einem M4-Mac mit einem virtuellen Gerät Pixel 5 API 34 (1080×2340) in Chrome 157, Frame-Transport rgba-mmap, 16 unmittelbar aufeinanderfolgende Wischgesten und 30 Taps. Ihre Werte hängen von Ihrem Mac, dem Gerät und dem Browser ab."
+  source={{ text: "Gemessene Leistung", href: "/de/docs/getting-started/requirements/#measured-performance" }}
+/>
+
+{/* <!-- verify: phase 2 --> */}
+<Features
+  eyebrow="Was es kann"
+  heading="Alles, was Sie im Emulatorfenster nutzen"
+  items={[
+    { title: "Bildschirm in voller Auflösung", body: "Frames werden in der Canvas-Größe mal dem Pixelverhältnis des Displays erfasst: 1080×2340 auf einem Retina-Display, keine unscharfe Kopie in halber Größe.", href: "/de/docs/getting-started/first-run/" },
+    { title: "Tippen, wischen und schreiben", body: "Klicken zum Tippen, Ziehen zum Wischen, Schreiben mit der Tastatur Ihres Macs. Zurück, Startbildschirm und Letzte Apps befinden sich über dem Bildschirm.", href: "/de/docs/guides/keyboard-and-input/" },
+    { title: "Zwischenablage in beide Richtungen", body: "Cmd+V fügt vom Mac aus ein. Text, den Sie in Android kopieren, landet in der Zwischenablage Ihres Macs. Chinesischer und anderer Nicht-ASCII-Text läuft über die Zwischenablage.", href: "/de/docs/guides/clipboard/" },
+    { title: "Geräte starten und stoppen", body: "Listen Sie Ihre virtuellen Android-Geräte auf, starten Sie eines, stoppen Sie es oder übernehmen Sie einen Emulator, der bereits läuft.", href: "/de/docs/guides/devices/" },
+    { title: "Drehen, Lautstärke, Screenshot", body: "Gerätetasten für Drehung, Lautstärke und Ein/Aus. Screenshots werden als PNG-Dateien in voller Auflösung gespeichert.", href: "/de/docs/guides/screenshots/" },
+    { title: "Mausrad", body: "Scrollen mit Mausrad und Trackpad wird zu kurzen Wischgesten auf dem Gerät, sodass lange Listen so scrollen, wie Sie es erwarten.", href: "/de/docs/guides/keyboard-and-input/" },
+  ]}
+/>
+
+{/* <!-- verify: phase 3 --> */}
+<Why
+  eyebrow="Warum es nutzen"
+  heading="Fakten, die Sie prüfen können"
+  facts={[
+    { figure: "127.0.0.1", title: "Frames bleiben auf Ihrem Mac", body: "Das Gateway lauscht nur auf Loopback. Andere Computer können es nicht erreichen, und kein Frame geht über das Internet.", source: { text: "Sicherheit", href: "/de/docs/reference/security/" } },
+    { figure: "SDK", title: "Der offizielle Android-Emulator", body: "Es nutzt Googles Emulator und Systemabbilder aus dem Android SDK, dieselben, die Android Studio verwendet. Wenn Sie das SDK bereits haben, verwendet das Gateway es.", source: { text: "Voraussetzungen", href: "/de/docs/getting-started/requirements/" } },
+    { figure: "1.24×", title: "CPU-Last nahe an scrcpy", body: "Bei 16 unmittelbar aufeinanderfolgenden Wischgesten auf einem M4-Mac (virtuelles Gerät Pixel 5 API 34, 1080×2340, Chrome 157, Transport rgba-mmap) nutzten Emulator, Gateway und Chrome zusammen 257 % CPU. scrcpy, auf dieselbe Weise mit demselben Emulator gemessen, nutzte 208 %.", source: { text: "Gemessene Leistung", href: "/de/docs/getting-started/requirements/#measured-performance" } },
+    { figure: "MIT", title: "Open Source", body: "Jede Zeile des Gateways und der Seite steht auf GitHub unter der MIT-Lizenz.", source: { text: "github.com/twosugar/droidpier", href: "https://github.com/twosugar/droidpier" } },
+  ]}
+/>
+
+<Compare
+  eyebrow="Vergleich"
+  heading="Worin es sich von anderen Wegen unterscheidet, einen Emulator zu sehen"
+  body="Nur Unterschiede, die Sie prüfen können. Jedes Tool ist gut in dem, wofür es gebaut wurde."
+  corner="Frage"
+  columns={["Droidpier", "Emulator von Android Studio", "scrcpy", "Cloud-Emulatoren (z. B. Appetize)"]}
+  rows={[
+    { label: "Wo Android läuft", cells: ["Offizieller Emulator auf Ihrem Mac", "Offizieller Emulator auf Ihrem Mac", "Ein Gerät oder Emulator, den Sie verbinden", "Die Server des Anbieters"] },
+    { label: "Wo Sie es sehen", cells: ["Ein Chrome- oder Edge-Tab", "Das Fenster Running Devices von Android Studio oder das eigene Fenster des Emulators", "Ein Desktop-App-Fenster", "Ein Browser-Tab"] },
+    { label: "Braucht Android Studio", cells: ["Nein; braucht das Gateway, den Emulator und ein Systemabbild", "Ja, für die Ansicht Running Devices", "Nein", "Nein"] },
+    { label: "Wie Frames übertragen werden", cells: ["Rohe RGBA-Frames über 127.0.0.1", "Emulatorfenster oder Android Studio, beide auf Ihrem Mac", "H.264-Video", "Video über das Internet"] },
+    { label: "Preis", cells: ["Kostenlos, MIT-Lizenz", "Kostenlos", "Kostenlos, Apache-2.0-Lizenz", "Kostenpflichtige Tarife"] },
+  ]}
+/>
+
+{/* <!-- 待第 3 阶段 Task 5 确认 --> */}
+{/* <!-- verify: phase 3 --> */}
+<Steps
+  eyebrow="Loslegen"
+  heading="Zwei Schritte bis zu Ihrem ersten Frame"
+  copyLabel="Kopieren"
+  copiedLabel="Kopiert"
+  failedLabel="Kopieren fehlgeschlagen"
+  steps={[
+    { title: "Einen Befehl ausführen", body: "Führen Sie dies im Terminal aus und lassen Sie das Fenster geöffnet. Der Befehl installiert oder aktualisiert droidpier in ~/.local/bin und startet es. Mit Ctrl+C beenden Sie es.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Installationsanleitung", href: "/de/docs/getting-started/install/" } },
+    { title: "Seite öffnen", body: "Öffnen Sie https://droid.devpier.dev/app/ in Chrome. Die Seite verbindet sich von selbst. Wenn Chrome beim ersten Mal fragt, ob die Seite auf Ihr lokales Netzwerk zugreifen darf, klicken Sie auf Zulassen.", link: { text: "Zugriff auf das lokale Netzwerk", href: "/de/docs/getting-started/first-run/#4-allow-local-network-access" } },
+  ]}
+  actions={[
+    { text: "Dokumentation lesen", href: "/de/docs/getting-started/requirements/", variant: "primary" },
+    { text: "Auf GitHub mit Stern markieren", href: "https://github.com/twosugar/droidpier" },
+  ]}
+/>

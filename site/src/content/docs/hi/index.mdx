@@ -1,0 +1,144 @@
+---
+title: Droidpier
+description: Android एमुलेटर, आपके ब्राउज़र में, बिना रुकावट।
+template: splash
+hero:
+  title: Android एमुलेटर, आपके ब्राउज़र में, बिना रुकावट।
+  tagline: इंस्टॉल करने के लिए एक कमांड। Android Studio की ज़रूरत नहीं।
+  actions:
+    - text: शुरू करें
+      link: /hi/docs/getting-started/install/
+      variant: primary
+      icon: right-arrow
+    - text: एमुलेटर खोलें
+      link: /app/
+      variant: secondary
+      icon: laptop
+    - text: GitHub
+      link: https://github.com/twosugar/droidpier
+      variant: minimal
+      icon: github
+markdownSummary: |
+  Droidpier आपके अपने Mac पर चल रहे आधिकारिक Android एमुलेटर को Chrome या Edge के टैब में दिखाता है। एक छोटा लोकल प्रोग्राम, गेटवे, एमुलेटर की स्क्रीन को 127.0.0.1 के ज़रिए पेज तक भेजता है और आपके टैप, स्वाइप और कीज़ वापस भेजता है।
+
+  ज़रूरतें: Apple Silicon वाला Mac, Chrome या Edge, और arm64 सिस्टम इमेज के साथ Android एमुलेटर। [ज़रूरतें](/hi/docs/getting-started/requirements/) देखें।
+
+  दो चरणों में शुरू करें:
+
+  1. इसे Terminal में चलाएँ और विंडो खुली रखें: `curl -fsSL https://droid.devpier.dev/install.sh | sh`। यह droidpier को इंस्टॉल या अपडेट करके शुरू कर देता है। बंद करने के लिए Ctrl+C दबाएँ।
+  2. https://droid.devpier.dev/app/ खोलें। पेज अपने-आप कनेक्ट हो जाता है। पहली बार, जब Chrome पूछे कि क्या पेज आपके लोकल नेटवर्क को एक्सेस कर सकता है, तो अनुमति दें पर क्लिक करें।
+
+  पूरे चरण: [इंस्टॉल](/hi/docs/getting-started/install/)।
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
+sourceHash: 094dc0ddb433
+---
+
+import PhoneDemo from "../../../components/home/PhoneDemo.astro";
+import ArchFlow from "../../../components/home/ArchFlow.astro";
+import Features from "../../../components/home/Features.astro";
+import Why from "../../../components/home/Why.astro";
+import Compare from "../../../components/home/Compare.astro";
+import Steps from "../../../components/home/Steps.astro";
+import MotionToggle from "../../../components/home/MotionToggle.astro";
+
+<MotionToggle label="एनिमेशन रोकें" pressedLabel="एनिमेशन रुके हुए हैं" />
+
+<PhoneDemo
+  eyebrow="लाइव डेमो"
+  heading="आपका एमुलेटर, ब्राउज़र के एक टैब में"
+  body="कोई स्क्रीन चुनें या साइड में स्वाइप करें। आपके Mac पर हर क्लिक और ड्रैग असली एमुलेटर तक जाता है।"
+  address="droid.devpier.dev/app/"
+  listLabel="डेमो स्क्रीन"
+  navLabels={["वापस", "होम", "हाल के ऐप"]}
+  clips={[
+    { id: "home", label: "होम स्क्रीन", src: "/media/screen-1.webp" },
+    { id: "settings", label: "Settings खोलें", src: "/media/screen-2.webp" },
+    { id: "scroll", label: "एक सूची स्क्रॉल करें", src: "/media/screen-3.webp" },
+  ]}
+/>
+
+<ArchFlow
+  eyebrow="यह कैसे काम करता है"
+  heading="तीन प्रोग्राम, सभी आपके Mac पर"
+  body="गेटवे आधिकारिक Android एमुलेटर से gRPC और shared memory के ज़रिए फ़्रेम पढ़ता है, और उन्हें 127.0.0.1 पर एक WebSocket के ज़रिए पेज तक भेजता है। टैप, स्वाइप और कीज़ इसी रास्ते से वापस जाते हैं।"
+  nodes={[
+    { name: "ब्राउज़र", detail: "Chrome या Edge टैब" },
+    { name: "गेटवे", detail: "127.0.0.1 पर droidpier" },
+    { name: "एमुलेटर", detail: "आधिकारिक Android एमुलेटर" },
+  ]}
+  lanes={[
+    "स्क्रीन फ़्रेम: shared memory के ज़रिए raw RGBA, फिर WebSocket",
+    "टैप, स्वाइप और कीज़: WebSocket, फिर gRPC",
+  ]}
+  metrics={[
+    { value: "60", unit: "fps", label: "मीडियन फ़्रेम रेट" },
+    { value: "20", unit: "ms", label: "टैप लेटेंसी p50" },
+    { value: "30", unit: "ms", label: "टैप लेटेंसी p90" },
+  ]}
+  conditions="M4 Mac पर Pixel 5 API 34 वर्चुअल डिवाइस (1080×2340) के साथ Chrome 157 में मापा गया, rgba-mmap फ़्रेम ट्रांसपोर्ट, लगातार 16 स्वाइप और 30 टैप। आपके आँकड़े आपके Mac, डिवाइस और ब्राउज़र पर निर्भर करते हैं।"
+  source={{ text: "मापा गया प्रदर्शन", href: "/hi/docs/getting-started/requirements/#measured-performance" }}
+/>
+
+{/* <!-- verify: phase 2 --> */}
+<Features
+  eyebrow="यह क्या करता है"
+  heading="एमुलेटर विंडो में आप जो कुछ इस्तेमाल करते हैं, वह सब"
+  items={[
+    { title: "पूरे रिज़ॉल्यूशन वाली स्क्रीन", body: "फ़्रेम canvas के साइज़ को डिस्प्ले के पिक्सेल अनुपात से गुणा करके लिए जाते हैं: Retina स्क्रीन पर 1080×2340, आधे साइज़ की धुंधली कॉपी नहीं।", href: "/hi/docs/getting-started/first-run/" },
+    { title: "टैप, स्वाइप और टाइप", body: "टैप के लिए क्लिक करें, स्वाइप के लिए ड्रैग करें, अपने Mac के कीबोर्ड पर टाइप करें। Back, Home और Recents स्क्रीन के ऊपर हैं।", href: "/hi/docs/guides/keyboard-and-input/" },
+    { title: "दोनों तरफ़ क्लिपबोर्ड", body: "Cmd+V आपके Mac से पेस्ट करता है। Android के अंदर कॉपी किया गया टेक्स्ट आपके Mac के क्लिपबोर्ड पर पहुँचता है। चीनी और दूसरा non-ASCII टेक्स्ट क्लिपबोर्ड के ज़रिए जाता है।", href: "/hi/docs/guides/clipboard/" },
+    { title: "डिवाइस शुरू और बंद करें", body: "अपने Android वर्चुअल डिवाइस की सूची देखें, किसी एक को शुरू करें, उसे बंद करें, या पहले से चल रहे एमुलेटर को अपने नियंत्रण में लें।", href: "/hi/docs/guides/devices/" },
+    { title: "रोटेट, वॉल्यूम, स्क्रीनशॉट", body: "रोटेशन, वॉल्यूम और पावर के लिए डिवाइस बटन। स्क्रीनशॉट पूरे रिज़ॉल्यूशन वाली PNG फ़ाइलों के रूप में सेव होते हैं।", href: "/hi/docs/guides/screenshots/" },
+    { title: "स्क्रॉल व्हील", body: "व्हील और ट्रैकपैड से स्क्रॉल करना डिवाइस पर छोटे स्वाइप में बदल जाता है, इसलिए लंबी सूचियाँ वैसे ही स्क्रॉल होती हैं जैसी आप उम्मीद करते हैं।", href: "/hi/docs/guides/keyboard-and-input/" },
+  ]}
+/>
+
+{/* <!-- verify: phase 3 --> */}
+<Why
+  eyebrow="इसे क्यों इस्तेमाल करें"
+  heading="तथ्य जिन्हें आप जाँच सकते हैं"
+  facts={[
+    { figure: "127.0.0.1", title: "फ़्रेम आपके Mac पर ही रहते हैं", body: "गेटवे सिर्फ़ loopback पर सुनता है। दूसरे कंप्यूटर उस तक नहीं पहुँच सकते, और कोई भी फ़्रेम इंटरनेट पर नहीं जाता।", source: { text: "सुरक्षा", href: "/hi/docs/reference/security/" } },
+    { figure: "SDK", title: "आधिकारिक Android एमुलेटर", body: "यह Android SDK से Google का एमुलेटर और सिस्टम इमेज चलाता है, वही जो Android Studio इस्तेमाल करता है। अगर आपके पास पहले से SDK है, तो गेटवे उसी का इस्तेमाल करता है।", source: { text: "ज़रूरतें", href: "/hi/docs/getting-started/requirements/" } },
+    { figure: "1.24×", title: "CPU उपयोग scrcpy के क़रीब", body: "M4 Mac पर लगातार 16 स्वाइप के दौरान (Pixel 5 API 34 वर्चुअल डिवाइस, 1080×2340, Chrome 157, rgba-mmap ट्रांसपोर्ट), एमुलेटर, गेटवे और Chrome ने मिलकर 257% CPU इस्तेमाल किया। scrcpy ने, इसी तरीक़े से और इसी एमुलेटर के साथ मापने पर, 208% इस्तेमाल किया।", source: { text: "मापा गया प्रदर्शन", href: "/hi/docs/getting-started/requirements/#measured-performance" } },
+    { figure: "MIT", title: "ओपन सोर्स", body: "गेटवे और पेज की हर लाइन MIT लाइसेंस के तहत GitHub पर है।", source: { text: "github.com/twosugar/droidpier", href: "https://github.com/twosugar/droidpier" } },
+  ]}
+/>
+
+<Compare
+  eyebrow="तुलना"
+  heading="एमुलेटर देखने के दूसरे तरीक़ों से यह कैसे अलग है"
+  body="सिर्फ़ वे अंतर जिन्हें आप जाँच सकते हैं। हर टूल उस काम में अच्छा है जिसके लिए वह बनाया गया था।"
+  corner="सवाल"
+  columns={["Droidpier", "Android Studio एमुलेटर", "scrcpy", "क्लाउड एमुलेटर (जैसे Appetize)"]}
+  rows={[
+    { label: "Android कहाँ चलता है", cells: ["आपके Mac पर आधिकारिक एमुलेटर", "आपके Mac पर आधिकारिक एमुलेटर", "कोई डिवाइस या एमुलेटर जिसे आप कनेक्ट करते हैं", "वेंडर के सर्वर"] },
+    { label: "आप इसे कहाँ देखते हैं", cells: ["Chrome या Edge का एक टैब", "Android Studio की Running Devices विंडो, या एमुलेटर की अपनी विंडो", "एक डेस्कटॉप ऐप विंडो", "ब्राउज़र का एक टैब"] },
+    { label: "Android Studio ज़रूरी है", cells: ["नहीं; गेटवे, एमुलेटर और एक सिस्टम इमेज चाहिए", "हाँ, Running Devices व्यू के लिए", "नहीं", "नहीं"] },
+    { label: "फ़्रेम कैसे पहुँचते हैं", cells: ["127.0.0.1 के ज़रिए raw RGBA फ़्रेम", "एमुलेटर विंडो या Android Studio, दोनों आपके Mac पर", "H.264 वीडियो", "इंटरनेट के ज़रिए वीडियो"] },
+    { label: "क़ीमत", cells: ["मुफ़्त, MIT लाइसेंस", "मुफ़्त", "मुफ़्त, Apache-2.0 लाइसेंस", "पेड प्लान"] },
+  ]}
+/>
+
+{/* <!-- 待第 3 阶段 Task 5 确认 --> */}
+{/* <!-- verify: phase 3 --> */}
+<Steps
+  eyebrow="शुरू करें"
+  heading="आपके पहले फ़्रेम तक दो चरण"
+  copyLabel="कॉपी करें"
+  copiedLabel="कॉपी हो गया"
+  failedLabel="कॉपी नहीं हो सका"
+  steps={[
+    { title: "एक कमांड चलाएँ", body: "इसे Terminal में चलाएँ और विंडो खुली रखें। यह droidpier को ~/.local/bin में इंस्टॉल या अपडेट करके शुरू कर देता है। बंद करने के लिए Ctrl+C दबाएँ।", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "इंस्टॉल गाइड", href: "/hi/docs/getting-started/install/" } },
+    { title: "पेज खोलें", body: "https://droid.devpier.dev/app/ को Chrome में खोलें। पेज अपने-आप कनेक्ट हो जाता है। पहली बार, जब Chrome पूछे कि क्या पेज आपके लोकल नेटवर्क को एक्सेस कर सकता है, तो अनुमति दें पर क्लिक करें।", link: { text: "लोकल नेटवर्क एक्सेस", href: "/hi/docs/getting-started/first-run/#4-allow-local-network-access" } },
+  ]}
+  actions={[
+    { text: "डॉक्यूमेंटेशन पढ़ें", href: "/hi/docs/getting-started/requirements/", variant: "primary" },
+    { text: "GitHub पर Star करें", href: "https://github.com/twosugar/droidpier" },
+  ]}
+/>

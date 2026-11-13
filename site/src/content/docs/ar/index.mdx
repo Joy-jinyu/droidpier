@@ -1,0 +1,144 @@
+---
+title: Droidpier
+description: محاكي Android، بسلاسة في متصفحك.
+template: splash
+hero:
+  title: محاكي Android، بسلاسة في متصفحك.
+  tagline: أمر واحد للتثبيت. لا حاجة إلى Android Studio.
+  actions:
+    - text: ابدأ الآن
+      link: /ar/docs/getting-started/install/
+      variant: primary
+      icon: right-arrow
+    - text: افتح المحاكي
+      link: /app/
+      variant: secondary
+      icon: laptop
+    - text: GitHub
+      link: https://github.com/twosugar/droidpier
+      variant: minimal
+      icon: github
+markdownSummary: |
+  يعرض Droidpier محاكي Android الرسمي الذي يعمل على جهاز Mac الخاص بك في علامة تبويب في Chrome أو Edge. يرسل برنامج محلي صغير، هو البوابة، شاشة المحاكي إلى الصفحة عبر 127.0.0.1، ويعيد إليه نقراتك وسحباتك وضغطات المفاتيح.
+
+  المتطلبات: جهاز Mac بمعالج Apple Silicon، وChrome أو Edge، ومحاكي Android مع صورة نظام arm64. راجع [المتطلبات](/ar/docs/getting-started/requirements/).
+
+  ابدأ في خطوتين:
+
+  1. شغّل هذا في Terminal واترك النافذة مفتوحة: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. يثبّت droidpier أو يحدّثه ثم يشغّله. اضغط Ctrl+C لإيقافه.
+  2. افتح https://droid.devpier.dev/app/. تتصل الصفحة من تلقاء نفسها. في المرة الأولى، عندما يسألك Chrome عمّا إذا كان مسموحًا للصفحة بالوصول إلى شبكتك المحلية، انقر على السماح.
+
+  الخطوات الكاملة: [التثبيت](/ar/docs/getting-started/install/).
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
+sourceHash: 094dc0ddb433
+---
+
+import PhoneDemo from "../../../components/home/PhoneDemo.astro";
+import ArchFlow from "../../../components/home/ArchFlow.astro";
+import Features from "../../../components/home/Features.astro";
+import Why from "../../../components/home/Why.astro";
+import Compare from "../../../components/home/Compare.astro";
+import Steps from "../../../components/home/Steps.astro";
+import MotionToggle from "../../../components/home/MotionToggle.astro";
+
+<MotionToggle label="إيقاف الرسوم المتحركة مؤقتًا" pressedLabel="الرسوم المتحركة متوقفة مؤقتًا" />
+
+<PhoneDemo
+  eyebrow="عرض حي"
+  heading="المحاكي الخاص بك، في علامة تبويب في المتصفح"
+  body="اختر شاشة أو اسحب إلى الجانب. على جهاز Mac الخاص بك، تصل كل نقرة وكل سحب إلى المحاكي الحقيقي."
+  address="droid.devpier.dev/app/"
+  listLabel="شاشات توضيحية"
+  navLabels={["رجوع", "الشاشة الرئيسية", "التطبيقات الأخيرة"]}
+  clips={[
+    { id: "home", label: "الشاشة الرئيسية", src: "/media/screen-1.webp" },
+    { id: "settings", label: "فتح الإعدادات", src: "/media/screen-2.webp" },
+    { id: "scroll", label: "تمرير قائمة", src: "/media/screen-3.webp" },
+  ]}
+/>
+
+<ArchFlow
+  eyebrow="آلية العمل"
+  heading="ثلاثة برامج، جميعها على جهاز Mac الخاص بك"
+  body="تقرأ البوابة الإطارات من محاكي Android الرسمي عبر gRPC والذاكرة المشتركة، وترسلها إلى الصفحة عبر WebSocket على 127.0.0.1. وتعود النقرات والسحبات وضغطات المفاتيح بالطريق نفسه."
+  nodes={[
+    { name: "المتصفح", detail: "علامة تبويب في Chrome أو Edge" },
+    { name: "البوابة", detail: "droidpier على 127.0.0.1" },
+    { name: "المحاكي", detail: "محاكي Android الرسمي" },
+  ]}
+  lanes={[
+    "إطارات الشاشة: RGBA خام عبر الذاكرة المشتركة، ثم WebSocket",
+    "النقرات والسحبات والمفاتيح: WebSocket، ثم gRPC",
+  ]}
+  metrics={[
+    { value: "60", unit: "fps", label: "الوسيط لمعدل الإطارات" },
+    { value: "20", unit: "ms", label: "زمن استجابة النقر p50" },
+    { value: "30", unit: "ms", label: "زمن استجابة النقر p90" },
+  ]}
+  conditions="القياس على جهاز Mac بمعالج M4 مع جهاز افتراضي Pixel 5 API 34 (1080×2340) في Chrome 157، بنقل الإطارات rgba-mmap، و16 سحبة متتالية و30 نقرة. تعتمد أرقامك على جهاز Mac والجهاز الافتراضي والمتصفح."
+  source={{ text: "الأداء المقيس", href: "/ar/docs/getting-started/requirements/#measured-performance" }}
+/>
+
+{/* <!-- verify: phase 2 --> */}
+<Features
+  eyebrow="ما الذي يقدمه"
+  heading="كل ما تستخدمه في نافذة المحاكي"
+  items={[
+    { title: "شاشة بالدقة الكاملة", body: "تُلتقط الإطارات بحجم اللوحة مضروبًا في نسبة بكسلات الشاشة: 1080×2340 على شاشة Retina، لا نسخة ضبابية بنصف الحجم.", href: "/ar/docs/getting-started/first-run/" },
+    { title: "المس واسحب واكتب", body: "انقر لتنفيذ لمسة، واسحب لتنفيذ سحبة بالإصبع، واكتب بلوحة مفاتيح جهاز Mac. تقع أزرار الرجوع والشاشة الرئيسية والتطبيقات الأخيرة فوق الشاشة.", href: "/ar/docs/guides/keyboard-and-input/" },
+    { title: "الحافظة في الاتجاهين", body: "يلصق Cmd+V من جهاز Mac. والنص الذي تنسخه داخل Android يصل إلى حافظة جهاز Mac. ويمر النص الصيني وغيره من النصوص غير ASCII عبر الحافظة.", href: "/ar/docs/guides/clipboard/" },
+    { title: "تشغيل الأجهزة وإيقافها", body: "اعرض أجهزة Android الافتراضية لديك، وشغّل أحدها، وأوقفه، أو تولَّ التحكم في محاكٍ يعمل بالفعل.", href: "/ar/docs/guides/devices/" },
+    { title: "التدوير ومستوى الصوت ولقطة الشاشة", body: "أزرار الجهاز للتدوير ومستوى الصوت والطاقة. تُحفظ لقطات الشاشة كملفات PNG بالدقة الكاملة.", href: "/ar/docs/guides/screenshots/" },
+    { title: "عجلة التمرير", body: "يتحول التمرير بالعجلة ولوحة التتبع إلى سحبات قصيرة على الجهاز، فتُمرَّر القوائم الطويلة كما تتوقع.", href: "/ar/docs/guides/keyboard-and-input/" },
+  ]}
+/>
+
+{/* <!-- verify: phase 3 --> */}
+<Why
+  eyebrow="لماذا تستخدمه"
+  heading="حقائق يمكنك التحقق منها"
+  facts={[
+    { figure: "127.0.0.1", title: "تبقى الإطارات على جهاز Mac الخاص بك", body: "تستمع البوابة على واجهة الاسترجاع (loopback) فقط. لا تستطيع أجهزة الكمبيوتر الأخرى الوصول إليها، ولا يمر أي إطار عبر الإنترنت.", source: { text: "الأمان", href: "/ar/docs/reference/security/" } },
+    { figure: "SDK", title: "محاكي Android الرسمي", body: "يشغّل محاكي Google وصور النظام من Android SDK، وهي نفسها التي يستخدمها Android Studio. إذا كان SDK مثبتًا لديك بالفعل، فإن البوابة تستخدمه.", source: { text: "المتطلبات", href: "/ar/docs/getting-started/requirements/" } },
+    { figure: "1.24×", title: "استهلاك للمعالج قريب من scrcpy", body: "خلال 16 سحبة متتالية على جهاز Mac بمعالج M4 (جهاز افتراضي Pixel 5 API 34، 1080×2340، Chrome 157، نقل rgba-mmap)، استخدم المحاكي والبوابة وChrome معًا 257% من المعالج. أما scrcpy، المقيس بالطريقة نفسها ومع المحاكي نفسه، فاستخدم 208%.", source: { text: "الأداء المقيس", href: "/ar/docs/getting-started/requirements/#measured-performance" } },
+    { figure: "MIT", title: "مفتوح المصدر", body: "كل سطر من البوابة والصفحة موجود على GitHub بموجب ترخيص MIT.", source: { text: "github.com/twosugar/droidpier", href: "https://github.com/twosugar/droidpier" } },
+  ]}
+/>
+
+<Compare
+  eyebrow="مقارنة"
+  heading="كيف يختلف عن الطرق الأخرى لرؤية محاكٍ"
+  body="فروق يمكنك التحقق منها فقط. كل أداة جيدة فيما صُممت له."
+  corner="السؤال"
+  columns={["Droidpier", "محاكي Android Studio", "scrcpy", "المحاكيات السحابية (مثل Appetize)"]}
+  rows={[
+    { label: "أين يعمل Android", cells: ["المحاكي الرسمي على جهاز Mac الخاص بك", "المحاكي الرسمي على جهاز Mac الخاص بك", "جهاز أو محاكٍ توصله", "خوادم المورّد"] },
+    { label: "أين تراه", cells: ["علامة تبويب في Chrome أو Edge", "نافذة Running Devices في Android Studio، أو نافذة المحاكي المستقلة الخاصة به", "نافذة تطبيق سطح مكتب", "علامة تبويب في المتصفح"] },
+    { label: "يتطلب Android Studio", cells: ["لا؛ يتطلب البوابة والمحاكي وصورة نظام", "نعم، لعرض Running Devices", "لا", "لا"] },
+    { label: "كيف تنتقل الإطارات", cells: ["إطارات RGBA خام عبر 127.0.0.1", "نافذة المحاكي أو Android Studio، وكلاهما على جهاز Mac الخاص بك", "فيديو H.264", "فيديو عبر الإنترنت"] },
+    { label: "السعر", cells: ["مجاني، ترخيص MIT", "مجاني", "مجاني، ترخيص Apache-2.0", "خطط مدفوعة"] },
+  ]}
+/>
+
+{/* <!-- 待第 3 阶段 Task 5 确认 --> */}
+{/* <!-- verify: phase 3 --> */}
+<Steps
+  eyebrow="ابدأ الآن"
+  heading="خطوتان حتى أول إطار"
+  copyLabel="نسخ"
+  copiedLabel="تم النسخ"
+  failedLabel="فشل النسخ"
+  steps={[
+    { title: "شغّل أمرًا واحدًا", body: "شغّل هذا في Terminal واترك النافذة مفتوحة. يثبّت droidpier في ~/.local/bin أو يحدّثه ثم يشغّله. اضغط Ctrl+C لإيقافه.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "دليل التثبيت", href: "/ar/docs/getting-started/install/" } },
+    { title: "افتح الصفحة", body: "افتح https://droid.devpier.dev/app/ في Chrome. تتصل الصفحة من تلقاء نفسها. في المرة الأولى، عندما يسألك Chrome عمّا إذا كان مسموحًا للصفحة بالوصول إلى شبكتك المحلية، انقر على السماح.", link: { text: "الوصول إلى الشبكة المحلية", href: "/ar/docs/getting-started/first-run/#4-allow-local-network-access" } },
+  ]}
+  actions={[
+    { text: "اقرأ التوثيق", href: "/ar/docs/getting-started/requirements/", variant: "primary" },
+    { text: "ضع نجمة على GitHub", href: "https://github.com/twosugar/droidpier" },
+  ]}
+/>

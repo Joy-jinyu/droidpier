@@ -1,0 +1,6 @@
+{
+  "site.footer.license": "Распространяется по <a href=\"https://github.com/twosugar/droidpier\" target=\"_blank\" rel=\"noopener noreferrer\">лицензии MIT</a>.",
+  "page.copyMarkdown": "Копировать как Markdown",
+  "page.copyMarkdown.copied": "Скопировано!",
+  "page.copyMarkdown.failed": "Не удалось скопировать"
+}

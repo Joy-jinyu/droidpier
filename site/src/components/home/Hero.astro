@@ -1,0 +1,25 @@
+---
+/**
+ * 覆盖 Starlight 的 Hero，只负责首页动效的启动脚本，不渲染可见内容。
+ * 主标语区（h1、副标题、按钮）和可操作的手机在同一个两栏布局里，由正文里的 PhoneDemo 渲染，
+ * 文案仍然来自页面 frontmatter 的 hero（见 HeroCopy.astro）。
+ * 这段脚本放在这里是因为 Hero 在正文之前输出：动画 class 要在正文解析之前加上，避免闪烁。
+ */
+---
+
+<script is:inline>
+  // 未开启减少动态效果时才启用动画 class；用户之前按过“暂停动画”的话同时恢复暂停状态（键名与 scripts/motion.ts 一致）
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    document.documentElement.classList.add("emu-motion");
+  }
+  try {
+    if (localStorage.getItem("emu-motion-paused") === "1") {
+      document.documentElement.classList.add("emu-paused");
+    }
+  } catch (e) {}
+</script>
+
+<script>
+  import { initMotion } from "../../scripts/motion.ts";
+  initMotion();
+</script>

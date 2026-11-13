@@ -1,0 +1,59 @@
+---
+// 覆盖 Starlight Footer，在 footer 元素内追加 MIT 许可证和仓库链接行
+import EditLink from "virtual:starlight/components/EditLink";
+import LastUpdated from "virtual:starlight/components/LastUpdated";
+import Pagination from "virtual:starlight/components/Pagination";
+
+// site.footer.license 在各语言的 src/content/i18n/<locale>.json 中定义，
+// 回退到 en.json 的英文值。
+const license = Astro.locals.t("site.footer.license");
+---
+
+<footer class="sl-flex">
+  <div class="meta sl-flex">
+    <EditLink />
+    <LastUpdated />
+  </div>
+  <Pagination />
+  <p class="emu-license" set:html={license} />
+</footer>
+
+<style>
+  @layer starlight.core {
+    footer {
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .meta {
+      gap: 0.75rem 3rem;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-top: 3rem;
+      font-size: var(--sl-text-sm);
+      color: var(--sl-color-gray-3);
+    }
+    .meta > :global(p:only-child) {
+      margin-inline-start: auto;
+    }
+    .emu-license {
+      font-size: var(--sl-text-xs);
+      color: var(--sl-color-gray-3);
+      text-align: center;
+      margin: 0 auto;
+    }
+    /* 链接来自 set:html，不带本组件的作用域属性，必须用 :global 才选得中 */
+    .emu-license :global(a) {
+      color: var(--sl-color-accent);
+      text-decoration: none;
+    }
+    .emu-license :global(a:hover) {
+      color: var(--sl-color-accent-high);
+      text-decoration: underline;
+    }
+    .emu-license :global(a:focus-visible) {
+      outline: 2px solid var(--sl-color-accent);
+      outline-offset: 2px;
+      border-radius: 2px;
+    }
+  }
+</style>

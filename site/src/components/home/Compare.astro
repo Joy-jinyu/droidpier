@@ -1,0 +1,173 @@
+---
+/**
+ * 对比表：第一列是本项目，其余是 Android Studio 模拟器、scrcpy、云端模拟器。
+ * 表格逐行展开；窄屏下每行变成一张卡片，单元格前显示列名（data-label）。
+ */
+import "../../styles/home.css";
+
+interface Row {
+  label: string;
+  /** 与 columns 一一对应 */
+  cells: string[];
+}
+
+interface Props {
+  eyebrow: string;
+  heading: string;
+  body: string;
+  /** 左上角表头（维度列的标题） */
+  corner: string;
+  columns: string[];
+  rows: Row[];
+  note?: string;
+}
+
+const { eyebrow, heading, body, corner, columns, rows, note } = Astro.props;
+---
+
+<section class="emu-section emu-compare not-content">
+  <header class="emu-section-head" data-reveal>
+    <span class="emu-eyebrow">{eyebrow}</span>
+    <h2>{heading}</h2>
+    <p>{body}</p>
+  </header>
+
+  <table class="emu-compare__table">
+    <thead>
+      <tr>
+        <th scope="col">{corner}</th>
+        {columns.map((c, i) => <th scope="col" class:list={[i === 0 && "is-ours"]}>{c}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        rows.map((row, r) => (
+          <tr data-reveal style={`--i:${r}`}>
+            <th scope="row">{row.label}</th>
+            {row.cells.map((cell, i) => (
+              <td data-label={columns[i]} class:list={[i === 0 && "is-ours"]}>
+                {cell}
+              </td>
+            ))}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  {note && <p class="emu-compare__note">{note}</p>}
+</section>
+
+<style>
+  /* 没有格线：本项目那一列用浅一级底色整列托起，行与行之间靠留白分开 */
+  .emu-compare__table {
+    inline-size: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .emu-compare__table th,
+  .emu-compare__table td {
+    padding: 1rem 1.1rem;
+    text-align: start;
+    vertical-align: top;
+    border: 0;
+  }
+
+  .emu-compare__table thead th {
+    padding-block: 1.1rem 0.9rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--emu-muted);
+    vertical-align: bottom;
+  }
+
+  .emu-compare__table tbody th {
+    font-weight: 600;
+    color: var(--emu-text);
+    inline-size: 18%;
+  }
+
+  .emu-compare__table td {
+    color: var(--emu-muted);
+  }
+
+  .emu-compare__table .is-ours {
+    color: var(--emu-text);
+    background: var(--emu-surface);
+  }
+  .emu-compare__table thead .is-ours {
+    color: var(--emu-accent);
+    border-start-start-radius: 0.75rem;
+    border-start-end-radius: 0.75rem;
+  }
+  .emu-compare__table tbody tr:last-child .is-ours {
+    border-end-start-radius: 0.75rem;
+    border-end-end-radius: 0.75rem;
+  }
+
+  /* 逐行展开：行从起始边滑入（覆盖 home.css 的默认上移） */
+  :global(.emu-reveal-ready) .emu-compare__table tr[data-reveal]:not(.is-in) {
+    translate: -1.5rem 0;
+  }
+  :global(.emu-reveal-ready) .emu-compare__table tr[data-reveal]:not(.is-in):dir(rtl) {
+    translate: 1.5rem 0;
+  }
+
+  @media (max-width: 47.99rem) {
+    .emu-compare__table thead {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .emu-compare__table,
+    .emu-compare__table tbody,
+    .emu-compare__table tr,
+    .emu-compare__table th,
+    .emu-compare__table td {
+      display: block;
+    }
+    /* 窄屏下每行一张卡片：卡片有底色，里面的单元格（包括本项目那格）都透明，只留一层底色 */
+    .emu-compare__table tr {
+      margin-block-end: 0.75rem;
+      padding-block: 0.4rem;
+      border-radius: 0.75rem;
+      background: var(--emu-surface);
+    }
+    .emu-compare__table tbody th {
+      inline-size: auto;
+      padding-block-end: 0.5rem;
+    }
+    .emu-compare__table td {
+      display: grid;
+      grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr);
+      gap: 1rem;
+      padding-block: 0.55rem;
+    }
+    .emu-compare__table td::before {
+      content: attr(data-label);
+      font-size: 0.75rem;
+      line-height: 1.6;
+      color: var(--emu-muted);
+    }
+    .emu-compare__table .is-ours,
+    .emu-compare__table tbody tr:last-child .is-ours {
+      background: transparent;
+      border-radius: 0;
+    }
+    .emu-compare__table td.is-ours::before {
+      color: var(--emu-accent);
+    }
+  }
+
+  .emu-compare__note {
+    margin: 1rem 0 0;
+    font-size: 0.8rem;
+    color: var(--emu-muted);
+  }
+</style>

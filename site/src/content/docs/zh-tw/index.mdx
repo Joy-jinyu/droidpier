@@ -1,0 +1,144 @@
+---
+title: Droidpier
+description: Android 模擬器，在瀏覽器中流暢執行。
+template: splash
+hero:
+  title: Android 模擬器，在瀏覽器中流暢執行。
+  tagline: 一道命令即可安裝。無需 Android Studio。
+  actions:
+    - text: 快速開始
+      link: /zh-tw/docs/getting-started/install/
+      variant: primary
+      icon: right-arrow
+    - text: 開啟模擬器
+      link: /app/
+      variant: secondary
+      icon: laptop
+    - text: GitHub
+      link: https://github.com/twosugar/droidpier
+      variant: minimal
+      icon: github
+markdownSummary: |
+  Droidpier 讓官方 Android 模擬器在你自己的 Mac 上執行，並在 Chrome 或 Edge 分頁中顯示。一個小型本地程式（閘道）透過 127.0.0.1 將模擬器畫面傳送到頁面，並將你的點擊、滑動和按鍵回傳。
+
+  前置需求：Apple Silicon Mac、Chrome 或 Edge，以及含有 arm64 系統映像的 Android 模擬器。請參閱[前置需求](/zh-tw/docs/getting-started/requirements/)。
+
+  兩個步驟即可開始：
+
+  1. 在終端機中執行以下命令，並保持該視窗開啟：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。它會安裝或更新 droidpier，然後啟動它。按 Ctrl+C 停止。
+  2. 開啟 https://droid.devpier.dev/app/。頁面會自行連線。第一次開啟時，當 Chrome 詢問是否允許該頁面存取你的本機網路時，點擊允許。
+
+  完整步驟：[安裝](/zh-tw/docs/getting-started/install/)。
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
+sourceHash: 094dc0ddb433
+---
+
+import PhoneDemo from "../../../components/home/PhoneDemo.astro";
+import ArchFlow from "../../../components/home/ArchFlow.astro";
+import Features from "../../../components/home/Features.astro";
+import Why from "../../../components/home/Why.astro";
+import Compare from "../../../components/home/Compare.astro";
+import Steps from "../../../components/home/Steps.astro";
+import MotionToggle from "../../../components/home/MotionToggle.astro";
+
+<MotionToggle label="暫停動畫" pressedLabel="動畫已暫停" />
+
+<PhoneDemo
+  eyebrow="即時示範"
+  heading="你的模擬器，在瀏覽器分頁中"
+  body="選擇畫面或左右滑動。在你的 Mac 上，每次點擊和拖曳都會作用於真實的模擬器。"
+  address="droid.devpier.dev/app/"
+  listLabel="示範畫面"
+  navLabels={["返回", "首頁", "最近使用"]}
+  clips={[
+    { id: "home", label: "主畫面", src: "/media/screen-1.webp" },
+    { id: "settings", label: "開啟設定", src: "/media/screen-2.webp" },
+    { id: "scroll", label: "捲動清單", src: "/media/screen-3.webp" },
+  ]}
+/>
+
+<ArchFlow
+  eyebrow="運作原理"
+  heading="三個程式，全在你的 Mac 上"
+  body="閘道透過 gRPC 和共享記憶體從官方 Android 模擬器讀取畫面幀，並透過 127.0.0.1 上的 WebSocket 傳送到頁面。點擊、滑動和按鍵以相同路徑回傳。"
+  nodes={[
+    { name: "瀏覽器", detail: "Chrome 或 Edge 分頁" },
+    { name: "閘道", detail: "droidpier 執行於 127.0.0.1" },
+    { name: "模擬器", detail: "官方 Android 模擬器" },
+  ]}
+  lanes={[
+    "畫面幀：原始 RGBA 經共享記憶體，再經 WebSocket 傳輸",
+    "點擊、滑動和按鍵：WebSocket，再經 gRPC 傳輸",
+  ]}
+  metrics={[
+    { value: "60", unit: "fps", label: "影格率中位數" },
+    { value: "20", unit: "ms", label: "點擊延遲 p50" },
+    { value: "30", unit: "ms", label: "點擊延遲 p90" },
+  ]}
+  conditions="在搭載 M4 的 Mac 上，使用 Pixel 5 API 34 虛擬裝置（1080×2340）於 Chrome 157 中測量，採用 rgba-mmap 幀傳輸方式，進行 16 次連續滑動和 30 次點擊。實際數值取決於你的 Mac、裝置和瀏覽器。"
+  source={{ text: "實測效能", href: "/zh-tw/docs/getting-started/requirements/#measured-performance" }}
+/>
+
+{/* <!-- verify: phase 2 --> */}
+<Features
+  eyebrow="功能介紹"
+  heading="模擬器視窗中的一切功能，觸手可及"
+  items={[
+    { title: "全解析度畫面", body: "畫面幀按畫布尺寸乘以螢幕像素比例擷取：在 Retina 螢幕上為 1080×2340，而非模糊的半尺寸複本。", href: "/zh-tw/docs/getting-started/first-run/" },
+    { title: "點擊、滑動與輸入", body: "點擊即為輕觸，拖曳即為滑動，使用 Mac 鍵盤直接輸入。返回、首頁和最近使用按鈕位於畫面上方。", href: "/zh-tw/docs/guides/keyboard-and-input/" },
+    { title: "雙向剪貼簿", body: "Cmd+V 貼上 Mac 上的內容。在 Android 內複製的文字會同步到 Mac 剪貼簿。中文及其他非 ASCII 文字透過剪貼簿傳輸。", href: "/zh-tw/docs/guides/clipboard/" },
+    { title: "啟動和停止裝置", body: "列出你的 Android 虛擬裝置，啟動一個，停止它，或接管已在執行的模擬器。", href: "/zh-tw/docs/guides/devices/" },
+    { title: "旋轉、音量、截圖", body: "提供旋轉、音量和電源的裝置按鈕。截圖儲存為全解析度 PNG 檔案。", href: "/zh-tw/docs/guides/screenshots/" },
+    { title: "捲動滾輪支援", body: "滑鼠滾輪和觸控板捲動會轉換為裝置上的短距離滑動，讓長清單按預期方式捲動。", href: "/zh-tw/docs/guides/keyboard-and-input/" },
+  ]}
+/>
+
+{/* <!-- verify: phase 3 --> */}
+<Why
+  eyebrow="為什麼使用它"
+  heading="可供核實的事實"
+  facts={[
+    { figure: "127.0.0.1", title: "畫面留在你的 Mac 上", body: "閘道僅監聽回送位址。其他電腦無法存取它，也不會有任何畫面幀經過網際網路傳輸。", source: { text: "安全性", href: "/zh-tw/docs/reference/security/" } },
+    { figure: "SDK", title: "官方 Android 模擬器", body: "它執行 Google 的模擬器和來自 Android SDK 的系統映像，與 Android Studio 使用的完全相同。如果你已有 SDK，閘道會直接使用它。", source: { text: "前置需求", href: "/zh-tw/docs/getting-started/requirements/" } },
+    { figure: "1.24×", title: "CPU 使用量接近 scrcpy", body: "在搭載 M4 的 Mac 上（Pixel 5 API 34 虛擬裝置，1080×2340，Chrome 157，rgba-mmap 傳輸）進行 16 次連續滑動期間，模擬器、閘道和 Chrome 合計使用了 257% CPU。scrcpy 在相同條件下使用了 208%。", source: { text: "實測效能", href: "/zh-tw/docs/getting-started/requirements/#measured-performance" } },
+    { figure: "MIT", title: "開放原始碼", body: "閘道和頁面的每一行程式碼都在 GitHub 上，遵循 MIT 授權條款。", source: { text: "github.com/twosugar/droidpier", href: "https://github.com/twosugar/droidpier" } },
+  ]}
+/>
+
+<Compare
+  eyebrow="比較"
+  heading="與其他查看模擬器方式的差異"
+  body="僅列可供核實的差異。每種工具都有其擅長之處。"
+  corner="問題"
+  columns={["Droidpier", "Android Studio 模擬器", "scrcpy", "雲端模擬器（如 Appetize）"]}
+  rows={[
+    { label: "Android 在哪裡執行", cells: ["你 Mac 上的官方模擬器", "你 Mac 上的官方模擬器", "你連接的裝置或模擬器", "供應商的伺服器"] },
+    { label: "在哪裡查看", cells: ["Chrome 或 Edge 分頁", "Android Studio 的執行裝置視窗，或模擬器自身視窗", "桌面應用程式視窗", "瀏覽器分頁"] },
+    { label: "需要 Android Studio", cells: ["不需要；需要閘道、模擬器和系統映像", "需要（用於執行裝置檢視）", "不需要", "不需要"] },
+    { label: "畫面如何傳輸", cells: ["原始 RGBA 幀經 127.0.0.1 傳輸", "模擬器視窗或 Android Studio，均在你的 Mac 上", "H.264 影片", "影片經網際網路傳輸"] },
+    { label: "價格", cells: ["免費，MIT 授權條款", "免費", "免費，Apache-2.0 授權條款", "付費方案"] },
+  ]}
+/>
+
+{/* <!-- 待第 3 阶段 Task 5 确认 --> */}
+{/* <!-- verify: phase 3 --> */}
+<Steps
+  eyebrow="快速開始"
+  heading="兩步看到第一幀畫面"
+  copyLabel="複製"
+  copiedLabel="已複製"
+  failedLabel="複製失敗"
+  steps={[
+    { title: "執行一道命令", body: "在終端機中執行以下命令，並保持該視窗開啟。它會把 droidpier 安裝或更新到 ~/.local/bin，然後啟動它。按 Ctrl+C 停止。", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "安裝指南", href: "/zh-tw/docs/getting-started/install/" } },
+    { title: "開啟頁面", body: "在 Chrome 中開啟 https://droid.devpier.dev/app/。頁面會自行連線。第一次開啟時，當 Chrome 詢問是否允許該頁面存取你的本機網路時，點擊允許。", link: { text: "本機網路存取", href: "/zh-tw/docs/getting-started/first-run/#4-allow-local-network-access" } },
+  ]}
+  actions={[
+    { text: "閱讀文件", href: "/zh-tw/docs/getting-started/requirements/", variant: "primary" },
+    { text: "在 GitHub 上加星", href: "https://github.com/twosugar/droidpier" },
+  ]}
+/>

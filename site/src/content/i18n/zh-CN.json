@@ -1,0 +1,6 @@
+{
+  "site.footer.license": "基于 <a href=\"https://github.com/twosugar/droidpier\" target=\"_blank\" rel=\"noopener noreferrer\">MIT 许可证</a> 发布。",
+  "page.copyMarkdown": "复制为 Markdown",
+  "page.copyMarkdown.copied": "已复制！",
+  "page.copyMarkdown.failed": "复制失败"
+}

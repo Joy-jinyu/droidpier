@@ -1,0 +1,144 @@
+---
+title: Droidpier
+description: Эмулятор Android — плавно, прямо в браузере.
+template: splash
+hero:
+  title: Эмулятор Android — плавно, прямо в браузере.
+  tagline: Установка одной командой. Android Studio не требуется.
+  actions:
+    - text: Начать
+      link: /ru/docs/getting-started/install/
+      variant: primary
+      icon: right-arrow
+    - text: Открыть эмулятор
+      link: /app/
+      variant: secondary
+      icon: laptop
+    - text: GitHub
+      link: https://github.com/twosugar/droidpier
+      variant: minimal
+      icon: github
+markdownSummary: |
+  Droidpier показывает официальный эмулятор Android, работающий на вашем собственном Mac, во вкладке Chrome или Edge. Небольшая локальная программа — шлюз — передаёт экран эмулятора на страницу через 127.0.0.1 и отправляет обратно ваши касания, свайпы и нажатия клавиш.
+
+  Требования: Mac на Apple Silicon, Chrome или Edge и эмулятор Android с системным образом arm64. См. [Требования](/ru/docs/getting-started/requirements/).
+
+  Начните работу за два шага:
+
+  1. Выполните это в Терминале и не закрывайте окно: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. Команда установит или обновит droidpier и запустит его. Чтобы остановить, нажмите Ctrl+C.
+  2. Откройте https://droid.devpier.dev/app/. Страница подключится сама. В первый раз, когда Chrome спросит, может ли страница получить доступ к вашей локальной сети, нажмите «Разрешить».
+
+  Подробные шаги: [Установка](/ru/docs/getting-started/install/).
+head:
+  - tag: script
+    attrs:
+      type: application/ld+json
+    content: >-
+      {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
+sourceHash: 094dc0ddb433
+---
+
+import PhoneDemo from "../../../components/home/PhoneDemo.astro";
+import ArchFlow from "../../../components/home/ArchFlow.astro";
+import Features from "../../../components/home/Features.astro";
+import Why from "../../../components/home/Why.astro";
+import Compare from "../../../components/home/Compare.astro";
+import Steps from "../../../components/home/Steps.astro";
+import MotionToggle from "../../../components/home/MotionToggle.astro";
+
+<MotionToggle label="Приостановить анимацию" pressedLabel="Анимация приостановлена" />
+
+<PhoneDemo
+  eyebrow="Живая демонстрация"
+  heading="Ваш эмулятор во вкладке браузера"
+  body="Выберите экран или проведите в сторону. На вашем Mac каждый щелчок и каждое перетаскивание попадают в настоящий эмулятор."
+  address="droid.devpier.dev/app/"
+  listLabel="Демонстрационные экраны"
+  navLabels={["Назад", "Домой", "Недавние"]}
+  clips={[
+    { id: "home", label: "Главный экран", src: "/media/screen-1.webp" },
+    { id: "settings", label: "Открыть Настройки", src: "/media/screen-2.webp" },
+    { id: "scroll", label: "Прокрутить список", src: "/media/screen-3.webp" },
+  ]}
+/>
+
+<ArchFlow
+  eyebrow="Как это работает"
+  heading="Три программы, и все на вашем Mac"
+  body="Шлюз читает кадры из официального эмулятора Android через gRPC и общую память и отправляет их на страницу по WebSocket на 127.0.0.1. Касания, свайпы и нажатия клавиш идут обратно тем же путём."
+  nodes={[
+    { name: "Браузер", detail: "Вкладка Chrome или Edge" },
+    { name: "Шлюз", detail: "droidpier на 127.0.0.1" },
+    { name: "Эмулятор", detail: "Официальный эмулятор Android" },
+  ]}
+  lanes={[
+    "Кадры экрана: необработанный RGBA через общую память, затем WebSocket",
+    "Касания, свайпы и клавиши: WebSocket, затем gRPC",
+  ]}
+  metrics={[
+    { value: "60", unit: "fps", label: "Медианная частота кадров" },
+    { value: "20", unit: "ms", label: "Задержка касания p50" },
+    { value: "30", unit: "ms", label: "Задержка касания p90" },
+  ]}
+  conditions="Измерено на Mac с M4 с виртуальным устройством Pixel 5 API 34 (1080×2340) в Chrome 157, транспорт кадров rgba-mmap, 16 свайпов подряд и 30 касаний. Ваши показатели зависят от вашего Mac, устройства и браузера."
+  source={{ text: "Измеренная производительность", href: "/ru/docs/getting-started/requirements/#measured-performance" }}
+/>
+
+{/* <!-- verify: phase 2 --> */}
+<Features
+  eyebrow="Что он умеет"
+  heading="Всё, чем вы пользуетесь в окне эмулятора"
+  items={[
+    { title: "Экран в полном разрешении", body: "Кадры снимаются в размере холста, умноженном на плотность пикселей дисплея: 1080×2340 на экране Retina, а не размытая копия в половину размера.", href: "/ru/docs/getting-started/first-run/" },
+    { title: "Касания, свайпы и ввод текста", body: "Щелчок — касание, перетаскивание — свайп, печатайте на клавиатуре Mac. Кнопки «Назад», «Домой» и «Недавние» находятся над экраном.", href: "/ru/docs/guides/keyboard-and-input/" },
+    { title: "Буфер обмена в обе стороны", body: "Cmd+V вставляет с вашего Mac. Текст, скопированный в Android, попадает в буфер обмена Mac. Китайский и другой текст не в ASCII передаётся через буфер обмена.", href: "/ru/docs/guides/clipboard/" },
+    { title: "Запуск и остановка устройств", body: "Просматривайте список виртуальных устройств Android, запускайте и останавливайте их или берите под управление уже запущенный эмулятор.", href: "/ru/docs/guides/devices/" },
+    { title: "Поворот, громкость, снимок экрана", body: "Кнопки устройства для поворота, громкости и питания. Снимки экрана сохраняются как PNG-файлы в полном разрешении.", href: "/ru/docs/guides/screenshots/" },
+    { title: "Колесо прокрутки", body: "Прокрутка колесом и трекпадом превращается в короткие свайпы на устройстве, поэтому длинные списки прокручиваются так, как вы ожидаете.", href: "/ru/docs/guides/keyboard-and-input/" },
+  ]}
+/>
+
+{/* <!-- verify: phase 3 --> */}
+<Why
+  eyebrow="Зачем он нужен"
+  heading="Факты, которые можно проверить"
+  facts={[
+    { figure: "127.0.0.1", title: "Кадры остаются на вашем Mac", body: "Шлюз слушает только loopback. Другие компьютеры не могут к нему подключиться, и ни один кадр не уходит в интернет.", source: { text: "Безопасность", href: "/ru/docs/reference/security/" } },
+    { figure: "SDK", title: "Официальный эмулятор Android", body: "Он запускает эмулятор и системные образы Google из Android SDK — те же, что использует Android Studio. Если SDK у вас уже есть, шлюз использует его.", source: { text: "Требования", href: "/ru/docs/getting-started/requirements/" } },
+    { figure: "1.24×", title: "Нагрузка на CPU близка к scrcpy", body: "Во время 16 свайпов подряд на Mac с M4 (виртуальное устройство Pixel 5 API 34, 1080×2340, Chrome 157, транспорт rgba-mmap) эмулятор, шлюз и Chrome вместе использовали 257% CPU. scrcpy, измеренный тем же способом с тем же эмулятором, использовал 208%.", source: { text: "Измеренная производительность", href: "/ru/docs/getting-started/requirements/#measured-performance" } },
+    { figure: "MIT", title: "Открытый исходный код", body: "Каждая строка кода шлюза и страницы опубликована на GitHub под лицензией MIT.", source: { text: "github.com/twosugar/droidpier", href: "https://github.com/twosugar/droidpier" } },
+  ]}
+/>
+
+<Compare
+  eyebrow="Сравнение"
+  heading="Чем он отличается от других способов увидеть эмулятор"
+  body="Только различия, которые можно проверить. Каждый инструмент хорош в том, для чего он создан."
+  corner="Вопрос"
+  columns={["Droidpier", "Эмулятор Android Studio", "scrcpy", "Облачные эмуляторы (например, Appetize)"]}
+  rows={[
+    { label: "Где работает Android", cells: ["Официальный эмулятор на вашем Mac", "Официальный эмулятор на вашем Mac", "Подключённое вами устройство или эмулятор", "Серверы поставщика"] },
+    { label: "Где вы его видите", cells: ["Вкладка Chrome или Edge", "Окно Running Devices в Android Studio или собственное окно эмулятора", "Окно настольного приложения", "Вкладка браузера"] },
+    { label: "Нужна ли Android Studio", cells: ["Нет; нужны шлюз, эмулятор и системный образ", "Да, для представления Running Devices", "Нет", "Нет"] },
+    { label: "Как передаются кадры", cells: ["Необработанные кадры RGBA через 127.0.0.1", "Окно эмулятора или Android Studio, оба на вашем Mac", "Видео H.264", "Видео через интернет"] },
+    { label: "Цена", cells: ["Бесплатно, лицензия MIT", "Бесплатно", "Бесплатно, лицензия Apache-2.0", "Платные тарифы"] },
+  ]}
+/>
+
+{/* <!-- 待第 3 阶段 Task 5 确认 --> */}
+{/* <!-- verify: phase 3 --> */}
+<Steps
+  eyebrow="Начать"
+  heading="Два шага до первого кадра"
+  copyLabel="Копировать"
+  copiedLabel="Скопировано"
+  failedLabel="Не удалось скопировать"
+  steps={[
+    { title: "Выполните одну команду", body: "Выполните это в Терминале и не закрывайте окно. Команда установит или обновит droidpier в ~/.local/bin и запустит его. Чтобы остановить, нажмите Ctrl+C.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Руководство по установке", href: "/ru/docs/getting-started/install/" } },
+    { title: "Откройте страницу", body: "Откройте https://droid.devpier.dev/app/ в Chrome. Страница подключится сама. В первый раз, когда Chrome спросит, может ли страница получить доступ к вашей локальной сети, нажмите «Разрешить».", link: { text: "Доступ к локальной сети", href: "/ru/docs/getting-started/first-run/#4-allow-local-network-access" } },
+  ]}
+  actions={[
+    { text: "Читать документацию", href: "/ru/docs/getting-started/requirements/", variant: "primary" },
+    { text: "Поставить звезду на GitHub", href: "https://github.com/twosugar/droidpier" },
+  ]}
+/>

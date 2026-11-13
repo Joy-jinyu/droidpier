@@ -1,0 +1,554 @@
+---
+/**
+ * 首页首屏：左边是主标语（HeroCopy，文案来自 frontmatter 的 hero），右边是可操作的手机，
+ * 手机旁边是演示说明和片段列表。屏幕上是静态截图，点片段列表或在屏幕上左右滑动切换截图。可见文案全部从 props 传入。
+ * 宽屏两栏：[主标语 | 手机] / [演示说明 | 手机]；窄屏依次是主标语、手机、演示说明。
+ */
+import "../../styles/home.css";
+import HeroCopy from "./HeroCopy.astro";
+
+interface Clip {
+  id: string;
+  label: string;
+  /** 828x1794 的截图 */
+  src: string;
+}
+
+interface Props {
+  eyebrow: string;
+  heading: string;
+  body: string;
+  /** 手机上方地址条里显示的地址 */
+  address: string;
+  /** 片段列表的无障碍名称 */
+  listLabel: string;
+  /** 设备按钮的无障碍名称：返回、主页、最近任务 */
+  navLabels: [string, string, string];
+  clips: Clip[];
+}
+
+const { eyebrow, heading, body, address, listLabel, navLabels, clips } = Astro.props;
+const first = clips[0];
+const pad = (n: number) => String(n + 1).padStart(2, "0");
+---
+
+<section class="emu-hero not-content" data-phone-demo>
+  <div class="emu-hero__copy">
+    <HeroCopy />
+  </div>
+
+  <div class="emu-hero__stage" data-stage>
+    <div class="emu-hero__halo" aria-hidden="true"></div>
+
+    <div class="emu-hero__device" data-device>
+      <div class="emu-hero__bar" aria-hidden="true">
+        <span class="emu-hero__address" dir="ltr">{address}</span>
+        <span class="emu-hero__nav" title={navLabels.join(" · ")}>
+          <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"></path></svg>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"></circle></svg>
+          <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"></rect></svg>
+        </span>
+      </div>
+
+      <div class="emu-phone" data-tilt>
+        <div class="emu-phone__screen" data-screen>
+          <img
+            data-phone-shot
+            src={first.src}
+            alt={first.label}
+            width="828"
+            height="1794"
+            decoding="async"
+            loading="eager"
+            fetchpriority="high"
+            draggable="false"
+          />
+          <span class="emu-phone__glass" aria-hidden="true"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="emu-hero__demo" data-enter style="--e:3">
+    <span class="emu-eyebrow">{eyebrow}</span>
+    <h2>{heading}</h2>
+    <p>{body}</p>
+    <ol class="emu-hero__clips" aria-label={listLabel}>
+      {
+        clips.map((clip, i) => (
+          <li>
+            <button
+              type="button"
+              data-clip={i}
+              data-src={clip.src}
+              data-label={clip.label}
+              aria-pressed={i === 0 ? "true" : "false"}
+            >
+              <span class="emu-hero__index" aria-hidden="true">{pad(i)}</span>
+              <span class="emu-hero__label">{clip.label}</span>
+            </button>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<script>
+  import { motionStopped } from "../../scripts/motion.ts";
+
+  for (const root of document.querySelectorAll<HTMLElement>("[data-phone-demo]")) {
+    const shot = root.querySelector<HTMLImageElement>("[data-phone-shot]")!;
+    const screen = root.querySelector<HTMLElement>("[data-screen]")!;
+    const stage = root.querySelector<HTMLElement>("[data-stage]")!;
+    const phone = root.querySelector<HTMLElement>("[data-tilt]")!;
+    const items = [...root.querySelectorAll<HTMLButtonElement>("[data-clip]")];
+    let current = 0;
+
+    const show = (index: number) => {
+      const n = items.length;
+      const next = ((index % n) + n) % n;
+      const clip = items[next].dataset;
+      current = next;
+      shot.src = clip.src!;
+      shot.alt = clip.label!;
+      items.forEach((el, i) => el.setAttribute("aria-pressed", String(i === next)));
+    };
+
+    items.forEach((b, i) => b.addEventListener("click", () => show(i)));
+
+    // 屏幕上左右滑动切换
+    let startX = 0;
+    let startY = 0;
+    screen.addEventListener("pointerdown", (e) => {
+      startX = e.clientX;
+      startY = e.clientY;
+    });
+    screen.addEventListener("pointerup", (e) => {
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(e.clientY - startY)) return;
+      show(current + (dx < 0 ? 1 : -1));
+    });
+
+    // 鼠标在手机周围移动时手机跟着轻微倾斜；触屏、减少动态效果或暂停时不动。
+    // 只在指针停在舞台上时加 data-tilt-on，平时手机是 transform: none，截图不经过 3D 图层，画面不发糊
+    const fine = matchMedia("(hover: hover) and (pointer: fine)");
+    stage.addEventListener("pointermove", (e) => {
+      if (!fine.matches || motionStopped()) return;
+      const r = stage.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      phone.style.setProperty("--ry", `${(x * 8).toFixed(2)}deg`);
+      phone.style.setProperty("--rx", `${(-y * 6).toFixed(2)}deg`);
+      phone.toggleAttribute("data-tilt-on", true);
+    });
+    const level = () => {
+      phone.removeAttribute("data-tilt-on");
+      phone.style.removeProperty("--ry");
+      phone.style.removeProperty("--rx");
+    };
+    stage.addEventListener("pointerleave", level);
+
+    // 减少动态效果或“暂停动画”打开时把手机放平
+    document.addEventListener("emu:motion", () => {
+      if (motionStopped()) level();
+    });
+  }
+</script>
+
+<style>
+  /* ---------- 布局 ---------- */
+  .emu-hero {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "copy"
+      "stage"
+      "demo";
+    gap: clamp(2.5rem, 7vw, 3.5rem);
+    padding-block: clamp(1.5rem, 6vw, 4rem) clamp(1rem, 3vw, 2rem);
+    /* 光晕比舞台宽，横向裁掉，免得窄屏出现横向滚动 */
+    overflow-x: clip;
+  }
+
+  @media (min-width: 64rem) {
+    .emu-hero {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
+      grid-template-areas:
+        "copy stage"
+        "demo stage";
+      grid-template-rows: auto auto;
+      column-gap: clamp(2rem, 5vw, 5rem);
+      row-gap: 3rem;
+      align-content: center;
+      padding-block: 1rem 0;
+    }
+
+  }
+
+  .emu-hero__copy {
+    grid-area: copy;
+    display: grid;
+    justify-items: start;
+    gap: 1.5rem;
+    align-self: end;
+  }
+
+  .emu-hero__stage {
+    grid-area: stage;
+    position: relative;
+    display: grid;
+    place-items: center;
+    padding-block: 1rem;
+  }
+
+  .emu-hero__demo {
+    grid-area: demo;
+    display: grid;
+    justify-items: start;
+    gap: 0.6rem;
+    align-self: start;
+    max-inline-size: 34rem;
+  }
+
+  /* ---------- 主标语 ---------- */
+  .emu-hero__copy :global(.emu-hero__title) {
+    margin: 0;
+    max-inline-size: 13ch;
+    font-size: clamp(2.6rem, 6.4vw, 4.9rem);
+    line-height: 1;
+    letter-spacing: -0.042em;
+    font-weight: 640;
+    color: var(--emu-text);
+    text-wrap: balance;
+  }
+
+  .emu-hero__copy :global(.emu-hero__tagline) {
+    margin: 0;
+    max-inline-size: 34rem;
+    font-size: clamp(1.1rem, 2vw, 1.3rem);
+    text-wrap: pretty;
+    line-height: 1.5;
+    color: var(--emu-muted);
+  }
+
+  /* 副标题前的提示符：呼应“一条命令”，等宽、强调色。“>” 是双向镜像字符，RTL 下自动显示成朝左的“<”，在行首（右端）指向文字 */
+  .emu-hero__copy :global(.emu-hero__tagline)::before {
+    content: ">";
+    display: inline-block;
+    margin-inline-end: 0.55em;
+    font-family: var(--sl-font-mono);
+    font-weight: 600;
+    color: var(--emu-accent);
+  }
+
+  .emu-hero__copy :global(.emu-hero__actions) {
+    margin-block-start: 0.75rem;
+  }
+
+  /* ---------- 手机 ---------- */
+
+  /* 手机背后的光晕和细点纹，只在舞台范围内，往四周淡出 */
+  .emu-hero__halo {
+    position: absolute;
+    inset: -8% -18%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(closest-side, color-mix(in srgb, var(--emu-glow) 55%, transparent), transparent 80%) center / 80% 75%
+        no-repeat,
+      radial-gradient(circle, color-mix(in srgb, var(--emu-muted) 35%, transparent) 1px, transparent 1.5px) 0 0 /
+        1.25rem 1.25rem;
+    mask-image: radial-gradient(closest-side, black 35%, transparent);
+  }
+  :global([data-theme="light"]) .emu-hero__halo {
+    background:
+      radial-gradient(closest-side, color-mix(in srgb, var(--emu-glow) 26%, transparent), transparent 70%) center / 70% 60%
+        no-repeat,
+      radial-gradient(circle, color-mix(in srgb, var(--emu-muted) 30%, transparent) 1px, transparent 1.5px) 0 0 /
+        1.25rem 1.25rem;
+  }
+
+  .emu-hero__device {
+    display: grid;
+    justify-items: center;
+    gap: 1rem;
+    perspective: 1400px;
+  }
+
+  /* 手机上方的小工具条：地址 + 返回/主页/最近任务，对应网页模拟器里屏幕上方那一排 */
+  .emu-hero__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    max-inline-size: 100%;
+    padding: 0.4rem 0.5rem 0.4rem 0.9rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--emu-surface) 85%, transparent);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px -14px rgb(0 0 0 / 0.5);
+  }
+
+  .emu-hero__address {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--sl-font-mono);
+    font-size: 0.75rem;
+    color: var(--emu-muted);
+  }
+
+  .emu-hero__nav {
+    display: inline-flex;
+    gap: 0.15rem;
+    flex: none;
+    color: var(--emu-text);
+  }
+  .emu-hero__nav svg {
+    inline-size: 1.65rem;
+    block-size: 1.65rem;
+    padding: 0.35rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* 真机外观：石墨色机身、细金属边、侧键、打孔摄像头、玻璃反光和柔和的投影。
+     机身两个主题都是深色，和真机一致 */
+  .emu-phone {
+    --rx: 0deg;
+    --ry: 0deg;
+    position: relative;
+    inline-size: min(17rem, 68vw);
+    padding: 0.6rem;
+    border-radius: 1.95rem;
+    background: linear-gradient(150deg, #3a4148 0%, #15191d 18%, #0d1013 55%, #262c32 100%);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.1),
+      inset 0 0 0 4px #07090b,
+      0 2px 0 0 rgb(255 255 255 / 0.04),
+      0 40px 80px -30px rgb(0 0 0 / 0.65),
+      0 30px 90px -40px color-mix(in srgb, var(--emu-glow) 55%, transparent);
+    transition: transform 0.6s var(--emu-ease);
+  }
+  .emu-phone[data-tilt-on] {
+    transform: rotateX(var(--rx)) rotateY(var(--ry));
+  }
+  :global([data-theme="light"]) .emu-phone {
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.12),
+      inset 0 0 0 4px #07090b,
+      0 40px 70px -34px rgb(10 30 40 / 0.55),
+      0 24px 80px -40px color-mix(in srgb, var(--emu-glow) 60%, transparent);
+  }
+
+  /* 侧键：电源键和音量键，物理位置在机身右侧，RTL 也不翻转 */
+  .emu-phone::before,
+  .emu-phone::after {
+    content: "";
+    position: absolute;
+    right: -3px;
+    inline-size: 3px;
+    border-radius: 0 2px 2px 0;
+    background: linear-gradient(90deg, #22272c, #3b4248);
+  }
+  .emu-phone::before {
+    top: 18%;
+    block-size: 11%;
+  }
+  .emu-phone::after {
+    top: 33%;
+    block-size: 6%;
+  }
+
+  /* 屏幕圆角要接近真机（Pixel 5 约为屏宽 8–9%）：录屏的状态栏按真机圆角留边距，圆角再大就会切掉时间。
+     按屏宽的比例算（宽 7.8%、高 3.6%，宽屏时约 1.35rem），窄屏手机变小时圆角跟着变小，不会切掉时间。
+     机身圆角固定 1.95rem（宽屏屏幕圆角 + 内边距），窄屏时比屏幕圆角大几个像素 */
+  .emu-phone__screen {
+    position: relative;
+    aspect-ratio: 1080 / 2340;
+    border-radius: 7.8% / 3.6%;
+    overflow: hidden;
+    background: #050607;
+    touch-action: pan-y;
+    user-select: none;
+  }
+
+  /* 打孔摄像头 */
+  .emu-phone__screen::before {
+    content: "";
+    position: absolute;
+    z-index: 2;
+    top: 1.6%;
+    left: 50%;
+    inline-size: 0.7rem;
+    block-size: 0.7rem;
+    margin-left: -0.35rem;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #2b3640, #050607 60%);
+    box-shadow: 0 0 0 2px rgb(0 0 0 / 0.6);
+    pointer-events: none;
+  }
+
+  .emu-phone__screen img {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  /* 玻璃反光：一道很淡的斜向高光，不挡点击 */
+  .emu-phone__glass {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(
+      118deg,
+      rgb(255 255 255 / 0.1) 0%,
+      rgb(255 255 255 / 0.04) 28%,
+      transparent 28.5%,
+      transparent 100%
+    );
+  }
+
+  /* ---------- 演示说明和片段列表 ---------- */
+  .emu-hero__demo h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+    font-weight: 600;
+    color: var(--emu-text);
+  }
+
+  .emu-hero__demo p {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--emu-muted);
+  }
+
+  .emu-hero__clips {
+    list-style: none;
+    margin: 0.9rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.25rem;
+    inline-size: 100%;
+    max-inline-size: 26rem;
+  }
+
+  .emu-hero__clips button {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.5rem 0.9rem;
+    inline-size: 100%;
+    min-block-size: 2.9rem;
+    padding: 0.6rem 0.9rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: var(--emu-muted);
+    font: inherit;
+    font-size: 0.95rem;
+    text-align: start;
+    cursor: pointer;
+    transition:
+      background-color 0.2s,
+      color 0.2s,
+      translate 0.2s var(--emu-ease);
+  }
+
+  .emu-hero__clips button:hover {
+    color: var(--emu-text);
+    background: var(--emu-surface);
+  }
+  .emu-hero__clips button[aria-pressed="false"]:hover {
+    translate: 2px 0;
+  }
+  .emu-hero__clips button[aria-pressed="false"]:hover:dir(rtl) {
+    translate: -2px 0;
+  }
+
+  .emu-hero__clips button:focus-visible {
+    outline: 2px solid var(--emu-accent);
+    outline-offset: 2px;
+  }
+
+  .emu-hero__clips button[aria-pressed="true"] {
+    color: var(--emu-text);
+    background: var(--emu-surface);
+  }
+
+  .emu-hero__index {
+    font-family: var(--sl-font-mono);
+    font-size: 0.75rem;
+    color: var(--emu-muted);
+  }
+  .emu-hero__clips button[aria-pressed="true"] .emu-hero__index {
+    color: var(--emu-accent);
+  }
+
+  .emu-hero__label {
+    font-weight: 520;
+  }
+
+  /* ---------- 载入编排：文字依次升起，手机从下方浮上来，光晕慢慢亮起 ---------- */
+  :global(.emu-motion) .emu-hero :global([data-enter]) {
+    animation: emu-rise 0.8s calc(var(--e, 0) * 90ms) var(--emu-ease) both;
+  }
+  :global(.emu-motion) .emu-hero__device {
+    animation: emu-phone-in 1.1s 0.15s var(--emu-ease) both;
+  }
+  :global(.emu-motion) .emu-hero__halo {
+    animation: emu-fade 1.2s 0.1s ease-out both;
+  }
+
+  @keyframes emu-rise {
+    from {
+      opacity: 0;
+      translate: 0 1.25rem;
+    }
+  }
+
+  @keyframes emu-phone-in {
+    from {
+      opacity: 0;
+      translate: 0 2.5rem;
+      scale: 0.96;
+    }
+  }
+
+  @keyframes emu-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @media (min-width: 64rem) {
+    .emu-phone {
+      /* 让手机连同上方工具条放得进一屏：屏幕比例 1080:2340 ≈ 0.46 */
+      inline-size: clamp(15rem, calc((100svh - 14rem) * 0.46), 18.5rem);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.emu-motion) .emu-hero *,
+    :global(.emu-motion) .emu-hero :global(*) {
+      animation: none !important;
+    }
+    .emu-phone {
+      transition: none;
+    }
+    .emu-hero__clips button:hover {
+      translate: none !important;
+    }
+  }
+</style>

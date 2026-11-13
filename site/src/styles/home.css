@@ -1,0 +1,197 @@
+/**
+ * 首页各区块共用的样式：区块间距、区块标题、按钮、随滚动出现。
+ * 颜色只用 theme.css 里的 --emu-* 变量；半透明色用 color-mix 从这些变量派生。
+ * 默认不画边框，表面之间靠底色深浅区分；一个元素只有一层底色。
+ * 动画一律挂在 html.emu-motion 下，循环动画还要求没有 html.emu-paused（各 class 的来源见 scripts/motion.ts）。
+ * 减少动态效果、禁用 JS、或者动效脚本没加载成功时，页面直接是最终状态。
+ */
+
+:root {
+  --emu-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.emu-section {
+  margin-block: clamp(5rem, 11vw, 9rem) 0;
+}
+
+.emu-section-head {
+  display: grid;
+  justify-items: start;
+  gap: 0.9rem;
+  max-width: 46rem;
+  margin-block-end: clamp(2rem, 4.5vw, 3.25rem);
+}
+
+/* 区块标签：单独一行，小号大写，600 字重 */
+.emu-eyebrow {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--emu-muted);
+}
+
+.emu-section-head h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.8vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  font-weight: 620;
+  color: var(--emu-text);
+  text-wrap: balance;
+}
+
+.emu-section-head p {
+  margin: 0;
+  max-width: 40rem;
+  color: var(--emu-muted);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+/* 按钮：主按钮实心强调色，次按钮浅一级底色；都没有边框 */
+.emu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-block-size: 2.875rem;
+  padding-inline: 1.25rem;
+  border: 0;
+  border-radius: 0.375rem;
+  font-size: 0.975rem;
+  font-weight: 560;
+  text-decoration: none;
+  color: var(--emu-text);
+  background: var(--emu-surface);
+  transition:
+    background-color 0.2s,
+    color 0.2s,
+    translate 0.2s var(--emu-ease),
+    box-shadow 0.2s;
+}
+
+.emu-btn:hover {
+  color: var(--emu-text);
+  background: var(--emu-surface-2);
+  translate: 0 -1px;
+}
+
+.emu-btn:active {
+  translate: 0 0;
+}
+
+.emu-btn:focus-visible {
+  outline: 2px solid var(--emu-accent);
+  outline-offset: 3px;
+}
+
+.emu-btn--primary {
+  background: var(--emu-accent);
+  color: var(--emu-on-accent);
+  box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--emu-glow) 70%, transparent);
+}
+
+.emu-btn--primary:hover {
+  color: var(--emu-on-accent);
+  background: color-mix(in srgb, var(--emu-accent) 88%, var(--emu-text));
+  box-shadow: 0 14px 34px -12px color-mix(in srgb, var(--emu-glow) 85%, transparent);
+}
+
+.emu-btn svg {
+  inline-size: 1.1em;
+  block-size: 1.1em;
+  flex: none;
+}
+
+/* 箭头在悬停时往前挪一点；RTL 下箭头本身是翻转的，挪动方向也跟着反过来 */
+.emu-btn [data-flip-rtl] {
+  display: inline-flex;
+  transition: translate 0.2s var(--emu-ease);
+}
+.emu-btn:hover [data-flip-rtl] {
+  translate: 3px 0;
+}
+.emu-btn [data-flip-rtl]:dir(rtl) {
+  transform: scaleX(-1);
+}
+.emu-btn:hover [data-flip-rtl]:dir(rtl) {
+  translate: -3px 0;
+}
+
+.emu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* 文字链接（出处、文档入口）：中性色加强调色下划线，悬停变成强调色 */
+.emu-link {
+  color: var(--emu-text);
+  font-size: 0.875rem;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--emu-accent) 60%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+  transition:
+    color 0.2s,
+    text-decoration-color 0.2s;
+}
+.emu-link:hover {
+  color: var(--emu-accent);
+  text-decoration-color: currentColor;
+}
+.emu-link:focus-visible {
+  outline: 2px solid var(--emu-accent);
+  outline-offset: 2px;
+}
+
+/* 随滚动出现：只有 initMotion 加上 emu-reveal-ready 后才先隐藏 */
+.emu-reveal-ready [data-reveal] {
+  transition:
+    opacity 0.8s var(--emu-ease),
+    translate 0.8s var(--emu-ease);
+  transition-delay: calc(var(--i, 0) * 80ms);
+}
+
+.emu-reveal-ready [data-reveal]:not(.is-in) {
+  opacity: 0;
+  translate: 0 1.5rem;
+}
+
+@media (prefers-reduced-motion: reduce), print {
+  /* 悬停时的位移也去掉，只保留颜色变化 */
+  .emu-btn,
+  .emu-btn:hover,
+  .emu-btn [data-flip-rtl],
+  .emu-btn:hover [data-flip-rtl] {
+    translate: none !important;
+  }
+  .emu-reveal-ready [data-reveal] {
+    transition: none;
+  }
+  .emu-reveal-ready [data-reveal]:not(.is-in) {
+    opacity: 1;
+    translate: none;
+  }
+}
+
+/* 首页的 Starlight 外壳：页头透明叠在光晕上，内容区宽一些 */
+:root[data-has-hero] {
+  --sl-content-width: 72rem;
+}
+
+/* 首页底色上叠一层很淡的颗粒，避免大面积纯色发闷；颗粒是内联 SVG（CSP 允许 img-src data:） */
+:root[data-has-hero] body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-has-hero][data-theme="light"] body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 阿拉伯文、天城文在 11px 下笔画糊成一团，小标签放大一档（这两种语言本来也没有大写） */
+:root:is(:lang(ar), :lang(hi)) :is(.emu-eyebrow, .emu-arch__metrics dt, .emu-compare__table thead th) {
+  font-size: 0.8125rem;
+}

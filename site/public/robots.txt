@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://droid.devpier.dev/sitemap-index.xml

@@ -1,0 +1,364 @@
+---
+/**
+ * 架构动画：浏览器 ⇄ 网关 ⇄ 模拟器。画面帧从模拟器流向浏览器，输入事件反向流动。
+ * SVG 里只画图形，不放文字；节点名、图例和实测数字都是 HTML，便于翻译和 RTL。
+ */
+import "../../styles/home.css";
+
+interface Node {
+  name: string;
+  detail: string;
+}
+
+interface Metric {
+  value: string;
+  unit: string;
+  label: string;
+}
+
+interface Props {
+  eyebrow: string;
+  heading: string;
+  body: string;
+  /** 依次是浏览器、网关、模拟器 */
+  nodes: [Node, Node, Node];
+  /** 依次是画面帧、输入事件两条通道的说明 */
+  lanes: [string, string];
+  metrics: Metric[];
+  /** 测试条件小字 */
+  conditions: string;
+  /** 测试条件后面的出处链接，指向文档里的完整测量说明 */
+  source: { text: string; href: string };
+}
+
+const { eyebrow, heading, body, nodes, lanes, metrics, conditions, source } = Astro.props;
+const frames = [0, 1, 2, 3, 4, 5];
+const inputs = [0, 1, 2];
+---
+
+<section class="emu-section emu-arch not-content" data-live>
+  <header class="emu-section-head" data-reveal>
+    <span class="emu-eyebrow">{eyebrow}</span>
+    <h2>{heading}</h2>
+    <p>{body}</p>
+  </header>
+
+  <div class="emu-arch__panel" data-reveal style="--i:1">
+    <svg class="arch" viewBox="0 0 600 140" aria-hidden="true" focusable="false">
+      <line class="arch__lane" x1="100" y1="58" x2="500" y2="58"></line>
+      <line class="arch__lane" x1="100" y1="84" x2="500" y2="84"></line>
+
+      <g class="arch__frames">
+        {frames.map((i) => <rect class="arch__frame" x="489" y="52" width="18" height="12" rx="2" style={`--d:${i * 0.4}s`} />)}
+      </g>
+      <g class="arch__inputs">
+        {inputs.map((i) => <circle class="arch__input" cx="100" cy="84" r="4.5" style={`--d:${i * 0.8}s`} />)}
+      </g>
+
+      <g class="arch__node">
+        <rect x="40" y="26" width="120" height="88" rx="8"></rect>
+        <rect class="arch__glyph" x="76" y="50" width="48" height="36" rx="3"></rect>
+        <line class="arch__glyph" x1="76" y1="58" x2="124" y2="58"></line>
+        <circle class="arch__dot" cx="82" cy="54" r="1.5"></circle>
+        <circle class="arch__dot" cx="87" cy="54" r="1.5"></circle>
+      </g>
+      <g class="arch__node arch__node--hub">
+        <rect x="240" y="26" width="120" height="88" rx="8"></rect>
+        <rect class="arch__glyph" x="282" y="52" width="36" height="36" rx="4"></rect>
+        <rect class="arch__glyph arch__core" x="291" y="61" width="18" height="18" rx="2"></rect>
+        <path class="arch__glyph" d="M288 52v-6M300 52v-6M312 52v-6M288 94v-6M300 94v-6M312 94v-6"></path>
+      </g>
+      <g class="arch__node">
+        <rect x="440" y="26" width="120" height="88" rx="8"></rect>
+        <rect class="arch__glyph" x="486" y="44" width="28" height="52" rx="5"></rect>
+        <line class="arch__glyph" x1="496" y1="90" x2="504" y2="90"></line>
+      </g>
+    </svg>
+
+    <ul class="emu-arch__nodes">
+      {
+        nodes.map((n) => (
+          <li>
+            <strong>{n.name}</strong>
+            <span>{n.detail}</span>
+          </li>
+        ))
+      }
+    </ul>
+
+    <ul class="emu-arch__legend">
+      <li><span class="swatch swatch--frame" aria-hidden="true"></span>{lanes[0]}</li>
+      <li><span class="swatch swatch--input" aria-hidden="true"></span>{lanes[1]}</li>
+    </ul>
+  </div>
+
+  <dl class="emu-arch__metrics">
+    {
+      metrics.map((m, i) => (
+        <div data-reveal style={`--i:${i + 2}`}>
+          <dt>{m.label}</dt>
+          <dd>
+            <span class="value">{m.value}</span>
+            <span class="unit">{m.unit}</span>
+          </dd>
+        </div>
+      ))
+    }
+  </dl>
+  <p class="emu-arch__conditions">
+    {conditions} <a class="emu-link emu-arch__source" href={source.href}>{source.text}</a>
+  </p>
+</section>
+
+<style>
+  .emu-arch__panel {
+    display: grid;
+    gap: 1rem;
+    padding: 0 clamp(0rem, 3vw, 2.5rem);
+    /* 面板本身不填底色：三个节点各自有底色，避免底色套底色 */
+    border-radius: 1rem;
+  }
+
+  .arch {
+    display: block;
+    inline-size: 100%;
+    block-size: auto;
+    overflow: visible;
+  }
+
+  /* RTL：整张图镜像，浏览器出现在右边；SVG 里如果有文字要单独翻回来。
+     用 :dir() 而不是 [dir=rtl] 祖先选择器：Starlight 的 <main> 会单独带 dir（比如 ar 站点里的英文回退页是 ltr），
+     要跟随离元素最近的方向，SVG 才会和下面的 HTML 节点名一致 */
+  .arch:dir(rtl) {
+    transform: scaleX(-1);
+  }
+  .arch:dir(rtl) text {
+    transform: scaleX(-1);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .arch__lane {
+    stroke: var(--emu-muted);
+    stroke-opacity: 0.5;
+    stroke-width: 1;
+    stroke-dasharray: 2 6;
+  }
+
+  .arch__node rect:first-child {
+    fill: var(--emu-surface-2);
+  }
+  /* 网关是主角：稍亮一点的底，外加一圈很淡的光 */
+  .arch__node--hub rect:first-child {
+    filter: drop-shadow(0 0 18px color-mix(in srgb, var(--emu-glow) 35%, transparent));
+  }
+
+  .arch__glyph {
+    fill: none;
+    stroke: var(--emu-text);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+  .arch__core {
+    fill: color-mix(in srgb, var(--emu-accent) 35%, transparent);
+    stroke: var(--emu-accent);
+  }
+  .arch__dot {
+    fill: var(--emu-muted);
+  }
+
+  .arch__frame {
+    fill: var(--emu-accent);
+    opacity: 0;
+  }
+  .arch__input {
+    fill: var(--emu-bg);
+    stroke: var(--emu-text);
+    stroke-width: 1.5;
+    opacity: 0;
+  }
+
+  /* 无动画时的静态画面：每条通道上停几颗包，表达方向 */
+  .arch__frame:nth-child(1) {
+    opacity: 1;
+    translate: -95px 0;
+  }
+  .arch__frame:nth-child(2) {
+    opacity: 1;
+    translate: -305px 0;
+  }
+  .arch__input:nth-child(1) {
+    opacity: 1;
+    translate: 95px 0;
+  }
+  .arch__input:nth-child(2) {
+    opacity: 1;
+    translate: 300px 0;
+  }
+
+  /* 暂停时连动画对象都不创建，回到上面的静态画面 */
+  :global(.emu-motion:not(.emu-paused)) .emu-arch .arch__frame,
+  :global(.emu-motion:not(.emu-paused)) .emu-arch .arch__input {
+    animation-delay: var(--d);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+    animation-play-state: paused;
+  }
+  :global(.emu-motion:not(.emu-paused)) .emu-arch .arch__frame {
+    animation-name: emu-frame;
+    animation-duration: 2.4s;
+  }
+  :global(.emu-motion:not(.emu-paused)) .emu-arch .arch__input {
+    animation-name: emu-input;
+    animation-duration: 2.4s;
+  }
+  :global(.emu-motion:not(.emu-paused)) .emu-arch.is-live .arch__frame,
+  :global(.emu-motion:not(.emu-paused)) .emu-arch.is-live .arch__input {
+    animation-play-state: running;
+  }
+  :global(.emu-motion:not(.emu-paused)) .emu-arch.is-live .arch__core {
+    animation: emu-blink 0.4s steps(2) infinite;
+  }
+
+  @keyframes emu-frame {
+    0% {
+      translate: 0 0;
+      opacity: 0;
+    }
+    8%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      translate: -400px 0;
+      opacity: 0;
+    }
+  }
+  @keyframes emu-input {
+    0% {
+      translate: 0 0;
+      opacity: 0;
+    }
+    8%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      translate: 400px 0;
+      opacity: 0;
+    }
+  }
+  @keyframes emu-blink {
+    to {
+      fill: color-mix(in srgb, var(--emu-accent) 70%, transparent);
+    }
+  }
+
+  .emu-arch__nodes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    text-align: center;
+  }
+  .emu-arch__nodes li {
+    display: grid;
+    gap: 0.25rem;
+    align-content: start;
+  }
+  .emu-arch__nodes strong {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--emu-text);
+  }
+  .emu-arch__nodes span {
+    font-size: 0.85rem;
+    line-height: 1.45;
+    color: var(--emu-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .emu-arch__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--emu-muted);
+  }
+  .emu-arch__legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .swatch {
+    flex: none;
+    inline-size: 0.9rem;
+    block-size: 0.65rem;
+    border-radius: 2px;
+  }
+  .swatch--frame {
+    background: var(--emu-accent);
+  }
+  .swatch--input {
+    inline-size: 0.65rem;
+    border-radius: 50%;
+    border: 1.5px solid var(--emu-text);
+  }
+
+  .emu-arch__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(1rem, 4vw, 3rem);
+    margin: clamp(2rem, 5vw, 3rem) 0 0;
+  }
+  .emu-arch__metrics > div {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: start;
+    gap: 0.5rem;
+  }
+  .emu-arch__metrics dt {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--emu-muted);
+  }
+  .emu-arch__metrics dd {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+  .emu-arch__metrics .value {
+    font-size: clamp(2.5rem, 8vw, 4.5rem);
+    font-weight: 600;
+    line-height: 0.95;
+    letter-spacing: -0.05em;
+    color: var(--emu-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .emu-arch__metrics .unit {
+    font-size: clamp(0.95rem, 2vw, 1.25rem);
+    font-weight: 500;
+    color: var(--emu-text);
+  }
+
+  .emu-arch__conditions {
+    margin: 1.5rem 0 0;
+    max-inline-size: 52rem;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--emu-muted);
+  }
+  .emu-arch__source {
+    font-size: inherit;
+  }
+</style>

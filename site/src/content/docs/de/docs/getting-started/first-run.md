@@ -1,0 +1,91 @@
+---
+title: Erster Start
+description: Starten Sie das Gateway mit einem Befehl, lassen Sie es das Android SDK prüfen, erlauben Sie den Zugriff auf das lokale Netzwerk in Chrome und sehen Sie Ihren Emulator.
+sourceHash: 67f231cc69cd
+---
+
+Führen Sie einen Befehl im Terminal aus und lassen Sie das Fenster geöffnet, öffnen Sie `https://droid.devpier.dev/app/` und erlauben Sie den Zugriff auf das lokale Netzwerk, wenn Chrome danach fragt.
+
+## 1. Gateway starten
+
+```sh
+curl -fsSL https://droid.devpier.dev/install.sh | sh
+```
+
+Er installiert oder aktualisiert das Gateway bei Bedarf und startet es. Siehe [Installation](/de/docs/getting-started/install/). Nach der Installation startet es auch `droidpier`.
+
+Das Gateway läuft in diesem Terminal-Fenster weiter. Lassen Sie das Fenster geöffnet, solange Sie die Seite verwenden.
+
+Das Gateway lauscht auf `127.0.0.1`, standardmäßig auf Port `7300`. Wie Sie einen anderen Port verwenden, steht unter [Befehlszeile](/de/docs/reference/cli/).
+
+## 2. Android SDK prüfen lassen {#2-let-it-check-your-android-sdk}
+
+<!-- verify: phase 3 -->
+Beim Start prüft das Gateway, ob das Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, das Systemabbild `system-images;android-34;google_apis;arm64-v8a` und mindestens ein virtuelles Gerät (AVD) vorhanden sind. Fehlt etwas, listet es jedes Element im Terminal mit einem Befehl zur manuellen Installation auf und bittet Sie, die Einrichtung auf der Seite abzuschließen. Im Terminal stellt es keine Fragen.
+
+<!-- verify: phase 3 -->
+Die Seite zeigt dieselbe Liste, mit der Downloadgröße jedes Elements:
+
+| Fehlt | Was Sie auf der Seite tun |
+|---|---|
+| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, Systemabbild | Installieren Sie ein Element mit der Schaltfläche daneben oder alle auf einmal. |
+| Kein AVD | Erstellen Sie ein Gerät: Wählen Sie ein Gerätemodell und eine Android-Version. |
+| Java, wenn ein Element es braucht | Installieren Sie Android Studio, das Java mitbringt, oder JDK 17 oder neuer, und öffnen Sie die Seite dann erneut. Das Gateway installiert Java nicht. |
+
+<!-- verify: phase 3 -->
+Es wird nichts heruntergeladen oder erstellt, bevor Sie auf der Seite bestätigen. Vorher zeigt die Seite, was heruntergeladen wird, wohin es kommt und wie viel Speicherplatz es braucht. Während der Installation zeigt die Seite jede Google-Lizenz vollständig an, und ein Element wird nur installiert, wenn Sie zustimmen. Befehlszeilentools ab Version 23 akzeptieren die Lizenzen möglicherweise ohne Nachfrage; darauf weist die Seite hin, bevor Sie bestätigen.
+
+Zum Beispiel, um das Systemabbild manuell zu installieren:
+
+```sh
+sdkmanager "system-images;android-34;google_apis;arm64-v8a"
+```
+
+## 3. Seite öffnen {#3-open-the-page}
+
+<!-- verify: phase 3 -->
+Öffnen Sie `https://droid.devpier.dev/app/` in Chrome oder Edge. Beim Start gibt das Gateway diese Adresse auch aus und öffnet sie in Ihrem Standardbrowser. Wenn Ihr Standardbrowser nicht Chrome oder Edge ist, öffnen Sie die Adresse selbst in Chrome oder Edge.
+
+Die Seite verbindet sich von selbst. Solange kein Gateway antwortet, prüft sie einmal pro Sekunde und verbindet sich, sobald das Gateway startet, ohne Neuladen. Solange der Tab im Hintergrund ist, prüft sie nicht.
+
+Wenn das Gateway nicht auf Port `7300` läuft, endet die ausgegebene Adresse auf `#port=<port>`:
+
+```text
+https://droid.devpier.dev/app/#port=7301
+```
+
+Öffnen Sie diese Adresse, damit die Seite den richtigen Port findet.
+
+## 4. Zugriff auf das lokale Netzwerk erlauben {#4-allow-local-network-access}
+
+<!-- verify: phase 3 -->
+Wenn sich die Seite zum ersten Mal mit dem Gateway auf Ihrem Mac verbindet, zeigt Chrome eine Berechtigungsabfrage, ob `droid.devpier.dev` auf Ihr lokales Netzwerk zugreifen darf. Klicken Sie auf **Zulassen**. Chrome merkt sich die Entscheidung für die Website.
+
+Wenn Sie es abgelehnt haben, siehe [Fehlerbehebung](/de/docs/guides/troubleshooting/#chrome-blocked-local-network-access).
+
+## 5. Emulator verwenden
+
+Wenn bereits ein Emulator mit gRPC läuft, zeigt die Seite seinen Bildschirm.
+
+<!-- verify: phase 2 -->
+Andernfalls wählen Sie ein Gerät in der Liste aus und starten es. Siehe [Geräte](/de/docs/guides/devices/).
+
+Klicken Sie auf den Bildschirm, damit er den Tastaturfokus erhält. Dann:
+
+- Klicken zum Tippen; Ziehen zum Wischen.
+- Schreiben Sie mit der Tastatur Ihres Macs. Siehe [Tastatur und Eingabe](/de/docs/guides/keyboard-and-input/).
+- Verwenden Sie die Tasten Zurück, Startbildschirm und Letzte Apps über dem Bildschirm.
+
+## Stoppen
+
+Drücken Sie `Ctrl+C` in dem Terminal, in dem das Gateway läuft, oder schließen Sie dieses Fenster. Laufende Emulatoren laufen weiter. Wenn Sie das Gateway das nächste Mal starten, mit demselben Befehl oder mit `droidpier`, verbindet es sich wieder mit ihnen.
+
+## Die lokale Ersatzseite
+
+Das Gateway stellt dieselbe Seite auch selbst unter `http://127.0.0.1:7300/app/` bereit (oder unter dem Port, den Sie gewählt haben). Verwenden Sie sie, wenn die öffentliche Seite nicht lädt oder keine Verbindung herstellen kann.
+
+Damit das Gateway die lokale Seite statt der öffentlichen öffnet, starten Sie es mit `--local`:
+
+```sh
+droidpier --local
+```

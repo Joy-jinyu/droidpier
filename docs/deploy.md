@@ -4,7 +4,7 @@
 
 | 地址 | 内容 | 来源 |
 | --- | --- | --- |
-| `/` | 官网 | android-emu-web-site 仓库的 `site/dist` |
+| `/` | 官网 | 本仓库 `site/` 构建出的 `site/dist` |
 | `/app/` | 网页模拟器 | 本仓库 `bun run build:ui` 的产物 `.nsh/out/Droidpier` |
 | `/download/droidpier-darwin-arm64.tar.xz`、`.tar.xz.sha256` | 网关可执行文件 | 本仓库 `bun run build:bin` 的产物 `dist/` |
 | `/install.sh` | 安装脚本 | 本仓库 `scripts/install.sh` |
@@ -21,16 +21,34 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 
 在 Chrome 或 Edge 里打开 https://droid.devpier.dev/app/，Chrome 弹出访问本地网络的权限框时点"允许"。
 
+## 自动部署
+
+`.github/workflows/pages.yml`：合并进 `main` 后自动构建并部署整站（官网、`/app/`、下载包、`install.sh`）；PR 上只跑测试和构建，不部署。官网源码在本仓库的 `site/`。
+
+- nsh 用 `longbridge/nsh` 的发行版（工作流里的 `NSH_VERSION`），下载后核对 sha256。
+- 网关下载包只在网关源码（`gateway/`、`shared/`、`scripts/build-binary.ts`、`scripts/scrub-paths.ts`、`package.json`、`pnpm-lock.yaml`）变了时重建，否则沿用线上那份，免得用户每次运行安装命令都重新下载。判断方法：源码指纹随下载包发布在 `/download/droidpier-darwin-arm64.source`，和当前代码算出的比。手动运行（Actions → pages → Run workflow）勾选“强制重新构建网关下载包”可以强制重建。
+- 部署前扫描部署目录和解压后的可执行文件，命中就不部署；日志里只列命中的文件名，不打印内容。
+
+仓库 Settings → Secrets and variables → Actions 里要有：
+
+| 密钥 | 内容 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API 令牌，权限 Account → Cloudflare Pages → Edit |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
+| `PRIVACY_PATTERNS` | 不能出现在公开产物里的词，一行一个正则（不区分大小写）；没配就不部署 |
+
+下面的手动步骤在流水线不可用时照做。
+
 ## 部署步骤
 
 部署和登录都要维护者本人来做。
 
-1. 构建官网：在 android-emu-web-site 仓库的 `site/` 里运行 `bun run build`，得到 `site/dist`。
+1. 构建官网：在本仓库的 `site/` 里运行 `bun install` 和 `bun run build`，得到 `site/dist`。
 2. 构建网关和页面：在本仓库运行 `bun run build:bin`。它先跑 `build:ui`，再生成 `dist/droidpier-darwin-arm64.tar.xz` 和 `.sha256`。`build:ui` 需要 nsh：把 `NSH` 设成 nsh 可执行文件的路径，或把 `nsh` 放进 `PATH`；编 wasm 用的 llvm 默认在 `/opt/homebrew/opt/llvm/bin`，别处的话设 `LLVM_BIN`。
 3. 拼部署目录：
 
    ```sh
-   node scripts/build-pages.ts <android-emu-web-site 仓库>/site/dist
+   node scripts/build-pages.ts site/dist
    ```
 
    产物在 `dist/pages`。脚本最后会检查：必需文件都在、sha256 对得上、没有超过 25 MiB 的文件、`/app/` 下没有 `.br`/`.gz`、`_headers` 里 `/app/` 的 CSP 放行了本机网关（`ws://127.0.0.1:*`）和 DevTools iframe（`https://chrome-devtools-frontend.appspot.com`）。有一项不通过就以非 0 退出，不要部署。

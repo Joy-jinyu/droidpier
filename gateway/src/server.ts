@@ -810,7 +810,11 @@ export async function startServer(opts: {
           enqueue("touch", (s) => s.touch(m.x, m.y, m.down));
           break;
         case "key":
-          enqueue("key", (s) => s.key(m.key, m.eventType));
+          // 模拟器不接受按键时页面上看起来就是“点了没反应”：把原因告诉页面，日志照旧由 enqueue 写
+          enqueue("key", (s) => s.key(m.key, m.eventType).catch((e: Error) => {
+            send(ws, { t: "error", message: `按键没有发出：${e.message}` });
+            throw e;
+          }));
           break;
         case "text":
           enqueue("text", (s) => s.text(m.text));

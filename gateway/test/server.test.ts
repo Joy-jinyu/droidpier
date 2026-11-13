@@ -50,7 +50,11 @@ class FakeSession implements EmulatorSession {
   }
   screenshotData: Buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]); // 伪 PNG 头
   async touch(x: number, y: number, down: boolean) { this.touches.push({ x, y, down }); this.calls.push("touch"); }
-  async key() { this.calls.push("key"); }
+  keyError: Error | undefined;
+  async key() {
+    if (this.keyError) throw this.keyError;
+    this.calls.push("key");
+  }
   async text() {
     await new Promise((r) => setTimeout(r, this.textDelayMs));
     if (this.textError) throw this.textError;
@@ -1595,6 +1599,17 @@ test("输入中文时 adb 粘贴无响应：告诉这个页面 adb 没有响应"
   c.ws.send(JSON.stringify({ t: "text", text: "你好" }));
   await until(() => c.msgs.some((m) => m.t === "error"));
   assert.deepEqual(c.msgs.find((m) => m.t === "error"), { t: "error", code: "adb-unresponsive", message: ADB_UNRESPONSIVE });
+});
+
+test("模拟器拒绝按键时把原因告诉页面，不再只写网关日志", async (t) => {
+  const { connect, session } = await setup(t);
+  session!.keyError = new Error("12 UNIMPLEMENTED: sendKey");
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  c.ws.send(JSON.stringify({ t: "key", key: "GoBack", eventType: "keypress" }));
+  await until(() => c.msgs.some((m) => m.t === "error"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "error"), { t: "error", message: "按键没有发出：12 UNIMPLEMENTED: sendKey" });
 });
 
 // ─────────────── 重启模拟器 ───────────────

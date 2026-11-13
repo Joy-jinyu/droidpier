@@ -1,6 +1,6 @@
 // 后台运行：用当前用户的 LaunchAgent（launchd）跑网关，关闭终端不影响，登录后自动启动，崩溃后自动拉起
 import { execFile } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { parseCli } from "./cli.ts";
@@ -161,6 +161,8 @@ export async function serviceStart(d: ServiceDeps, o: { args: string[]; noOpen: 
     const v = d.env[k] || prevEnv[k];
     if (v) env[k] = v;
   }
+  // 后台进程靠它找到自己的日志去轮转（rotateLog）；正式 label 不用写
+  if (d.label !== SERVICE_LABEL) env.DROIDPIER_SERVICE_LABEL = d.label;
   const xml = plistXml({ label: d.label, program: d.program, args, logPath: p.log, env });
 
   const before = await state(d);
@@ -304,6 +306,30 @@ export async function serviceLogs(d: ServiceDeps): Promise<number> {
   for (const l of lines) d.log(l);
   return 0;
 }
+
+/** 日志轮转上限。launchd 不轮转 StandardOutPath，网关日志不多，5 MB 够看好几个月。 */
+export const LOG_LIMIT = 5 * 2 ** 20;
+
+export type RotateIo = { size(path: string): Promise<number | null>; copy(from: string, to: string): Promise<void>; truncate(path: string): Promise<void> };
+
+/**
+ * 后台进程启动时调用：日志超过上限就复制成 <日志>.1（覆盖旧的）再清空原文件。
+ * 不能改名：launchd 在拉起进程前就打开了这个文件，改名后这次运行仍写进改了名的文件；
+ * launchd 以追加方式打开，清空后接着从头写（2026-11-13 实测）。
+ */
+export async function rotateLog(path: string, io: RotateIo, limit = LOG_LIMIT): Promise<boolean> {
+  const n = await io.size(path);
+  if (n === null || n <= limit) return false;
+  await io.copy(path, `${path}.1`);
+  await io.truncate(path);
+  return true;
+}
+
+export const realRotateIo: RotateIo = {
+  size: (p) => stat(p).then((s) => s.size, () => null),
+  copy: (a, b) => copyFile(a, b),
+  truncate: (p) => truncate(p, 0),
+};
 
 /** 真实的依赖。label 来自 serviceLabel()：DROIDPIER_SERVICE_LABEL 只给测试用，换一个 label，不碰正式的后台服务。 */
 export function realServiceDeps(label: string): ServiceDeps {

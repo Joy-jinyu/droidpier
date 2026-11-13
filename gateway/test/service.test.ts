@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { argsFromPlist, plistXml, serviceLabel, serviceLogs, serviceStart, serviceStatus, serviceStop, SERVICE_LABEL, type ServiceDeps } from "../src/service.ts";
+import { argsFromPlist, plistXml, rotateLog, serviceLabel, serviceLogs, serviceStart, serviceStatus, serviceStop, SERVICE_LABEL, type ServiceDeps } from "../src/service.ts";
 
 const HOME = "/Users/someone";
 const PLIST = `${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist`;
@@ -257,6 +257,8 @@ test("测试用的 label 换日志文件名，不碰正式服务的日志", asyn
   await serviceStart(f.deps, { args: [], noOpen: true });
   assert.ok(f.files[`${HOME}/Library/LaunchAgents/dev.devpier.droidpier.test.plist`]);
   assert.match(f.files[`${HOME}/Library/LaunchAgents/dev.devpier.droidpier.test.plist`], /Droidpier\/dev\.devpier\.droidpier\.test\.log/);
+  // 后台进程自己要知道 label，才能找到自己的日志去轮转
+  assert.match(f.files[`${HOME}/Library/LaunchAgents/dev.devpier.droidpier.test.plist`], /<key>DROIDPIER_SERVICE_LABEL<\/key>\s*<string>dev\.devpier\.droidpier\.test<\/string>/);
 });
 
 test("start：/healthz 应答的不是 launchd 拉起的那个进程（前台的 droidpier）时不算启动成功", async () => {
@@ -321,4 +323,19 @@ test("serviceLabel：默认用正式 label；测试 label 只许字母、数字�
   assert.deepEqual(serviceLabel({}), { label: SERVICE_LABEL });
   assert.deepEqual(serviceLabel({ DROIDPIER_SERVICE_LABEL: "dev.devpier.droidpier.test-1" }), { label: "dev.devpier.droidpier.test-1" });
   for (const bad of ["../x", "a b", "a/b", "a<b"]) assert.ok("error" in serviceLabel({ DROIDPIER_SERVICE_LABEL: bad }), bad);
+});
+
+test("rotateLog：超过上限时把日志复制成 .1（覆盖旧的）并清空原文件；没超过或没有日志时不动", async () => {
+  const files: Record<string, string> = { "/l/droidpier.log": "x".repeat(11), "/l/droidpier.log.1": "old" };
+  const io = {
+    size: async (p: string) => (p in files ? files[p].length : null),
+    copy: async (a: string, b: string) => void (files[b] = files[a]),
+    truncate: async (p: string) => void (files[p] = ""),
+  };
+  assert.equal(await rotateLog("/l/droidpier.log", io, 10), true);
+  assert.deepEqual(files, { "/l/droidpier.log": "", "/l/droidpier.log.1": "x".repeat(11) });
+  files["/l/droidpier.log"] = "short";
+  assert.equal(await rotateLog("/l/droidpier.log", io, 10), false);
+  assert.equal(files["/l/droidpier.log"], "short");
+  assert.equal(await rotateLog("/l/missing.log", io, 10), false);
 });

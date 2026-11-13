@@ -6,7 +6,7 @@ import { startServer } from "./server.ts";
 import { listAvds, renameAvd } from "./avd.ts";
 import { startAvd, stopAvd } from "./lifecycle.ts";
 import { cachedSession } from "./session-cache.ts";
-import { avdHome, avdmanagerBin, cmdlineToolsManifestUrl, discoveryDir, emulatorBin, findJavaHome, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
+import { avdHome, avdmanagerBin, serviceLogPath, cmdlineToolsManifestUrl, discoveryDir, emulatorBin, findJavaHome, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
@@ -23,7 +23,7 @@ import { buildPageUrl } from "./page-url.ts";
 import { parseCli, USAGE, versionLine } from "./cli.ts";
 import { checkPortFirst, explainBusyPort } from "./already-running.ts";
 import { cleanStaleUploads } from "./upload-temp.ts";
-import { realServiceDeps, serviceLabel, serviceLogs, serviceStart, serviceStatus, serviceStop } from "./service.ts";
+import { realRotateIo, realServiceDeps, rotateLog, serviceLabel, serviceLogs, serviceStart, serviceStatus, serviceStop } from "./service.ts";
 import { tmpdir } from "node:os";
 
 // scripts/build-binary.ts 打包时把 DROIDPIER_VERSION 替换成构建时间；直接用源码跑时没有
@@ -65,6 +65,10 @@ if (cli.kind === "service") {
   process.exit(await run[cli.command]());
 }
 const { port, noOpen, allowOrigins: extraOrigins, service } = cli.options;
+if (service) {
+  const l = serviceLabel(process.env);
+  if ("label" in l) await rotateLog(serviceLogPath(l.label), realRotateIo).catch((e: Error) => console.log(`日志轮转失败：${e.message}`));
+}
 // 默认打开公网页面；--local 改为打开本机页面；--public 是兼容别名，不改行为（见 gateway/src/page-url.ts）
 
 /** 端口被占时打印判断、需要时打开页面，然后退出。后台服务一律按正常退出，launchd 不会每 10 秒重试一次。 */

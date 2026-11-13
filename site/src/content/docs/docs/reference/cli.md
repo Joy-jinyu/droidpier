@@ -61,7 +61,7 @@ With or without `--no-open`, the page finds the gateway by itself. See [First ru
 | Variable | Effect |
 |---|---|
 | `ANDROID_HOME` | The Android SDK directory. Without it, the gateway uses `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | The directory that holds AVDs. Without it, the gateway uses `avd` inside `ANDROID_USER_HOME`, or `~/.android/avd`, like the emulator. |
+| `ANDROID_AVD_HOME` | The directory that holds AVDs. Without it, the gateway uses `avd` inside `ANDROID_USER_HOME` when that holds AVDs, otherwise `~/.android/avd`. The gateway passes the result to the emulators it starts. |
 | `ANDROID_USER_HOME` | The Android user directory. Without it, the gateway uses `~/.android`. |
 | `DEBUG=1` | Print one line per second for each connection: frames received, sent and dropped, average frame size, and the delay from the emulator to the gateway. |
 

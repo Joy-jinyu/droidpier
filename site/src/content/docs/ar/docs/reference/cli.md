@@ -1,7 +1,7 @@
 ---
 title: سطر الأوامر
 description: الخيارات ومتغيرات البيئة لأمر بوابة Droidpier.
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | المتغير | التأثير |
 |---|---|
 | `ANDROID_HOME` | دليل Android SDK. من دونه، تستخدم البوابة `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | الدليل الذي يحتوي على أجهزة AVD. من دونه، تستخدم البوابة `avd` داخل `ANDROID_USER_HOME`، أو `~/.android/avd`، كما يفعل المحاكي. |
+| `ANDROID_AVD_HOME` | الدليل الذي يحتوي على أجهزة AVD. من دونه، تستخدم البوابة `avd` داخل `ANDROID_USER_HOME` إذا كان يحتوي على أجهزة AVD، وإلا `~/.android/avd`. وتمرّر البوابة النتيجة إلى المحاكيات التي تشغّلها. |
 | `ANDROID_USER_HOME` | دليل مستخدم Android. من دونه، تستخدم البوابة `~/.android`. |
 | `DEBUG=1` | يطبع سطرًا واحدًا في الثانية لكل اتصال: الإطارات المستلمة والمرسلة والمُسقطة، ومتوسط حجم الإطار، والتأخير من المحاكي إلى البوابة. |
 

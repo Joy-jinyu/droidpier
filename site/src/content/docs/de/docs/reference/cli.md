@@ -1,7 +1,7 @@
 ---
 title: Befehlszeile
 description: Optionen und Umgebungsvariablen für den Befehl des Droidpier-Gateways.
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ Mit oder ohne `--no-open` findet die Seite das Gateway von selbst. Siehe [Erster
 | Variable | Wirkung |
 |---|---|
 | `ANDROID_HOME` | Das Verzeichnis des Android SDK. Ohne sie verwendet das Gateway `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | Das Verzeichnis, das die AVDs enthält. Ohne sie verwendet das Gateway wie der Emulator `avd` in `ANDROID_USER_HOME` oder `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | Das Verzeichnis, das die AVDs enthält. Ohne sie verwendet das Gateway `avd` in `ANDROID_USER_HOME`, wenn dort AVDs liegen, sonst `~/.android/avd`. Das Gateway gibt das Ergebnis an die Emulatoren weiter, die es startet. |
 | `ANDROID_USER_HOME` | Das Android-Benutzerverzeichnis. Ohne sie verwendet das Gateway `~/.android`. |
 | `DEBUG=1` | Gibt pro Sekunde eine Zeile für jede Verbindung aus: empfangene, gesendete und verworfene Frames, durchschnittliche Frame-Größe und die Verzögerung vom Emulator zum Gateway. |
 

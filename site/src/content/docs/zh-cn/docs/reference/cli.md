@@ -1,7 +1,7 @@
 ---
 title: 命令行
 description: Droidpier 网关命令的选项和环境变量。
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 变量 | 效果 |
 |---|---|
 | `ANDROID_HOME` | Android SDK 目录。如未设置，网关使用 `~/Library/Android/sdk`。 |
-| `ANDROID_AVD_HOME` | 存放 AVD 的目录。如未设置，网关和模拟器一样使用 `ANDROID_USER_HOME` 里的 `avd`，或 `~/.android/avd`。 |
+| `ANDROID_AVD_HOME` | 存放 AVD 的目录。如未设置，`ANDROID_USER_HOME` 里的 `avd` 有 AVD 时网关用它，否则用 `~/.android/avd`。网关会把这个结果传给它启动的模拟器。 |
 | `ANDROID_USER_HOME` | Android 用户目录。如未设置，网关使用 `~/.android`。 |
 | `DEBUG=1` | 每秒为每个连接打印一行：已接收、已发送和已丢弃的帧数，平均帧大小，以及从模拟器到网关的延迟。 |
 

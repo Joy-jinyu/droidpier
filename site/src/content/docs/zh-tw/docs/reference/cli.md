@@ -1,7 +1,7 @@
 ---
 title: 命令列
 description: Droidpier 閘道命令的選項和環境變數。
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 變數 | 效果 |
 |---|---|
 | `ANDROID_HOME` | Android SDK 目錄。如未設定，閘道使用 `~/Library/Android/sdk`。 |
-| `ANDROID_AVD_HOME` | 存放 AVD 的目錄。如未設定，閘道和模擬器一樣使用 `ANDROID_USER_HOME` 裡的 `avd`，或 `~/.android/avd`。 |
+| `ANDROID_AVD_HOME` | 存放 AVD 的目錄。如未設定，`ANDROID_USER_HOME` 裡的 `avd` 有 AVD 時閘道用它，否則用 `~/.android/avd`。閘道會把這個結果傳給它啟動的模擬器。 |
 | `ANDROID_USER_HOME` | Android 使用者目錄。如未設定，閘道使用 `~/.android`。 |
 | `DEBUG=1` | 每秒為每個連線列印一行：已接收、已傳送和已捨棄的幀數，平均幀大小，以及從模擬器到閘道的延遲。 |
 

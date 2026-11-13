@@ -1,7 +1,7 @@
 ---
 title: Ligne de commande
 description: Options et variables d’environnement de la commande de la passerelle Droidpier.
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ Avec ou sans `--no-open`, la page trouve la passerelle d’elle-même. Voir [Pre
 | Variable | Effet |
 |---|---|
 | `ANDROID_HOME` | Le répertoire de l’Android SDK. Sans elle, la passerelle utilise `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | Le répertoire qui contient les AVD. Sans elle, la passerelle utilise `avd` dans `ANDROID_USER_HOME`, ou `~/.android/avd`, comme l'émulateur. |
+| `ANDROID_AVD_HOME` | Le répertoire qui contient les AVD. Sans elle, la passerelle utilise `avd` dans `ANDROID_USER_HOME` s'il contient des AVD, sinon `~/.android/avd`. La passerelle transmet ce résultat aux émulateurs qu'elle démarre. |
 | `ANDROID_USER_HOME` | Le répertoire utilisateur Android. Sans elle, la passerelle utilise `~/.android`. |
 | `DEBUG=1` | Affiche une ligne par seconde pour chaque connexion : images reçues, envoyées et abandonnées, taille moyenne des images, et délai entre l’émulateur et la passerelle. |
 

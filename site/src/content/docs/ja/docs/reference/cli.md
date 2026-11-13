@@ -1,7 +1,7 @@
 ---
 title: コマンドライン
 description: Droidpier ゲートウェイコマンドのオプションと環境変数。
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 変数 | 効果 |
 |---|---|
 | `ANDROID_HOME` | Android SDK ディレクトリ。設定しない場合、ゲートウェイは `~/Library/Android/sdk` を使用します。 |
-| `ANDROID_AVD_HOME` | AVD を格納するディレクトリ。設定しない場合、ゲートウェイはエミュレータと同じく `ANDROID_USER_HOME` 内の `avd`、または `~/.android/avd` を使用します。 |
+| `ANDROID_AVD_HOME` | AVD を格納するディレクトリ。設定しない場合、ゲートウェイは `ANDROID_USER_HOME` 内の `avd` に AVD があればそれを、なければ `~/.android/avd` を使用します。ゲートウェイは起動するエミュレータにこの結果を渡します。 |
 | `ANDROID_USER_HOME` | Android のユーザーディレクトリ。設定しない場合、ゲートウェイは `~/.android` を使用します。 |
 | `DEBUG=1` | 各接続について 1 秒ごとに 1 行表示：受信・送信・破棄されたフレーム数・平均フレームサイズ・エミュレーターからゲートウェイまでの遅延。 |
 

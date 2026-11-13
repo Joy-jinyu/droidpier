@@ -1,7 +1,7 @@
 ---
 title: कमांड लाइन
 description: Droidpier गेटवे कमांड के विकल्प और environment variables।
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | Variable | असर |
 |---|---|
 | `ANDROID_HOME` | Android SDK डायरेक्टरी। इसके बिना गेटवे `~/Library/Android/sdk` इस्तेमाल करता है। |
-| `ANDROID_AVD_HOME` | वह डायरेक्टरी जिसमें AVD रहते हैं। इसके बिना गेटवे एमुलेटर की तरह `ANDROID_USER_HOME` के अंदर `avd`, या `~/.android/avd` इस्तेमाल करता है। |
+| `ANDROID_AVD_HOME` | वह डायरेक्टरी जिसमें AVD रहते हैं। इसके बिना गेटवे `ANDROID_USER_HOME` के अंदर `avd` इस्तेमाल करता है अगर उसमें AVD हों, वरना `~/.android/avd`। गेटवे यही नतीजा अपने शुरू किए एमुलेटर को देता है। |
 | `ANDROID_USER_HOME` | Android यूज़र डायरेक्टरी। इसके बिना गेटवे `~/.android` इस्तेमाल करता है। |
 | `DEBUG=1` | हर कनेक्शन के लिए हर सेकंड एक लाइन प्रिंट करें: मिले, भेजे गए और छोड़े गए फ़्रेम, औसत फ़्रेम साइज़, और एमुलेटर से गेटवे तक की देरी। |
 

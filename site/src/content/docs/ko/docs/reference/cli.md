@@ -1,7 +1,7 @@
 ---
 title: 명령줄
 description: Droidpier 게이트웨이 명령의 옵션과 환경 변수.
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 변수 | 효과 |
 |---|---|
 | `ANDROID_HOME` | Android SDK 디렉터리입니다. 설정하지 않으면 게이트웨이는 `~/Library/Android/sdk`를 사용합니다. |
-| `ANDROID_AVD_HOME` | AVD가 들어 있는 디렉터리입니다. 설정하지 않으면 게이트웨이는 에뮬레이터처럼 `ANDROID_USER_HOME` 안의 `avd` 또는 `~/.android/avd`를 사용합니다. |
+| `ANDROID_AVD_HOME` | AVD가 들어 있는 디렉터리입니다. 설정하지 않으면 게이트웨이는 `ANDROID_USER_HOME` 안의 `avd`에 AVD가 있으면 그것을, 없으면 `~/.android/avd`를 사용합니다. 게이트웨이는 자신이 시작하는 에뮬레이터에 이 결과를 넘깁니다. |
 | `ANDROID_USER_HOME` | Android 사용자 디렉터리입니다. 설정하지 않으면 게이트웨이는 `~/.android`를 사용합니다. |
 | `DEBUG=1` | 연결마다 초당 한 줄씩 출력합니다: 받은 프레임, 보낸 프레임, 버린 프레임, 평균 프레임 크기, 에뮬레이터에서 게이트웨이까지의 지연. |
 

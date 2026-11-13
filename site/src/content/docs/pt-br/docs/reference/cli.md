@@ -1,7 +1,7 @@
 ---
 title: Linha de comando
 description: Opções e variáveis de ambiente do comando do gateway Droidpier.
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ Com ou sem `--no-open`, a página encontra o gateway sozinha. Veja [Primeira exe
 | Variável | Efeito |
 |---|---|
 | `ANDROID_HOME` | O diretório do Android SDK. Sem ela, o gateway usa `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | O diretório que contém os AVDs. Sem ela, o gateway usa `avd` dentro de `ANDROID_USER_HOME`, ou `~/.android/avd`, como o emulador. |
+| `ANDROID_AVD_HOME` | O diretório que contém os AVDs. Sem ela, o gateway usa `avd` dentro de `ANDROID_USER_HOME` quando ele contém AVDs; caso contrário, `~/.android/avd`. O gateway passa o resultado para os emuladores que inicia. |
 | `ANDROID_USER_HOME` | O diretório de usuário do Android. Sem ela, o gateway usa `~/.android`. |
 | `DEBUG=1` | Mostra uma linha por segundo para cada conexão: quadros recebidos, enviados e descartados, tamanho médio do quadro e o atraso do emulador até o gateway. |
 

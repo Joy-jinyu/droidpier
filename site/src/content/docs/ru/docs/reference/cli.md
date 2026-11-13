@@ -1,7 +1,7 @@
 ---
 title: Командная строка
 description: Параметры и переменные окружения команды шлюза Droidpier.
-sourceHash: eef348a17cbd
+sourceHash: 2510f26cb9be
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | Переменная | Действие |
 |---|---|
 | `ANDROID_HOME` | Каталог Android SDK. Без неё шлюз использует `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | Каталог, в котором хранятся AVD. Без неё шлюз, как и эмулятор, использует `avd` внутри `ANDROID_USER_HOME` или `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | Каталог, в котором хранятся AVD. Без неё шлюз использует `avd` внутри `ANDROID_USER_HOME`, если там есть AVD, иначе `~/.android/avd`. Шлюз передаёт результат эмуляторам, которые запускает. |
 | `ANDROID_USER_HOME` | Пользовательский каталог Android. Без неё шлюз использует `~/.android`. |
 | `DEBUG=1` | Раз в секунду выводить по строке для каждого подключения: полученные, отправленные и отброшенные кадры, средний размер кадра и задержку от эмулятора до шлюза. |
 

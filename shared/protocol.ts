@@ -351,8 +351,7 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return { t: "uploadCancel", id: o.id };
     case "start":
     case "use":
-      // 和 deleteAvd 一样：name 会拼进命令参数和文件路径，不合 AVD 名规则的整条丢掉
-      if (!isStr(o.name) || avdNameError(o.name, []) !== null) return null;
+      if (!isStr(o.name)) return null;
       return o as ClientMsg;
     case "webviews":
       if (!isNum(o.rid)) return null;

@@ -2096,6 +2096,18 @@ test("查不了对端进程（lsof 出错）：WebSocket 503 不握手，HTTP �
   assert.ok(logs.some((l) => /HTTP 请求放行.*lsof 超时/.test(l)), logs.join("\n"));
 });
 
+test("start / use 的名字不合 AVD 名规则：回一条错误，不去启动或切换", async (t) => {
+  const f = fakeAvd({});
+  const { connect } = await setup(t, null, async () => null, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  for (const t of ["start", "use"]) c.ws.send(JSON.stringify({ t, name: "../A" }));
+  await until(() => c.msgs.filter((m) => m.t === "error").length === 2);
+  for (const m of c.msgs.filter((m) => m.t === "error")) assert.match(m.message, /^设备名不对：/);
+  assert.deepEqual(f.calls, []);
+});
+
 test("Host 不是 127.0.0.1:<端口> 或 localhost:<端口>：HTTP 和 WebSocket 升级都是 421", async (t) => {
   const { srv } = await setup(t);
   for (const host of ["droid.devpier.dev", "evil.example:" + srv.port, `127.0.0.1:${srv.port + 1}`]) {

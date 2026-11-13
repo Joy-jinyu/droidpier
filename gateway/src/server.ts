@@ -898,11 +898,15 @@ export async function startServer(opts: {
             (e: Error) => send(ws, { t: "error", message: `读取 AVD 列表失败：${e.message}` }),
           );
           break;
-        case "start":
+        case "start": {
           if (!opts.avd) break;
-          if (deleting.has(m.name)) send(ws, { t: "error", message: DELETING });
+          // 名字会拼进启动参数，不合 AVD 名规则的不启动
+          const bad = avdNameError(m.name, []);
+          if (bad) send(ws, { t: "error", message: `设备名不对：${bad}` });
+          else if (deleting.has(m.name)) send(ws, { t: "error", message: DELETING });
           else startJob(m.name);
           break;
+        }
         case "stop":
           if (!opts.avd) break;
           if (!conn.session) {
@@ -913,6 +917,11 @@ export async function startServer(opts: {
           break;
         case "use": {
           if (!opts.avd) break;
+          const bad = avdNameError(m.name, []);
+          if (bad) {
+            send(ws, { t: "error", message: `设备名不对：${bad}` });
+            break;
+          }
           if (deleting.has(m.name)) {
             send(ws, { t: "error", message: DELETING });
             break;

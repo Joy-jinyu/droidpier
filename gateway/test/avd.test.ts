@@ -76,6 +76,28 @@ test("listAvds 合并运行状态：正在运行的 AVD 显示 grpc 并带 grpcP
   assert.equal(avd.apiLevel, 34);
 });
 
+test("listAvds 认出显示名和 id 不同的运行中 AVD（发现文件按 avd.id 对上）", async (t) => {
+  const tmpBase = await mkdtemp(join(tmpdir(), "emu-avd-test-"));
+  const discDir = await mkdtemp(join(tmpdir(), "emu-disc-test-"));
+  t.after(() => Promise.all([rm(tmpBase, { recursive: true, force: true }), rm(discDir, { recursive: true, force: true })]));
+  await writeFile(
+    join(discDir, `pid_${process.pid}.ini`),
+    "port.serial=5554\ngrpc.port=8554\navd.id=Resizable_Experimental\navd.name=Resizable (Experimental)\n",
+  );
+
+  const avds = await listAvds({
+    exec: async (cmd: string) => {
+      if (cmd.includes("-list-avds")) return { stdout: "Resizable_Experimental\n", stderr: "" };
+      return { stdout: "List of devices attached\nemulator-5554 device\n", stderr: "" };
+    },
+    discoveryDir: discDir,
+    avdHome: tmpBase,
+  });
+
+  assert.equal(avds[0].running, "grpc");
+  assert.equal(avds[0].serial, 5554);
+});
+
 test("listAvds emulator -list-avds 有 INFO 行时过滤掉", async (t) => {
   const tmpBase = await mkdtemp(join(tmpdir(), "emu-avd-test-"));
   const discDir = await mkdtemp(join(tmpdir(), "emu-disc-test-"));

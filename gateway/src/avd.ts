@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { avdHome as defaultAvdHome, emulatorBin, adbBin, discoveryDir as defaultDiscoveryDir } from "./platform.ts";
-import { pidAlive } from "./discovery.ts";
+import { discoveryAvdName, pidAlive } from "./discovery.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 
 const execFileP = promisify(execFile);
@@ -83,7 +83,7 @@ async function scanAllRunning(dir: string): Promise<Map<string, RunningEntry>> {
         const i = line.indexOf("=");
         if (i > 0) kv.set(line.slice(0, i).trim(), line.slice(i + 1).trim());
       }
-      const avdName = kv.get("avd.name");
+      const avdName = discoveryAvdName(kv);
       if (!avdName) continue;
       const serial = Number(kv.get("port.serial"));
       const grpcPort = Number(kv.get("grpc.port")) || undefined;

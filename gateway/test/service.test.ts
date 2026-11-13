@@ -10,7 +10,7 @@ const BIN = `${HOME}/.local/bin/droidpier`;
 type Holder = { kind: "droidpier"; version: string | null; service?: boolean } | { kind: "other" } | null;
 
 /** 假的 launchd + 文件系统 + 端口：bootstrap 读 plist 起一个新 pid，kickstart -k 换 pid，bootout 停掉。 */
-function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: number | null; holder?: Holder; startsOk?: boolean; env?: Record<string, string> } = {}) {
+function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: number | null; holder?: Holder; startsOk?: boolean; env?: Record<string, string>; slowExit?: number } = {}) {
   const files: Record<string, string> = { ...o.files };
   const calls: string[] = [];
   const out: string[] = [];
@@ -18,6 +18,8 @@ function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: numbe
   let loaded = o.loaded ?? false;
   let pid: number | null = o.pid ?? null;
   let nextPid = 500;
+  // bootout 返回后，launchd 还要列着这个服务几次 print（进程在退出清理）
+  let exiting = 0;
   const startsOk = o.startsOk ?? true;
   const spawn = () => (pid = startsOk ? nextPid++ : null);
   const deps: ServiceDeps = {
@@ -31,6 +33,11 @@ function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: numbe
       assert.equal(cmd, "/bin/launchctl");
       const [sub] = args;
       if (sub === "print") {
+        if (exiting > 0) {
+          exiting--;
+          if (exiting === 0) loaded = false;
+          return { code: 0, stdout: `gui/501/${SERVICE_LABEL} = {\n\tstate = running\n\tpid = 499\n}\n`, stderr: "" };
+        }
         if (!loaded) return { code: 113, stdout: "", stderr: "Could not find service" };
         return { code: 0, stdout: `gui/501/${SERVICE_LABEL} = {\n\tstate = ${pid ? "running" : "not running"}\n${pid ? `\tpid = ${pid}\n` : ""}\tenvironment = {\n\t\tstate = nested\n\t}\n}\n`, stderr: "" };
       }
@@ -46,8 +53,9 @@ function fake(o: { files?: Record<string, string>; loaded?: boolean; pid?: numbe
         return { code: 0, stdout: "", stderr: "" };
       }
       if (sub === "bootout") {
-        loaded = false;
         pid = null;
+        if (o.slowExit) exiting = o.slowExit;
+        else loaded = false;
         return { code: 0, stdout: "", stderr: "" };
       }
       throw new Error(`没想到的 launchctl 调用：${args.join(" ")}`);
@@ -181,6 +189,16 @@ test("stop：bootout 并删掉 plist（开机不再启动）", async () => {
   assert.equal(f.state().loaded, false);
   assert.match(f.out.join("\n"), /已停止/);
   assert.match(f.out.join("\n"), /droidpier start/);
+});
+
+test("stop：bootout 返回后等 launchd 真正放掉这个服务再说已停止", async () => {
+  const f = fake({ slowExit: 3 });
+  await serviceStart(f.deps, { args: [], noOpen: true });
+  assert.equal(await serviceStop(f.deps), 0);
+  assert.equal(f.state().loaded, false);
+  f.out.length = 0;
+  assert.equal(await serviceStatus(f.deps), 1);
+  assert.match(f.out.join("\n"), /没有在后台运行/);
 });
 
 test("stop：没在后台运行时只说明一下，不报错", async () => {

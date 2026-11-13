@@ -210,9 +210,9 @@ export async function serviceStop(d: ServiceDeps): Promise<number> {
     }
   }
   await d.rm(p.plist);
-  // 等端口放出来，紧接着再运行 droidpier 或 droidpier start 不会撞上正在退出的旧进程
-  const port = (xml && portOf(argsFromPlist(xml))) || null;
-  for (let waited = 0; port !== null && waited < d.waitMs && (await d.health(port)); waited += 200) await d.sleep(200);
+  // bootout 返回时网关还在退出清理（最多 3 秒），launchd 这时仍列着它；等它真正退出，
+  // 紧接着再运行 droidpier、droidpier start 或 status 才不会撞上正在退出的旧进程（2026-11-13 实测）
+  for (let waited = 0; waited < d.waitMs && (await state(d)).loaded; waited += 200) await d.sleep(200);
   d.log("已停止 droidpier 后台服务，开机也不会再自动启动。再次启动：droidpier start");
   return 0;
 }

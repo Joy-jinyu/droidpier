@@ -258,6 +258,15 @@ test("replaceDir：新目录换不过去时，旧的包目录放回原处", asyn
   await assert.rejects(replaceDir(src, target, parking, failSecond), /EXDEV/);
   assert.equal(await readFile(join(target, "emulator"), "utf8"), "old");
   assert.equal(existsSync(parking), false);
+  // 旧目录也挪不回去：两个错误都报，旧的留在 parking 里不能删
+  calls = 0;
+  const failAfterFirst = async (a: string, b: string) => {
+    if (++calls >= 2) throw new Error(calls === 2 ? "EXDEV" : "EBUSY");
+    await rename(a, b);
+  };
+  await assert.rejects(replaceDir(src, target, parking, failAfterFirst), (e: Error) => /EXDEV/.test(e.message) && /EBUSY/.test(e.message) && e.message.includes(parking));
+  assert.equal(await readFile(join(parking, "emulator"), "utf8"), "old");
+  await rename(parking, target);
   // 正常时换成新的，旧的留在 parking 由调用方删
   await replaceDir(src, target, parking);
   assert.equal(await readFile(join(target, "emulator"), "utf8"), "new");
@@ -371,9 +380,21 @@ test("网关启动时：删掉 .droidpier-tmp 里一天前的残留目录，新�
   await utimes(join(tmp, "emulator-old"), old, old);
   await cleanStaleInstallTmp(sdk, Date.now());
   assert.deepEqual(await readdir(tmp), ["emulator-new"]);
-  // 都删光了时连 .droidpier-tmp 一起删
+  // 删光了也留着 .droidpier-tmp：正要开始的安装可能刚 mkdir 了它
   await cleanStaleInstallTmp(sdk, Date.now() + 2 * 86_400_000);
-  assert.deepEqual(await readdir(sdk), []);
+  assert.deepEqual(await readdir(sdk), [".droidpier-tmp"]);
+});
+
+test("网关启动时：.droidpier-tmp 是符号链接就不碰它指向的东西", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "emu-stale-link-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "elsewhere/keep"), { recursive: true });
+  const old = new Date(Date.now() - 2 * 86_400_000);
+  await utimes(join(root, "elsewhere/keep"), old, old);
+  await mkdir(join(root, "sdk"));
+  await symlink(join(root, "elsewhere"), join(root, "sdk/.droidpier-tmp"));
+  await cleanStaleInstallTmp(join(root, "sdk"), Date.now());
+  assert.deepEqual(await readdir(join(root, "elsewhere")), ["keep"]);
 });
 
 test("fetchWithIdle：服务器一直不回数据，过了空闲时限就失败", async (t) => {

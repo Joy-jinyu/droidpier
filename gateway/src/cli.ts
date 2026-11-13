@@ -2,18 +2,30 @@
 import { isOrigin } from "./auth.ts";
 import { DEFAULT_PORT } from "./page-url.ts";
 
-/** 启动网关要用的参数。--local / --public 由 page-url.ts 直接看 argv。 */
-export type CliOptions = { port: number; noOpen: boolean; allowOrigins: string[] };
+/** 启动网关要用的参数。--local / --public 由 page-url.ts 直接看 argv。service 表示由 launchd 拉起（gateway/src/service.ts）。 */
+export type CliOptions = { port: number; noOpen: boolean; allowOrigins: string[]; service: boolean };
+
+export type ServiceCommand = "start" | "stop" | "status" | "logs";
 
 export type CliResult =
   | { kind: "run"; options: CliOptions }
+  | { kind: "service"; command: ServiceCommand; args: string[]; noOpen: boolean }
   | { kind: "help" }
   | { kind: "version" }
   | { kind: "error"; message: string };
 
-// --public 是兼容别名、--allow-origin 只在本地模拟公网页面时用，都不写进帮助
+const SERVICE_COMMANDS: readonly string[] = ["start", "stop", "status", "logs"];
+
+// --public 是兼容别名、--allow-origin 只在本地模拟公网页面时用、--service 只给 launchd 用，都不写进帮助
 export const USAGE = [
-  "用法：droidpier [--port <端口>] [--local] [--no-open]",
+  "用法：",
+  "  droidpier start [--port <端口>] [--local] [--no-open]",
+  "                   在后台运行：关闭终端不影响，开机后自动启动；已在运行时重启它",
+  "  droidpier stop    停止后台运行，开机也不再自动启动",
+  "  droidpier status  查看后台运行的状态",
+  "  droidpier logs    打印日志位置和最近的日志",
+  "  droidpier [--port <端口>] [--local] [--no-open]",
+  "                   在当前终端里运行，按 Ctrl+C 停止",
   "",
   `  --port <端口>  在 127.0.0.1 的这个端口上监听，默认 ${DEFAULT_PORT}`,
   "  --local        打开网关自己托管的页面 http://127.0.0.1:<端口>/app/，不打开公网页面",
@@ -26,11 +38,28 @@ export const USAGE = [
 export function parseCli(args: string[]): CliResult {
   if (args.includes("-h") || args.includes("--help")) return { kind: "help" };
   if (args.includes("--version")) return { kind: "version" };
-  const options: CliOptions = { port: DEFAULT_PORT, noOpen: false, allowOrigins: [] };
+  const [first, ...rest] = args;
+  if (first !== undefined && SERVICE_COMMANDS.includes(first)) {
+    const command = first as ServiceCommand;
+    if (command !== "start") return rest.length ? { kind: "error", message: `多余的参数：${rest[0]}` } : { kind: "service", command, args: [], noOpen: false };
+    if (rest.includes("--service")) return { kind: "error", message: "不认识的参数：--service" };
+    const r = parseRun(rest);
+    if (r.kind === "error") return r;
+    // --no-open 只管这一次打不打开页面；后台服务本来就不开浏览器
+    return { kind: "service", command, args: rest.filter((a) => a !== "--no-open"), noOpen: r.options.noOpen };
+  }
+  return parseRun(args);
+}
+
+function parseRun(args: string[]): Extract<CliResult, { kind: "run" | "error" }> {
+  const options: CliOptions = { port: DEFAULT_PORT, noOpen: false, allowOrigins: [], service: false };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--local" || a === "--public") continue;
-    if (a === "--no-open") {
+    if (a === "--service") {
+      options.service = true;
+      options.noOpen = true;
+    } else if (a === "--no-open") {
       options.noOpen = true;
     } else if (a === "--port") {
       const v = args[++i];

@@ -25,6 +25,23 @@ test("busyPortReport：正在运行的版本更旧（或旧到没有 /healthz）
   }
 });
 
+test("busyPortReport：端口上是后台服务时说明在后台运行、怎么停；更新提示改成 droidpier start", () => {
+  const r = busyPortReport({ port: 7300, pageUrl: URL_, ownVersion: "2026-11-12T10:00:00Z", running: { kind: "droidpier", version: "2026-11-12T10:00:00Z", service: true } });
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.lines, ["droidpier 已经在后台运行（端口 7300）", URL_, "停止后台运行：droidpier stop"]);
+  const old = busyPortReport({ port: 7300, pageUrl: URL_, ownVersion: "2026-11-12T10:00:00Z", running: { kind: "droidpier", version: "2026-11-01T00:00:00Z", service: true } });
+  assert.equal(old.lines.at(-1), "新版本已装好，运行 droidpier start 重启后台服务即可更新");
+});
+
+test("explainBusyPort：/healthz 报 service 时认出是后台服务", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "emu-busy-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const srv = await startServer({ port: 0, allowedOrigins: [], staticDir: dir, getSession: async () => null, version: "2026-11-12T10:00:00Z", service: true, log: () => {} });
+  t.after(() => srv.close());
+  const r = await explainBusyPort({ port: srv.port, pageUrl: URL_, ownVersion: "2026-11-12T10:00:00Z" });
+  assert.equal(r.lines[0], `droidpier 已经在后台运行（端口 ${srv.port}）`);
+});
+
 test("busyPortReport：自己是开发版（没有版本）时不判断新旧", () => {
   const r = busyPortReport({ port: 7300, pageUrl: URL_, ownVersion: "", running: { kind: "droidpier", version: null } });
   assert.equal(r.lines.length, 2);

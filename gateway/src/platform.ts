@@ -34,6 +34,19 @@ export function emulatorLogPath(avd: string): string {
   return join(homedir(), "Library/Logs/Droidpier", `${avd}.log`);
 }
 
+/** 后台运行的 LaunchAgent label（macOS launchd）。 */
+export const SERVICE_LABEL = "dev.devpier.droidpier";
+
+/** 后台运行用的 LaunchAgent plist（macOS launchd，见 gateway/src/service.ts）。 */
+export function launchAgentPath(label: string, home = homedir()): string {
+  return join(home, "Library/LaunchAgents", `${label}.plist`);
+}
+
+/** 后台运行的网关日志，和模拟器日志放在同一个目录；测试用的 label 用自己的文件名。 */
+export function serviceLogPath(label: string, home = homedir()): string {
+  return join(home, "Library/Logs/Droidpier", label === SERVICE_LABEL ? "droidpier.log" : `${label}.log`);
+}
+
 /** adb 可执行文件的绝对路径（adbPath 的别名）。 */
 export function adbBin(): string {
   return adbPath();

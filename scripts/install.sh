@@ -1,7 +1,9 @@
 #!/bin/sh
 # Droidpier 安装并启动：curl -fsSL https://droid.devpier.dev/install.sh | sh
-# 没装或有新版时下载打包好的可执行文件，校验 sha256，装到 ~/.local/bin/droidpier，然后启动它。
-# 参数原样传给 droidpier：curl … | sh -s -- --port 7310；只装不启动：DROIDPIER_NO_START=1
+# 没装或有新版时下载打包好的可执行文件，校验 sha256，装到 ~/.local/bin/droidpier，然后用 droidpier start 在后台启动
+# （macOS LaunchAgent：关闭终端不影响，开机后自动启动；已在运行时重启它，更新就换上了）。
+# 参数原样传给 droidpier start，存进后台服务：curl … | sh -s -- --port 7310
+# 只装不启动：DROIDPIER_NO_START=1；像以前一样在这个终端里前台运行：DROIDPIER_FOREGROUND=1
 set -eu
 
 # 整个脚本包在函数里：curl | sh 半途断线时不会只执行一半
@@ -92,15 +94,19 @@ main() {
   esac
 
   if [ -n "${DROIDPIER_NO_START:-}" ]; then
-    echo "运行 droidpier 启动"
+    echo "运行 droidpier start 在后台启动（或者运行 droidpier 在终端里前台运行）"
     exit 0
   fi
   # exec 之后 EXIT trap 不会再跑，临时目录要先删掉
   rm -rf "$tmp"
   trap - EXIT
-  echo "启动 droidpier（保持这个终端开着；按 Ctrl+C 停止）"
   # curl | sh 时 stdin 是送脚本的管道；网关不读 stdin，接 /dev/null 免得它继承这根管道
-  exec "$target" "$@" </dev/null
+  if [ -n "${DROIDPIER_FOREGROUND:-}" ]; then
+    echo "启动 droidpier（保持这个终端开着；按 Ctrl+C 停止）"
+    exec "$target" "$@" </dev/null
+  fi
+  echo "在后台启动 droidpier"
+  exec "$target" start "$@" </dev/null
 }
 
 main "$@"

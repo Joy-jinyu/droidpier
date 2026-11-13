@@ -58,7 +58,7 @@ async function fixture(t: { after(fn: () => unknown): void }, opts: { badSha?: b
 const ARCHIVE = `/${NAME}.tar.xz`;
 const SHA = `/${NAME}.tar.xz.sha256`;
 
-test("install.sh：第一次运行下载、校验、装到 ~/.local/bin，然后直接启动", async (t) => {
+test("install.sh：第一次运行下载、校验、装到 ~/.local/bin，然后用 droidpier start 在后台启动", async (t) => {
   const { dir, home, run, requests } = await fixture(t);
   const r = await run();
   assert.equal(r.status, 0, r.stderr);
@@ -68,10 +68,11 @@ test("install.sh：第一次运行下载、校验、装到 ~/.local/bin，然后
   assert.deepEqual(requests, [SHA, ARCHIVE]);
   assert.match(r.stdout, /不在 PATH 里/);
   assert.match(r.stdout, /export PATH="\$HOME\/\.local\/bin:\$PATH"/);
-  assert.match(r.stdout, /启动 droidpier（保持这个终端开着；按 Ctrl\+C 停止）\nfake-gateway\n$/);
+  assert.match(r.stdout, /在后台启动 droidpier\nfake-gateway start\n$/);
+  assert.doesNotMatch(r.stdout, /保持这个终端开着/);
 });
 
-test("install.sh：已装且 sha256 没变时只取 .sha256，不重新下载，直接启动", async (t) => {
+test("install.sh：已装且 sha256 没变时只取 .sha256，不重新下载，直接（重新）启动后台服务", async (t) => {
   const { run, requests } = await fixture(t);
   assert.equal((await run({ DROIDPIER_NO_START: "1" })).status, 0);
   requests.length = 0;
@@ -79,10 +80,10 @@ test("install.sh：已装且 sha256 没变时只取 .sha256，不重新下载，
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(requests, [SHA]);
   assert.match(r.stdout, /已是最新版本/);
-  assert.match(r.stdout, /fake-gateway\n$/);
+  assert.match(r.stdout, /fake-gateway start\n$/);
 });
 
-test("install.sh：远端 sha256 变了就重新下载、替换，再启动新版本", async (t) => {
+test("install.sh：远端 sha256 变了就重新下载、替换，再用 droidpier start 换上新版本", async (t) => {
   const { run, requests, publish } = await fixture(t);
   assert.equal((await run({ DROIDPIER_NO_START: "1" })).status, 0);
   await publish("fake-gateway-v2");
@@ -91,7 +92,7 @@ test("install.sh：远端 sha256 变了就重新下载、替换，再启动新�
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(requests, [SHA, ARCHIVE]);
   assert.match(r.stdout, /更新 droidpier/);
-  assert.match(r.stdout, /fake-gateway-v2\n$/);
+  assert.match(r.stdout, /fake-gateway-v2 start\n$/);
 });
 
 test("install.sh：已装但没有记录过 sha256（旧版脚本装的）时当作更新重新下载", async (t) => {
@@ -111,10 +112,10 @@ test("install.sh：DROIDPIER_NO_START=1 只安装不启动，并说明怎么启�
   assert.equal(r.status, 0, r.stderr);
   await stat(join(home, ".local/bin/droidpier"));
   assert.doesNotMatch(r.stdout, /fake-gateway/);
-  assert.match(r.stdout, /运行 droidpier 启动/);
+  assert.match(r.stdout, /运行 droidpier start 在后台启动/);
 });
 
-test("install.sh：脚本参数原样传给 droidpier（curl … | sh -s -- --port 7310）", async (t) => {
+test("install.sh：脚本参数原样传给 droidpier start（curl … | sh -s -- --port 7310），由它存进后台服务", async (t) => {
   const { home, base } = await fixture(t);
   const env = { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", HOME: home, DROIDPIER_DOWNLOAD: base };
   const r = await new Promise<{ status: number; stdout: string; stderr: string }>((res) => {
@@ -124,7 +125,14 @@ test("install.sh：脚本参数原样传给 droidpier（curl … | sh -s -- --po
     readFile(SCRIPT).then((src) => c.stdin!.end(src));
   });
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /fake-gateway --port 7310 --no-open\n$/);
+  assert.match(r.stdout, /fake-gateway start --port 7310 --no-open\n$/);
+});
+
+test("install.sh：DROIDPIER_FOREGROUND=1 照旧在这个终端里前台运行", async (t) => {
+  const { run } = await fixture(t);
+  const r = await run({ DROIDPIER_FOREGROUND: "1" }, ["--port", "7310"]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /启动 droidpier（保持这个终端开着；按 Ctrl\+C 停止）\nfake-gateway --port 7310\n$/);
 });
 
 test("install.sh：下载站连不上但已经装过时，提示后启动已装的版本", async (t) => {
@@ -134,7 +142,7 @@ test("install.sh：下载站连不上但已经装过时，提示后启动已装�
   const r = await run();
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stderr, /连不上下载站/);
-  assert.match(r.stdout, /fake-gateway\n$/);
+  assert.match(r.stdout, /fake-gateway start\n$/);
 });
 
 test("install.sh：下载站连不上又没装过时失败", async (t) => {

@@ -143,6 +143,8 @@ export async function startServer(opts: {
   log?: (s: string) => void;
   /** /healthz 报的网关版本；另一个 droidpier 启动时靠它判断谁更新（gateway/src/already-running.ts）。 */
   version?: string;
+  /** 由 launchd 拉起的后台服务；/healthz 报给前台再运行的 droidpier，让它说明怎么停（gateway/src/already-running.ts）。 */
+  service?: boolean;
 }): Promise<{ port: number; close(): Promise<void> }> {
   const log = opts.log ?? ((s: string) => console.log(s));
   const root = resolve(opts.staticDir);
@@ -189,7 +191,7 @@ export async function startServer(opts: {
       return;
     }
     if (rel === "/healthz") {
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ app: "droidpier", version: opts.version ?? "" }));
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ app: "droidpier", version: opts.version ?? "", service: opts.service === true }));
       return;
     }
     if (rel === "/" || rel === APP_PATH.slice(0, -1)) {

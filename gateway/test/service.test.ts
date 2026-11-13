@@ -286,13 +286,13 @@ test("start：kickstart 失败时报出 launchctl 的错误，退出码 1", asyn
   assert.match(f.out.join("\n"), /launchctl kickstart 失败：Operation already in progress/);
 });
 
-test("start：这次没设 ANDROID_HOME 时沿用 plist 里上次的值；JAVA_HOME 也带上", async () => {
+test("start：这次没设 ANDROID_HOME 时沿用 plist 里上次的值；JAVA_HOME 不再带（安装不用 Java 了）", async () => {
   const f = fake({ env: { ANDROID_HOME: "/opt/sdk", JAVA_HOME: "/opt/jdk" } });
   await serviceStart(f.deps, { args: [], noOpen: true });
   f.deps.env = {};
   await serviceStart(f.deps, { args: [], noOpen: true });
   assert.match(f.files[PLIST], /<key>ANDROID_HOME<\/key>\s*<string>\/opt\/sdk<\/string>/);
-  assert.match(f.files[PLIST], /<key>JAVA_HOME<\/key>\s*<string>\/opt\/jdk<\/string>/);
+  assert.doesNotMatch(f.files[PLIST], /JAVA_HOME/);
   f.deps.env = { ANDROID_HOME: "/new/sdk" };
   await serviceStart(f.deps, { args: [], noOpen: true });
   assert.match(f.files[PLIST], /<key>ANDROID_HOME<\/key>\s*<string>\/new\/sdk<\/string>/);

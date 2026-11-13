@@ -113,8 +113,8 @@ describe("AI 友好输出", () => {
     assert.ok(md.includes("/docs/getting-started/install/"), "index.md 缺安装文档链接");
     assert.ok(md.includes("Get started in two steps:"), "index.md 不是两步开始");
     assert.ok(
-      md.includes("Run this in Terminal and keep the window open: `curl -fsSL https://droid.devpier.dev/install.sh | sh`"),
-      "index.md 缺第 1 步（在终端运行安装命令并保持窗口打开）",
+      md.includes("Run this in Terminal: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. It installs droidpier, or updates it, and starts it in the background."),
+      "index.md 缺第 1 步（在终端运行安装命令，在后台启动）",
     );
     assert.ok(!/^import\s/m.test(md), "index.md 含 import 语句");
   });

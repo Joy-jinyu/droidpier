@@ -2028,3 +2028,73 @@ test("切换设备时连接失败：error 里带上真正的原因", async (t) =
   await until(() => c.msgs.some((m) => m.t === "error"));
   assert.match(c.msgs.find((m) => m.t === "error").message, /B 连不上：UNAUTHENTICATED: bad token/);
 });
+
+/** 用裸 TCP 发一个请求，返回状态行。Host 等头完全由调用方决定。 */
+async function rawRequest(port: number, head: string): Promise<string> {
+  const s = net.connect(port, "127.0.0.1");
+  s.on("error", () => {});
+  s.write(head);
+  let buf = "";
+  for await (const chunk of s) {
+    buf += chunk.toString();
+    if (buf.includes("\r\n")) break;
+  }
+  s.destroy();
+  return buf.split("\r\n")[0];
+}
+const wsHead = (port: number, host = `127.0.0.1:${port}`, origin = `http://127.0.0.1:${port}`) =>
+  `GET / HTTP/1.1\r\nHost: ${host}\r\nOrigin: ${origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${randomBytes(16).toString("base64")}\r\n\r\n`;
+const getHead = (path: string, host: string) => `GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`;
+const peerIs = (command: string) => ({ platform: "darwin", lookup: async () => ({ kind: "found" as const, pid: 4321, command }) });
+
+test("对端是模拟器进程（qemu-system-*）：WebSocket 升级和 HTTP 请求都是 403，日志写出进程名", async (t) => {
+  const { srv, logs, origin } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: peerIs("qemu-system-aar") });
+  // 伪造了白名单里的 Origin 也不行
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, undefined, "https://droid.devpier.dev")), "HTTP/1.1 403 Forbidden");
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, undefined, origin)), "HTTP/1.1 403 Forbidden");
+  assert.match(await rawRequest(srv.port, getHead("/healthz", `127.0.0.1:${srv.port}`)), /^HTTP\/1\.1 403/);
+  // Host 不对也先按对端拒绝（403），日志里有进程名
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, "10.0.2.2:" + srv.port)), "HTTP/1.1 403 Forbidden");
+  assert.ok(logs.some((l) => /拒绝 WebSocket：.*qemu-system-aar.*pid 4321/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /拒绝 HTTP 请求：.*qemu-system-aar/.test(l)), logs.join("\n"));
+});
+
+test("对端是浏览器：照常连上，收到 ready", async (t) => {
+  const { connect, logs } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: peerIs("Google Chrome He") });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  assert.equal(logs.some((l) => l.startsWith("拒绝")), false);
+});
+
+test("查不了对端进程（lsof 出错）：放行并写日志", async (t) => {
+  const peer = { platform: "darwin", lookup: async () => { throw new Error("spawn lsof ENOENT"); } };
+  const { connect, logs } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  assert.ok(logs.some((l) => /放行.*spawn lsof ENOENT/.test(l)), logs.join("\n"));
+});
+
+test("Host 不是 127.0.0.1:<端口> 或 localhost:<端口>：HTTP 和 WebSocket 升级都是 421", async (t) => {
+  const { srv } = await setup(t);
+  for (const host of ["droid.devpier.dev", "evil.example:" + srv.port, `127.0.0.1:${srv.port + 1}`]) {
+    assert.match(await rawRequest(srv.port, getHead("/healthz", host)), /^HTTP\/1\.1 421/, host);
+    assert.equal(await rawRequest(srv.port, wsHead(srv.port, host)), "HTTP/1.1 421 Misdirected Request", host);
+  }
+  assert.match(await rawRequest(srv.port, getHead("/healthz", `localhost:${srv.port}`)), /^HTTP\/1\.1 200/);
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, `localhost:${srv.port}`)), "HTTP/1.1 101 Switching Protocols");
+});
+
+test("deleteAvd：失败原因带本机路径的细节只写日志，不发给页面", async (t) => {
+  const f = fakeAvd({});
+  f.ops.delete = async () => { throw new Error("删除 A 失败，详情见网关日志", { cause: new Error("EACCES: permission denied, rmdir '/home/u/.android/avd/A.avd'") }); };
+  const { connect, logs } = await setup(t, new FakeSession(), undefined, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 11, name: "A" }));
+  await until(() => c.msgs.some((m) => m.t === "deleteAvd"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 11, ok: false, error: "删除 A 失败，详情见网关日志" });
+  assert.ok(logs.some((l) => l.includes("删除设备 A 失败") && l.includes("/home/u/.android/avd/A.avd")), logs.join("\n"));
+});

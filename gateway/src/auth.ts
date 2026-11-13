@@ -23,6 +23,12 @@ export function checkUpgrade(origin: string | undefined, allowed: string[]): boo
   return origin !== undefined && allowed.includes(origin);
 }
 
+/** Host 头只认 127.0.0.1:<端口> 和 localhost:<端口>：别的域名解析到 127.0.0.1（DNS rebinding）时浏览器带的是那个域名，读不到网关的回复。 */
+export function checkHost(host: string | undefined, port: number): boolean {
+  const h = host?.toLowerCase();
+  return h === `127.0.0.1:${port}` || h === `localhost:${port}`;
+}
+
 /** DevTools 票据：iframe 里的前端发不了 hello，靠 inspect 回复里签发的一次性票据鉴权。 */
 export type Tickets = {
   issue(socket: string, pageId: string): string;

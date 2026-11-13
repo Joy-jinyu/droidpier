@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as auth from "../src/auth.ts";
-import { allowedOrigins, checkUpgrade, createTickets, isOrigin, PUBLIC_ORIGIN } from "../src/auth.ts";
+import { allowedOrigins, checkHost, checkUpgrade, createTickets, isOrigin, PUBLIC_ORIGIN } from "../src/auth.ts";
 
 test("网关不再生成、比较启动口令", () => {
   assert.equal("newToken" in auth, false);
@@ -87,4 +87,11 @@ test("票据：60 秒后过期", () => {
   assert.equal(tk.take(a, "sock", "p1"), true);
   now += 2;
   assert.equal(tk.take(b, "sock", "p1"), false);
+});
+
+test("checkHost：只认 127.0.0.1:<端口> 和 localhost:<端口>，公网入口和别的域名都不算", () => {
+  for (const h of ["127.0.0.1:7300", "localhost:7300", "LOCALHOST:7300"]) assert.equal(checkHost(h, 7300), true, h);
+  for (const h of ["droid.devpier.dev", "droid.devpier.dev:7300", "evil.example:7300", "127.0.0.1", "localhost", "127.0.0.1:7301", "[::1]:7300", "", undefined]) {
+    assert.equal(checkHost(h, 7300), false, String(h));
+  }
 });

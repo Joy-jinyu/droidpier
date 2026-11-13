@@ -1,11 +1,14 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
+import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { mkdtemp, open, readFile, rm, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { LatestFrame } from "./latest-frame.ts";
 import { CLOSE_UNKNOWN_SOCKET, DEVTOOLS_FRONTEND_ORIGIN, inspectUrl, parseDevtoolsPath, proxyDevtools } from "./devtools-proxy.ts";
-import { checkUpgrade, createTickets, type Tickets } from "./auth.ts";
+import { checkHost, checkUpgrade, createTickets, type Tickets } from "./auth.ts";
+import { createPeerCheck, type PeerLookup } from "./peer.ts";
 import { DEV_SERVER_DOWN, navigateAndCheck, type CdpClient } from "./cdp.ts";
 import { normalizeTarget } from "../../shared/target-url.ts";
 import type { EmulatorSession } from "./emulator.ts";
@@ -143,6 +146,8 @@ export async function startServer(opts: {
   log?: (s: string) => void;
   /** /healthz 报的网关版本；另一个 droidpier 启动时靠它判断谁更新（gateway/src/already-running.ts）。 */
   version?: string;
+  /** 查连接的对端进程（gateway/src/peer.ts）；不传时 macOS 上用 lsof。platform 测试时注入。 */
+  peer?: { lookup?: PeerLookup; platform?: string };
   /** 由 launchd 拉起的后台服务；/healthz 报给前台再运行的 droidpier，让它说明怎么停（gateway/src/already-running.ts）。 */
   service?: boolean;
 }): Promise<{ port: number; close(): Promise<void> }> {
@@ -156,6 +161,7 @@ export async function startServer(opts: {
   const DELETING = "正在删除这台设备";
   let gatewayPort = opts.port;
   const tickets = opts.tickets ?? createTickets();
+  const peerCheck = createPeerCheck({ ...opts.peer, log });
 
   // 当前设备的调试工具：首次用到时创建，换设备、设备退出、网关关闭时收掉
   type Debug = { id: string; d: DeviceDebug; disposed: boolean; listing?: Promise<WebViewPage[]>; proxies: Set<WebSocket> };
@@ -186,6 +192,17 @@ export async function startServer(opts: {
   const listPages = (h: Debug) => (h.listing ??= h.d.webviews.list().finally(() => (h.listing = undefined)));
 
   const http = createServer(async (req, res) => {
+    const peer = await peerCheck(req.socket, gatewayPort);
+    if (!peer.ok) {
+      log(`拒绝 HTTP 请求：${peer.why}`);
+      res.writeHead(403).end();
+      return;
+    }
+    if (!checkHost(req.headers.host, gatewayPort)) {
+      log(`拒绝 HTTP 请求：Host 是 ${req.headers.host ?? "<无>"}`);
+      res.writeHead(421).end();
+      return;
+    }
     let rel: string;
     try {
       rel = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
@@ -227,7 +244,31 @@ export async function startServer(opts: {
   // 按路径分流：/devtools/<socket>/<pageId>/<票据> 走 DevTools 代理，其余走模拟器协议
   // 两条路都先核 Origin（4003），模拟器协议只靠这一道；DevTools 前端还要核票据（4001）
   // 拒绝也要先完成握手：浏览器只有握手成功后才看得到关闭码
+  // 升级前先核对端进程（403）和 Host（421），这两种直接回 HTTP 错误，不握手：正常的浏览器页面不会碰到
+  const refuseUpgrade = (socket: Duplex, status: string) =>
+    socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, () => socket.destroy());
   http.on("upgrade", (req, socket, head) => {
+    // 升级后 http 模块不再给这个 socket 挂 error 监听，交给 ws 之前对端重置连接会让进程崩掉
+    const swallow = () => {};
+    socket.on("error", swallow);
+    // upgrade 事件给的就是 net.Socket，类型上写的是 Duplex
+    void peerCheck(socket as Socket, gatewayPort).then((peer) => {
+      if (socket.destroyed) return;
+      if (!peer.ok) {
+        log(`拒绝 WebSocket：${peer.why}`);
+        refuseUpgrade(socket, "403 Forbidden");
+        return;
+      }
+      if (!checkHost(req.headers.host, gatewayPort)) {
+        log(`拒绝 WebSocket：Host 是 ${req.headers.host ?? "<无>"}`);
+        refuseUpgrade(socket, "421 Misdirected Request");
+        return;
+      }
+      socket.off("error", swallow);
+      upgrade(req, socket, head);
+    });
+  });
+  const upgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     let path: string;
     try {
       path = new URL(req.url ?? "/", "http://x").pathname;
@@ -263,7 +304,7 @@ export async function startServer(opts: {
       }
       proxyDevtools(ws, `ws://127.0.0.1:${port}/devtools/page/${encodeURIComponent(target.pageId)}`);
     });
-  });
+  };
   // adb 无响应统一成一句话并带 code，页面据此给出“重启模拟器”；其他失败照旧加前缀
   const adbFail = (prefix: string, e: unknown): { error: string; code?: "adb-unresponsive" } =>
     e instanceof AdbUnresponsive ? { error: e.message, code: "adb-unresponsive" } : { error: `${prefix}${(e as Error).message}` };
@@ -926,6 +967,8 @@ export async function startServer(opts: {
           }
           const avd = opts.avd;
           const name = m.name;
+          // 失败原因给页面看；cause 里带本机路径的细节只写日志（gateway/src/avd.ts 的 deleteAvd）
+          let detail = "";
           const tryDelete = async (): Promise<string | null> => {
             if (deleting.has(name)) return DELETING;
             // 开机任务进行中时发现文件可能还没写出来，AvdOps 看不出它在运行
@@ -938,13 +981,15 @@ export async function startServer(opts: {
               await avd.delete(name);
               return null;
             } catch (e) {
+              const cause = (e as Error).cause;
+              if (cause instanceof Error) detail = `（${cause.message}）`;
               return (e as Error).message;
             } finally {
               deleting.delete(name);
             }
           };
           const done = await tryDelete();
-          log(done === null ? `已删除设备 ${m.name}` : `删除设备 ${m.name} 失败：${done}`);
+          log(done === null ? `已删除设备 ${m.name}` : `删除设备 ${m.name} 失败：${done}${detail}`);
           send(ws, { t: "deleteAvd", rid: m.rid, ok: done === null, ...(done === null ? {} : { error: done }) });
           if (done === null) avd.list().then((list) => broadcast({ t: "avds", list }), (e: Error) => log(`删除后读取 AVD 列表失败：${e.message}`));
           break;

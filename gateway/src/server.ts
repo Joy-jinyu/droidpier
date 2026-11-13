@@ -8,7 +8,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { LatestFrame } from "./latest-frame.ts";
 import { CLOSE_UNKNOWN_SOCKET, DEVTOOLS_FRONTEND_ORIGIN, inspectUrl, parseDevtoolsPath, proxyDevtools } from "./devtools-proxy.ts";
 import { checkHost, checkUpgrade, createTickets, type Tickets } from "./auth.ts";
-import { createPeerCheck, type PeerLookup } from "./peer.ts";
+import { createPeerCheck, type SocketsLookup } from "./peer.ts";
 import { DEV_SERVER_DOWN, navigateAndCheck, type CdpClient } from "./cdp.ts";
 import { normalizeTarget } from "../../shared/target-url.ts";
 import type { EmulatorSession } from "./emulator.ts";
@@ -146,8 +146,8 @@ export async function startServer(opts: {
   log?: (s: string) => void;
   /** /healthz 报的网关版本；另一个 droidpier 启动时靠它判断谁更新（gateway/src/already-running.ts）。 */
   version?: string;
-  /** 查连接的对端进程（gateway/src/peer.ts）；不传时 macOS 上用 lsof。platform 测试时注入。 */
-  peer?: { lookup?: PeerLookup; platform?: string };
+  /** 查连接的对端进程（gateway/src/peer.ts）；不传时 macOS 上用 lsof。都是测试时注入。 */
+  peer?: { lookup?: SocketsLookup; platform?: string; maxPending?: number; allowAnyWsClient?: boolean };
   /** 由 launchd 拉起的后台服务；/healthz 报给前台再运行的 droidpier，让它说明怎么停（gateway/src/already-running.ts）。 */
   service?: boolean;
 }): Promise<{ port: number; close(): Promise<void> }> {
@@ -192,15 +192,15 @@ export async function startServer(opts: {
   const listPages = (h: Debug) => (h.listing ??= h.d.webviews.list().finally(() => (h.listing = undefined)));
 
   const http = createServer(async (req, res) => {
-    const peer = await peerCheck(req.socket, gatewayPort);
-    if (!peer.ok) {
-      log(`拒绝 HTTP 请求：${peer.why}`);
-      res.writeHead(403).end();
-      return;
-    }
     if (!checkHost(req.headers.host, gatewayPort)) {
       log(`拒绝 HTTP 请求：Host 是 ${req.headers.host ?? "<无>"}`);
       res.writeHead(421).end();
+      return;
+    }
+    const peer = await peerCheck(req.socket, gatewayPort, "http");
+    if (!peer.ok) {
+      log(`拒绝 HTTP 请求：${peer.why}`);
+      res.writeHead(peer.status).end();
       return;
     }
     let rel: string;
@@ -244,24 +244,24 @@ export async function startServer(opts: {
   // 按路径分流：/devtools/<socket>/<pageId>/<票据> 走 DevTools 代理，其余走模拟器协议
   // 两条路都先核 Origin（4003），模拟器协议只靠这一道；DevTools 前端还要核票据（4001）
   // 拒绝也要先完成握手：浏览器只有握手成功后才看得到关闭码
-  // 升级前先核对端进程（403）和 Host（421），这两种直接回 HTTP 错误，不握手：正常的浏览器页面不会碰到
+  // 升级前先核 Host（421）和对端进程（403 / 503），这两种直接回 HTTP 错误，不握手：正常的浏览器页面不会碰到
   const refuseUpgrade = (socket: Duplex, status: string) =>
     socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`, () => socket.destroy());
   http.on("upgrade", (req, socket, head) => {
     // 升级后 http 模块不再给这个 socket 挂 error 监听，交给 ws 之前对端重置连接会让进程崩掉
     const swallow = () => {};
     socket.on("error", swallow);
+    if (!checkHost(req.headers.host, gatewayPort)) {
+      log(`拒绝 WebSocket：Host 是 ${req.headers.host ?? "<无>"}`);
+      refuseUpgrade(socket, "421 Misdirected Request");
+      return;
+    }
     // upgrade 事件给的就是 net.Socket，类型上写的是 Duplex
-    void peerCheck(socket as Socket, gatewayPort).then((peer) => {
+    void peerCheck(socket as Socket, gatewayPort, "ws").then((peer) => {
       if (socket.destroyed) return;
       if (!peer.ok) {
         log(`拒绝 WebSocket：${peer.why}`);
-        refuseUpgrade(socket, "403 Forbidden");
-        return;
-      }
-      if (!checkHost(req.headers.host, gatewayPort)) {
-        log(`拒绝 WebSocket：Host 是 ${req.headers.host ?? "<无>"}`);
-        refuseUpgrade(socket, "421 Misdirected Request");
+        refuseUpgrade(socket, peer.status === 403 ? "403 Forbidden" : "503 Service Unavailable");
         return;
       }
       socket.off("error", swallow);

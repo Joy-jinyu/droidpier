@@ -12,6 +12,7 @@ import { cachedSession } from "../src/session-cache.ts";
 import type { EmulatorSession } from "../src/emulator.ts";
 import { BIN_SCREENSHOT, binKind, CLOSE_BAD_TOKEN, CLOSE_NO_HELLO, CLOSE_ORIGIN, CLOSE_VERSION, decodeFrameHeader, PROTOCOL_VERSION, type FrameHeader } from "../../shared/protocol.ts";
 import { allowedOrigins } from "../src/auth.ts";
+import { lsofSockets, type Snapshot } from "../src/peer.ts";
 import { randomBytes } from "node:crypto";
 
 const randomToken = () => randomBytes(32).toString("base64url");
@@ -119,7 +120,8 @@ async function setup(
   const logs: string[] = [];
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
-  const srv = await startServer({ port, allowedOrigins: allowedOrigins(null, port), staticDir, getSession, avd, debug, setup: setupOps, pollMs: 20, log: (s) => logs.push(s), ...more });
+  // 测试客户端是 node 的 ws，不是浏览器：放开 WebSocket 的浏览器白名单（模拟器照样拒绝）
+  const srv = await startServer({ port, allowedOrigins: allowedOrigins(null, port), staticDir, getSession, avd, debug, setup: setupOps, pollMs: 20, log: (s) => logs.push(s), peer: { allowAnyWsClient: true }, ...more });
   t.after(() => srv.close());
   const clients: Client[] = [];
   t.after(() => { for (const c of clients) c.ws.terminate(); });
@@ -2049,35 +2051,49 @@ async function rawRequest(port: number, head: string): Promise<string> {
 const wsHead = (port: number, host = `127.0.0.1:${port}`, origin = `http://127.0.0.1:${port}`) =>
   `GET / HTTP/1.1\r\nHost: ${host}\r\nOrigin: ${origin}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${randomBytes(16).toString("base64")}\r\n\r\n`;
 const getHead = (path: string, host: string) => `GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`;
-const peerIs = (command: string) => ({ platform: "darwin", lookup: async () => ({ kind: "found" as const, pid: 4321, command }) });
+/** 对端进程改名：本机真实连接（不管是谁发起的）都当成 command 持有的；不是 macOS 时造一个。 */
+const peerIs = (command: string) => ({
+  platform: "darwin",
+  lookup: async (gatewayPort: number): Promise<Snapshot> => {
+    const snap = process.platform === "darwin" ? await lsofSockets(gatewayPort) : { holders: new Map(), own: new Set<number>() };
+    for (const [p, hs] of snap.holders) snap.holders.set(p, hs.map(() => ({ pid: 4321, command })));
+    return snap;
+  },
+});
 
-test("对端是模拟器进程（qemu-system-*）：WebSocket 升级和 HTTP 请求都是 403，日志写出进程名", async (t) => {
-  const { srv, logs, origin } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: peerIs("qemu-system-aar") });
-  // 伪造了白名单里的 Origin 也不行
+test("对端是模拟器进程（qemu-system-*）：WebSocket 升级和 HTTP 请求都是 403，日志写出进程名", { skip: process.platform !== "darwin" }, async (t) => {
+  const { srv, logs, origin } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: { ...peerIs("qemu-system-aarch64-headless"), allowAnyWsClient: true } });
+  // 伪造了白名单里的 Origin 也不行；就算放开了浏览器白名单也不行
   assert.equal(await rawRequest(srv.port, wsHead(srv.port, undefined, "https://droid.devpier.dev")), "HTTP/1.1 403 Forbidden");
   assert.equal(await rawRequest(srv.port, wsHead(srv.port, undefined, origin)), "HTTP/1.1 403 Forbidden");
   assert.match(await rawRequest(srv.port, getHead("/healthz", `127.0.0.1:${srv.port}`)), /^HTTP\/1\.1 403/);
-  // Host 不对也先按对端拒绝（403），日志里有进程名
-  assert.equal(await rawRequest(srv.port, wsHead(srv.port, "10.0.2.2:" + srv.port)), "HTTP/1.1 403 Forbidden");
-  assert.ok(logs.some((l) => /拒绝 WebSocket：.*qemu-system-aar.*pid 4321/.test(l)), logs.join("\n"));
-  assert.ok(logs.some((l) => /拒绝 HTTP 请求：.*qemu-system-aar/.test(l)), logs.join("\n"));
+  // Host 先查：Host 不对直接 421
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, "10.0.2.2:" + srv.port)), "HTTP/1.1 421 Misdirected Request");
+  assert.ok(logs.some((l) => /拒绝 WebSocket：.*qemu-system-aarch64-headless（pid 4321）/.test(l)), logs.join("\n"));
+  assert.ok(logs.some((l) => /拒绝 HTTP 请求：.*qemu-system-aarch64-headless/.test(l)), logs.join("\n"));
 });
 
-test("对端是浏览器：照常连上，收到 ready", async (t) => {
-  const { connect, logs } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: peerIs("Google Chrome He") });
+test("对端是 Chrome 的网络进程：不放开白名单也照常连上，收到 ready", { skip: process.platform !== "darwin" }, async (t) => {
+  const { connect, logs } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: { ...peerIs("Google Chrome Helper (Aperitif)"), allowAnyWsClient: false } });
   const c = await connect();
   hello(c);
   await until(() => c.msgs.some((m) => m.t === "ready"));
   assert.equal(logs.some((l) => l.startsWith("拒绝")), false);
 });
 
-test("查不了对端进程（lsof 出错）：放行并写日志", async (t) => {
-  const peer = { platform: "darwin", lookup: async () => { throw new Error("spawn lsof ENOENT"); } };
-  const { connect, logs } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer });
-  const c = await connect();
-  hello(c);
-  await until(() => c.msgs.some((m) => m.t === "ready"));
-  assert.ok(logs.some((l) => /放行.*spawn lsof ENOENT/.test(l)), logs.join("\n"));
+test("对端是 node（不是浏览器）且没放开白名单：WebSocket 403，HTTP 照常", { skip: process.platform !== "darwin" }, async (t) => {
+  const { srv, logs, origin } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer: { allowAnyWsClient: false } });
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, undefined, origin)), "HTTP/1.1 403 Forbidden");
+  assert.match(await rawRequest(srv.port, getHead("/healthz", `127.0.0.1:${srv.port}`)), /^HTTP\/1\.1 200/);
+  assert.ok(logs.some((l) => /拒绝 WebSocket：WebSocket 只收 Chrome \/ Edge，这条来自 node/.test(l)), logs.join("\n"));
+});
+
+test("查不了对端进程（lsof 出错）：WebSocket 503 不握手，HTTP 放行并写日志", async (t) => {
+  const peer = { platform: "darwin", lookup: async () => { throw new Error("lsof 超时"); } };
+  const { srv, logs, origin } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { peer });
+  assert.equal(await rawRequest(srv.port, wsHead(srv.port, undefined, origin)), "HTTP/1.1 503 Service Unavailable");
+  assert.match(await rawRequest(srv.port, getHead("/healthz", `127.0.0.1:${srv.port}`)), /^HTTP\/1\.1 200/);
+  assert.ok(logs.some((l) => /HTTP 请求放行.*lsof 超时/.test(l)), logs.join("\n"));
 });
 
 test("Host 不是 127.0.0.1:<端口> 或 localhost:<端口>：HTTP 和 WebSocket 升级都是 421", async (t) => {

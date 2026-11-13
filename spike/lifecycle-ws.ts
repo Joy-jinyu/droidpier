@@ -1,4 +1,5 @@
 // 一次性检查脚本：直接走 WebSocket 协议驱动网关的 avds / start / stop / use，打印收到的文本消息和帧数。
+// 网关要用 DROIDPIER_ALLOW_ANY_WS_CLIENT=1 启动：macOS 上它的 WebSocket 只收 Chrome / Edge（gateway/src/peer.ts）
 // 用法：node spike/lifecycle-ws.ts <avds|start|stop|use|watch> [AVD 名] --token <网关打印的口令> [--url ws://127.0.0.1:7300/] [--wait 秒]
 import WebSocket from "ws";
 import { PROTOCOL_VERSION, type ClientMsg } from "../shared/protocol.ts";

@@ -122,6 +122,10 @@ Open `https://droid.devpier.dev/app/` (or `#port=<port>` for another port) in Ch
 changes, build them (`bun run build:host`, `NSH=/path/to/nsh bun run build:ui`) and open the gateway's local page
 with `--local`.
 
+On macOS the gateway takes WebSocket connections only from Chrome and Edge processes, and nothing from the
+emulator or adb. To drive it from a script (for example `spike/lifecycle-ws.ts`), start that gateway with
+`DROIDPIER_ALLOW_ANY_WS_CLIENT=1`. Use it for tests and scripts only.
+
 ### Reviewing changes
 
 Check whether the tests and the description cover the behavior the pull request claims, including its states: an

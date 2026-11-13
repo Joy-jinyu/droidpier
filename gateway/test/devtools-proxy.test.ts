@@ -41,6 +41,8 @@ async function gateway(t: import("node:test").TestContext, portOf?: (socket: str
   await writeFile(join(staticDir, "index.html"), "<p>hi</p>");
   const srv = await startServer({
     port: 0, allowedOrigins: [LOCAL], tickets, staticDir, getSession: async () => null, pollMs: 20, portOf, log: () => {},
+    // 测试里的 DevTools 前端是 node 的 ws，不是浏览器
+    peer: { allowAnyWsClient: true },
   });
   t.after(() => srv.close());
   /** 签一张票，返回 DevTools 前端会连的地址。 */

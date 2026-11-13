@@ -3,9 +3,18 @@ import { isAbsolute, join, relative } from "node:path";
 import { readFileSync, realpathSync } from "node:fs";
 import { discoveryDir, explicitAvdHome } from "./platform.ts";
 
-/** avdDir：发现文件里的 avd.dir，AVD 数据目录的绝对路径；目录名可能和 avdName 不同。 */
+/** avdName：AVD 的 id（见 discoveryAvdName）；avdDir：发现文件里的 avd.dir，AVD 数据目录的绝对路径；目录名可能和 avdName 不同。 */
 export type Discovery = { grpcPort: number; serial: number; token?: string; avdName?: string; avdDir?: string };
 export type Running = Discovery & { pid: number };
+
+/**
+ * 发现文件里这台模拟器的 AVD 名，和 emulator -list-avds、<avdHome>/<名>.ini 用的是同一个。
+ * avd.name 是显示名，可能和 id 不同（实测 avd.id=Resizable_Experimental、avd.name=Resizable (Experimental)），
+ * 所以先取 avd.id；旧版模拟器没写 avd.id 时才退回 avd.name。
+ */
+export function discoveryAvdName(kv: Map<string, string>): string | undefined {
+  return kv.get("avd.id") || kv.get("avd.name") || undefined;
+}
 
 /** 解析模拟器发现文件（key=value 每行一条）。 */
 export function parseDiscovery(text: string): Discovery {
@@ -21,7 +30,7 @@ export function parseDiscovery(text: string): Discovery {
   const out: Discovery = { grpcPort, serial };
   const token = kv.get("grpc.token");
   if (token) out.token = token;
-  const avdName = kv.get("avd.name");
+  const avdName = discoveryAvdName(kv);
   if (avdName) out.avdName = avdName;
   const avdDir = kv.get("avd.dir");
   if (avdDir) out.avdDir = avdDir;

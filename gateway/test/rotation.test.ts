@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rotationFromSkin, rotationFromZ, zForRotation } from "../src/emulator.ts";
+import { rotationFromSkin, rotationFromZ, turn, zForRotation } from "../src/emulator.ts";
 
 test("方向模型 z 轴和设备顺时针角度互相换算", () => {
   assert.deepEqual([0, -90, 180, 90].map(rotationFromZ), [0, 90, 180, 270]);
@@ -18,4 +18,9 @@ test("帧里的 SkinRotation 换成设备顺时针角度", () => {
   );
   assert.equal(rotationFromSkin(undefined), null);
   assert.equal(rotationFromSkin("BOGUS"), null);
+});
+
+test("向右是顺时针 +90°，向左是逆时针 -90°，跨过 0° 时绕回", () => {
+  assert.deepEqual(([0, 90, 180, 270] as const).map((r) => turn(r, "right")), [90, 180, 270, 0]);
+  assert.deepEqual(([0, 90, 180, 270] as const).map((r) => turn(r, "left")), [270, 0, 90, 180]);
 });

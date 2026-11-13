@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { toDevice, keyToMsg, textToMsgs, pasteToMsgs, inputToMsgs, wheelToSwipe } from "../input-map.ts";
+import { toDevice, keyToMsg, shortcutToMsg, textToMsgs, pasteToMsgs, inputToMsgs, wheelToSwipe } from "../input-map.ts";
 
 describe("toDevice", () => {
   it("正常换算", () => {
@@ -209,6 +209,27 @@ describe("wheelToSwipe", () => {
     assert.deepEqual(wheelToSwipe(1, { x: 0, y: 1 }, { width: 1080, height: 30 }), []);
   });
 
+  it("往上滚一点（deltaY=-4）：手指往下滑，起点在终点上方 40", () => {
+    // rawDist=-12，endY=1182，actDist=12<40 → 起点要在终点的反方向：1182-40=1142，不能是 1222（那是往下滚）
+    const steps = wheelToSwipe(-4, at, device);
+    assert.equal(steps[0].y, 1142, "起点在终点上方");
+    assert.equal(steps[9].y, 1182, "终点在目标位置");
+  });
+
+  it("起点靠底边（y=2330）往上滚：终点夹到 2339，起点移到 2299，不能返回空数组", () => {
+    const steps = wheelToSwipe(-100, { x: 540, y: 2330 }, device);
+    assert.ok(steps.length > 0, "底边附近往上滚也要发出滑动");
+    assert.equal(steps[0].y, 2299);
+    assert.equal(steps[9].y, 2339);
+  });
+
+  it("rotation=90 往上滚一点（deltaY=-4）：手指往 x 增大方向滑，起点在终点左边 40", () => {
+    // rawDist=-12，endX=552 → 起点 552-40=512
+    const steps = wheelToSwipe(-4, at, device, 90);
+    assert.equal(steps[0].x, 512);
+    assert.equal(steps[9].x, 552);
+  });
+
   it("rotation=90 起点靠左（x=20，deltaY=10）：后移到 x=40，|40−0|=40≥40", () => {
     // rawDist=30，endX=0，actDist=20<40 → startX 后移到 40
     const steps = wheelToSwipe(10, { x: 20, y: 1170 }, device, 90);
@@ -216,5 +237,39 @@ describe("wheelToSwipe", () => {
     assert.equal(steps[0].x, 40, "起点 x 后移");
     assert.equal(steps[9].x, 0, "终点 x 在左边");
     assert.ok(Math.abs(steps[0].x - steps[9].x) >= 40);
+  });
+});
+
+describe("shortcutToMsg", () => {
+  const cmd = { metaKey: true, ctrlKey: false, altKey: false, shiftKey: false };
+  const press = (key: string) => ({ t: "key", key, eventType: "keypress" });
+
+  it("照 Android Studio 模拟器的键位按设备按键", () => {
+    assert.deepEqual(shortcutToMsg({ key: "s", ...cmd }), { t: "screenshot" });
+    assert.deepEqual(shortcutToMsg({ key: "p", ...cmd }), press("Power"));
+    assert.deepEqual(shortcutToMsg({ key: "o", ...cmd }), press("AppSwitch"));
+    assert.deepEqual(shortcutToMsg({ key: "Backspace", ...cmd }), press("GoBack"));
+    assert.deepEqual(shortcutToMsg({ key: "=", ...cmd }), press("AudioVolumeUp"));
+    assert.deepEqual(shortcutToMsg({ key: "-", ...cmd }), press("AudioVolumeDown"));
+    assert.deepEqual(shortcutToMsg({ key: "ArrowRight", ...cmd }), { t: "rotate" });
+  });
+
+  it("主页是 Shift+Cmd+H，大小写都认", () => {
+    assert.deepEqual(shortcutToMsg({ key: "H", ...cmd, shiftKey: true }), press("GoHome"));
+    assert.deepEqual(shortcutToMsg({ key: "h", ...cmd, shiftKey: true }), press("GoHome"));
+    assert.equal(shortcutToMsg({ key: "h", ...cmd }), null);
+  });
+
+  it("不带 Cmd、多按了 Ctrl / Option / Shift 都不算", () => {
+    assert.equal(shortcutToMsg({ key: "p", ...cmd, metaKey: false }), null);
+    assert.equal(shortcutToMsg({ key: "p", ...cmd, ctrlKey: true }), null);
+    assert.equal(shortcutToMsg({ key: "p", ...cmd, altKey: true }), null);
+    assert.equal(shortcutToMsg({ key: "S", ...cmd, shiftKey: true }), null);
+    // ⌘+（Shift+=）不是模拟器的键位，留给浏览器缩放
+    assert.equal(shortcutToMsg({ key: "+", ...cmd, shiftKey: true }), null);
+  });
+
+  it("浏览器自己的快捷键和协议里没有的向左旋转留给浏览器", () => {
+    for (const key of ["r", "w", "t", "v", "c", "ArrowLeft"]) assert.equal(shortcutToMsg({ key, ...cmd }), null);
   });
 });

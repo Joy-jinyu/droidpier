@@ -61,6 +61,30 @@ export function keyToMsg(
 }
 
 /**
+ * 设备按键的快捷键，键位照 Android Studio 模拟器：模拟器 36.4.10 里的快捷键表写的是 Ctrl，在 Mac 上就是 Cmd。
+ * 只收页面上有对应按键的几个；向左旋转（Ctrl+Left）协议里没有，不收。键名前的 ⇧ 表示要同时按 Shift。
+ */
+const SHORTCUTS: Record<string, ClientMsg> = {
+  "s": { t: "screenshot" },
+  "p": { t: "key", key: "Power", eventType: "keypress" },
+  "⇧h": { t: "key", key: "GoHome", eventType: "keypress" },
+  "o": { t: "key", key: "AppSwitch", eventType: "keypress" },
+  "Backspace": { t: "key", key: "GoBack", eventType: "keypress" },
+  "=": { t: "key", key: "AudioVolumeUp", eventType: "keypress" },
+  "-": { t: "key", key: "AudioVolumeDown", eventType: "keypress" },
+  "ArrowRight": { t: "rotate" },
+};
+
+/** 设备有键盘焦点时按下的 Cmd 组合键 → 对应按键的消息；不是这几个快捷键就返回 null，交给浏览器。 */
+export function shortcutToMsg(
+  e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }
+): ClientMsg | null {
+  if (!e.metaKey || e.ctrlKey || e.altKey) return null;
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  return SHORTCUTS[(e.shiftKey ? "⇧" : "") + key] ?? null;
+}
+
+/**
  * 将文本转换为 ClientMsg 数组。
  * 纯 ASCII → 逐字符 keypress；含非 ASCII → 单条 text 消息。
  */
@@ -118,15 +142,16 @@ export function wheelToSwipe(
   const endX = Math.max(0, Math.min(device.width - 1, at.x + dir.dx * rawDist));
   const endY = Math.max(0, Math.min(device.height - 1, at.y + dir.dy * rawDist));
 
-  // 夹边后实际位移；不足 MIN_SWIPE_PX 时把起点往反方向移，确保够长
+  // 夹边后实际位移；不足 MIN_SWIPE_PX 时把起点沿滑动的反方向移，确保够长。滑动方向是 dir 乘 deltaY 的符号，往上滚时和 dir 相反
   const actDist = dir.dx !== 0 ? Math.abs(endX - at.x) : Math.abs(endY - at.y);
   let startX = at.x;
   let startY = at.y;
   if (actDist < MIN_SWIPE_PX) {
+    const back = Math.sign(deltaY) * MIN_SWIPE_PX;
     if (dir.dx !== 0) {
-      startX = Math.max(0, Math.min(device.width - 1, endX - dir.dx * MIN_SWIPE_PX));
+      startX = Math.max(0, Math.min(device.width - 1, endX - dir.dx * back));
     } else {
-      startY = Math.max(0, Math.min(device.height - 1, endY - dir.dy * MIN_SWIPE_PX));
+      startY = Math.max(0, Math.min(device.height - 1, endY - dir.dy * back));
     }
     const newDist = dir.dx !== 0 ? Math.abs(endX - startX) : Math.abs(endY - startY);
     if (newDist < MIN_SWIPE_PX) return []; // 设备空间不够，放弃

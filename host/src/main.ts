@@ -9,6 +9,7 @@ import { gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalP
 import { createRenderer } from "./renderer.ts";
 import { createUploads } from "./uploads.ts";
 import { parseZoom, ZOOM_STEPS } from "../../shared/zoom.ts";
+import { readPref, writePref } from "./prefs.ts";
 import { parseTheme, THEMES } from "../../shared/theme.ts";
 import { registerTools } from "./webmcp.ts";
 import { INSTALL_CMD, INSTALL_IDS, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
@@ -38,6 +39,7 @@ const GATEWAY_PORT = resolvePort();
 const ZOOM_KEY = "droidpier.zoom";
 // 页面外观存在这台浏览器里；存储不可用（隐私模式等）时每次都跟随系统
 const THEME_KEY = "droidpier.theme";
+const SIDEBAR_KEY = "droidpier.sidebar";
 // 还不知道设备尺寸、容器也没量出来时，hello 用这个尺寸（网关会夹到设备尺寸内）
 const FALLBACK_CSS = { width: 540, height: 1170 };
 const RESIZE_DEBOUNCE_MS = 150;
@@ -684,39 +686,24 @@ export async function createHost(player: Player) {
         if (typeof id !== "number") throw new Error(`${name} 需要 id`);
         return ctl({ t: name === "emu.acceptLicenses" ? "acceptLicenses" : "rejectLicenses", id });
       }
-      if (name === "emu.zoom") {
-        try {
-          return parseZoom(localStorage.getItem(ZOOM_KEY));
-        } catch {
-          return parseZoom(null);
-        }
-      }
+      if (name === "emu.zoom") return parseZoom(readPref(ZOOM_KEY));
       if (name === "emu.setZoom") {
         const zoom = (args as { zoom?: unknown } | undefined)?.zoom;
         if (!ZOOM_STEPS.includes(zoom as number)) throw new Error(`emu.setZoom 需要 zoom：${ZOOM_STEPS.join("、")} 之一`);
-        try {
-          localStorage.setItem(ZOOM_KEY, String(zoom));
-          return { ok: true };
-        } catch {
-          return { ok: false };
-        }
+        return { ok: writePref(ZOOM_KEY, String(zoom)) };
       }
-      if (name === "emu.theme") {
-        try {
-          return parseTheme(localStorage.getItem(THEME_KEY));
-        } catch {
-          return parseTheme(null);
-        }
-      }
+      if (name === "emu.theme") return parseTheme(readPref(THEME_KEY));
       if (name === "emu.setTheme") {
         const theme = (args as { theme?: unknown } | undefined)?.theme;
         if (!THEMES.includes(theme as never)) throw new Error("emu.setTheme 需要 theme：system、light 或 dark");
-        try {
-          localStorage.setItem(THEME_KEY, theme as string);
-          return { ok: true };
-        } catch {
-          return { ok: false };
-        }
+        return { ok: writePref(THEME_KEY, theme as string) };
+      }
+      // 侧栏收起与否，存在这台浏览器里
+      if (name === "emu.sidebar") return { hidden: readPref(SIDEBAR_KEY) === "hidden" };
+      if (name === "emu.setSidebar") {
+        const hidden = (args as { hidden?: unknown } | undefined)?.hidden;
+        if (typeof hidden !== "boolean") throw new Error("emu.setSidebar 需要 hidden");
+        return { ok: writePref(SIDEBAR_KEY, hidden ? "hidden" : "shown") };
       }
       throw new Error(`no host function ${name}`);
     },

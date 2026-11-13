@@ -1,7 +1,7 @@
 ---
 title: कमांड लाइन
 description: Droidpier गेटवे कमांड के विकल्प और environment variables।
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | Variable | असर |
 |---|---|
 | `ANDROID_HOME` | Android SDK डायरेक्टरी। इसके बिना गेटवे `~/Library/Android/sdk` इस्तेमाल करता है। |
-| `ANDROID_AVD_HOME` | वह डायरेक्टरी जिसमें AVD रहते हैं। इसके बिना गेटवे `~/.android/avd` इस्तेमाल करता है। |
+| `ANDROID_AVD_HOME` | वह डायरेक्टरी जिसमें AVD रहते हैं। इसके बिना गेटवे एमुलेटर की तरह `ANDROID_USER_HOME` के अंदर `avd`, या `~/.android/avd` इस्तेमाल करता है। |
+| `ANDROID_USER_HOME` | Android यूज़र डायरेक्टरी। इसके बिना गेटवे `~/.android` इस्तेमाल करता है। |
 | `DEBUG=1` | हर कनेक्शन के लिए हर सेकंड एक लाइन प्रिंट करें: मिले, भेजे गए और छोड़े गए फ़्रेम, औसत फ़्रेम साइज़, और एमुलेटर से गेटवे तक की देरी। |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME` पहली बार चलने वाली जाँच में पढ़ा जाता है।
 
-अगर `ANDROID_HOME` और `ANDROID_AVD_HOME` सेट हैं, तो `droidpier start` उन्हें बैकग्राउंड गेटवे के लिए सहेजता है, क्योंकि launchd आपकी shell प्रोफ़ाइल नहीं पढ़ता। इन्हें बदलने के बाद `droidpier start` फिर से चलाएँ।
+अगर `ANDROID_HOME`, `ANDROID_AVD_HOME` और `ANDROID_USER_HOME` सेट हैं, तो `droidpier start` उन्हें बैकग्राउंड गेटवे के लिए सहेजता है, क्योंकि launchd आपकी shell प्रोफ़ाइल नहीं पढ़ता। इन्हें बदलने के बाद `droidpier start` फिर से चलाएँ।
 
 ## यह क्या प्रिंट करता है
 

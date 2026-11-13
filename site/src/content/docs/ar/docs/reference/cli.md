@@ -1,7 +1,7 @@
 ---
 title: سطر الأوامر
 description: الخيارات ومتغيرات البيئة لأمر بوابة Droidpier.
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | المتغير | التأثير |
 |---|---|
 | `ANDROID_HOME` | دليل Android SDK. من دونه، تستخدم البوابة `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | الدليل الذي يحتوي على أجهزة AVD. من دونه، تستخدم البوابة `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | الدليل الذي يحتوي على أجهزة AVD. من دونه، تستخدم البوابة `avd` داخل `ANDROID_USER_HOME`، أو `~/.android/avd`، كما يفعل المحاكي. |
+| `ANDROID_USER_HOME` | دليل مستخدم Android. من دونه، تستخدم البوابة `~/.android`. |
 | `DEBUG=1` | يطبع سطرًا واحدًا في الثانية لكل اتصال: الإطارات المستلمة والمرسلة والمُسقطة، ومتوسط حجم الإطار، والتأخير من المحاكي إلى البوابة. |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 <!-- verify: phase 3 -->
 يُقرأ `ANDROID_HOME` أثناء فحص التشغيل الأول.
 
-عند ضبط `ANDROID_HOME` و`ANDROID_AVD_HOME`، يحفظهما `droidpier start` للبوابة العاملة في الخلفية، لأن launchd لا يقرأ ملف إعدادات الصدفة لديك. شغّل `droidpier start` مجددًا بعد تغييرهما.
+عند ضبط `ANDROID_HOME` و`ANDROID_AVD_HOME` و`ANDROID_USER_HOME`، يحفظها `droidpier start` للبوابة العاملة في الخلفية، لأن launchd لا يقرأ ملف إعدادات الصدفة لديك. شغّل `droidpier start` مجددًا بعد تغييرها.
 
 ## ما الذي تطبعه
 

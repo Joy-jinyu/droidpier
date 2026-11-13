@@ -1,7 +1,7 @@
 ---
 title: Командная строка
 description: Параметры и переменные окружения команды шлюза Droidpier.
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | Переменная | Действие |
 |---|---|
 | `ANDROID_HOME` | Каталог Android SDK. Без неё шлюз использует `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | Каталог, в котором хранятся AVD. Без неё шлюз использует `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | Каталог, в котором хранятся AVD. Без неё шлюз, как и эмулятор, использует `avd` внутри `ANDROID_USER_HOME` или `~/.android/avd`. |
+| `ANDROID_USER_HOME` | Пользовательский каталог Android. Без неё шлюз использует `~/.android`. |
 | `DEBUG=1` | Раз в секунду выводить по строке для каждого подключения: полученные, отправленные и отброшенные кадры, средний размер кадра и задержку от эмулятора до шлюза. |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME` читается проверкой при первом запуске.
 
-Если заданы `ANDROID_HOME` и `ANDROID_AVD_HOME`, `droidpier start` сохраняет их для фонового шлюза, потому что launchd не читает профиль вашей оболочки. После их изменения снова выполните `droidpier start`.
+Если заданы `ANDROID_HOME`, `ANDROID_AVD_HOME` и `ANDROID_USER_HOME`, `droidpier start` сохраняет их для фонового шлюза, потому что launchd не читает профиль вашей оболочки. После их изменения снова выполните `droidpier start`.
 
 ## Что он выводит
 

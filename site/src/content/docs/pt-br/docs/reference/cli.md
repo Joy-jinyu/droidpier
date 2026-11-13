@@ -1,7 +1,7 @@
 ---
 title: Linha de comando
 description: Opções e variáveis de ambiente do comando do gateway Droidpier.
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ Com ou sem `--no-open`, a página encontra o gateway sozinha. Veja [Primeira exe
 | Variável | Efeito |
 |---|---|
 | `ANDROID_HOME` | O diretório do Android SDK. Sem ela, o gateway usa `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | O diretório que contém os AVDs. Sem ela, o gateway usa `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | O diretório que contém os AVDs. Sem ela, o gateway usa `avd` dentro de `ANDROID_USER_HOME`, ou `~/.android/avd`, como o emulador. |
+| `ANDROID_USER_HOME` | O diretório de usuário do Android. Sem ela, o gateway usa `~/.android`. |
 | `DEBUG=1` | Mostra uma linha por segundo para cada conexão: quadros recebidos, enviados e descartados, tamanho médio do quadro e o atraso do emulador até o gateway. |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ Com ou sem `--no-open`, a página encontra o gateway sozinha. Veja [Primeira exe
 <!-- verify: phase 3 -->
 `ANDROID_HOME` é lida pela verificação da primeira execução.
 
-Quando `ANDROID_HOME` e `ANDROID_AVD_HOME` estão definidas, `droidpier start` as salva para o gateway em segundo plano, porque o launchd não lê o perfil do seu shell. Execute `droidpier start` de novo depois de alterá-las.
+Quando `ANDROID_HOME`, `ANDROID_AVD_HOME` e `ANDROID_USER_HOME` estão definidas, `droidpier start` as salva para o gateway em segundo plano, porque o launchd não lê o perfil do seu shell. Execute `droidpier start` de novo depois de alterá-las.
 
 ## O que ele mostra
 

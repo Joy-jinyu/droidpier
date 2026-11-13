@@ -61,7 +61,8 @@ With or without `--no-open`, the page finds the gateway by itself. See [First ru
 | Variable | Effect |
 |---|---|
 | `ANDROID_HOME` | The Android SDK directory. Without it, the gateway uses `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | The directory that holds AVDs. Without it, the gateway uses `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | The directory that holds AVDs. Without it, the gateway uses `avd` inside `ANDROID_USER_HOME`, or `~/.android/avd`, like the emulator. |
+| `ANDROID_USER_HOME` | The Android user directory. Without it, the gateway uses `~/.android`. |
 | `DEBUG=1` | Print one line per second for each connection: frames received, sent and dropped, average frame size, and the delay from the emulator to the gateway. |
 
 <!-- verify: phase 2 -->
@@ -70,7 +71,7 @@ With or without `--no-open`, the page finds the gateway by itself. See [First ru
 <!-- verify: phase 3 -->
 `ANDROID_HOME` is read by the first-run check.
 
-`droidpier start` saves `ANDROID_HOME` and `ANDROID_AVD_HOME` for the background gateway when they are set, because launchd does not read your shell profile. Run `droidpier start` again after you change them.
+`droidpier start` saves `ANDROID_HOME`, `ANDROID_AVD_HOME` and `ANDROID_USER_HOME` for the background gateway when they are set, because launchd does not read your shell profile. Run `droidpier start` again after you change them.
 
 ## What it prints
 

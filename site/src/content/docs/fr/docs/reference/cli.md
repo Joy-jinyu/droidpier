@@ -1,7 +1,7 @@
 ---
 title: Ligne de commande
 description: Options et variables d’environnement de la commande de la passerelle Droidpier.
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ Avec ou sans `--no-open`, la page trouve la passerelle d’elle-même. Voir [Pre
 | Variable | Effet |
 |---|---|
 | `ANDROID_HOME` | Le répertoire de l’Android SDK. Sans elle, la passerelle utilise `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | Le répertoire qui contient les AVD. Sans elle, la passerelle utilise `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | Le répertoire qui contient les AVD. Sans elle, la passerelle utilise `avd` dans `ANDROID_USER_HOME`, ou `~/.android/avd`, comme l'émulateur. |
+| `ANDROID_USER_HOME` | Le répertoire utilisateur Android. Sans elle, la passerelle utilise `~/.android`. |
 | `DEBUG=1` | Affiche une ligne par seconde pour chaque connexion : images reçues, envoyées et abandonnées, taille moyenne des images, et délai entre l’émulateur et la passerelle. |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ Avec ou sans `--no-open`, la page trouve la passerelle d’elle-même. Voir [Pre
 <!-- verify: phase 3 -->
 `ANDROID_HOME` est lue par la vérification du premier lancement.
 
-Quand `ANDROID_HOME` et `ANDROID_AVD_HOME` sont définies, `droidpier start` les enregistre pour la passerelle en arrière-plan, car launchd ne lit pas le profil de votre shell. Relancez `droidpier start` après les avoir modifiées.
+Quand `ANDROID_HOME`, `ANDROID_AVD_HOME` et `ANDROID_USER_HOME` sont définies, `droidpier start` les enregistre pour la passerelle en arrière-plan, car launchd ne lit pas le profil de votre shell. Relancez `droidpier start` après les avoir modifiées.
 
 ## Ce qu’elle affiche
 

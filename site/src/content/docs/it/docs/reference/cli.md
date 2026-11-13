@@ -1,7 +1,7 @@
 ---
 title: Riga di comando
 description: Opzioni e variabili d’ambiente del comando del gateway Droidpier.
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ Con o senza `--no-open`, la pagina trova il gateway da sola. Vedi [Primo avvio](
 | Variabile | Effetto |
 |---|---|
 | `ANDROID_HOME` | La directory dell’Android SDK. Se non è impostata, il gateway usa `~/Library/Android/sdk`. |
-| `ANDROID_AVD_HOME` | La directory che contiene gli AVD. Se non è impostata, il gateway usa `~/.android/avd`. |
+| `ANDROID_AVD_HOME` | La directory che contiene gli AVD. Se non è impostata, il gateway usa `avd` dentro `ANDROID_USER_HOME`, oppure `~/.android/avd`, come l'emulatore. |
+| `ANDROID_USER_HOME` | La directory utente di Android. Se non è impostata, il gateway usa `~/.android`. |
 | `DEBUG=1` | Stampa una riga al secondo per ogni connessione: frame ricevuti, inviati e scartati, dimensione media dei frame e ritardo dall’emulatore al gateway. |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ Con o senza `--no-open`, la pagina trova il gateway da sola. Vedi [Primo avvio](
 <!-- verify: phase 3 -->
 `ANDROID_HOME` viene letta dal controllo del primo avvio.
 
-Se `ANDROID_HOME` e `ANDROID_AVD_HOME` sono impostate, `droidpier start` le salva per il gateway in background, perché launchd non legge il profilo della shell. Esegui di nuovo `droidpier start` dopo averle cambiate.
+Se `ANDROID_HOME`, `ANDROID_AVD_HOME` e `ANDROID_USER_HOME` sono impostate, `droidpier start` le salva per il gateway in background, perché launchd non legge il profilo della shell. Esegui di nuovo `droidpier start` dopo averle cambiate.
 
 ## Cosa stampa
 

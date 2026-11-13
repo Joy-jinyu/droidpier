@@ -1,7 +1,7 @@
 ---
 title: 命令列
 description: Droidpier 閘道命令的選項和環境變數。
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 變數 | 效果 |
 |---|---|
 | `ANDROID_HOME` | Android SDK 目錄。如未設定，閘道使用 `~/Library/Android/sdk`。 |
-| `ANDROID_AVD_HOME` | 存放 AVD 的目錄。如未設定，閘道使用 `~/.android/avd`。 |
+| `ANDROID_AVD_HOME` | 存放 AVD 的目錄。如未設定，閘道和模擬器一樣使用 `ANDROID_USER_HOME` 裡的 `avd`，或 `~/.android/avd`。 |
+| `ANDROID_USER_HOME` | Android 使用者目錄。如未設定，閘道使用 `~/.android`。 |
 | `DEBUG=1` | 每秒為每個連線列印一行：已接收、已傳送和已捨棄的幀數，平均幀大小，以及從模擬器到閘道的延遲。 |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME` 在首次執行檢查時讀取。
 
-設定了 `ANDROID_HOME` 和 `ANDROID_AVD_HOME` 時，`droidpier start` 會把它們儲存給在背景執行的閘道，因為 launchd 不讀取你的 shell 設定。修改它們後請重新執行 `droidpier start`。
+設定了 `ANDROID_HOME`、`ANDROID_AVD_HOME` 和 `ANDROID_USER_HOME` 時，`droidpier start` 會把它們儲存給在背景執行的閘道，因為 launchd 不讀取你的 shell 設定。修改它們後請重新執行 `droidpier start`。
 
 ## 列印內容
 

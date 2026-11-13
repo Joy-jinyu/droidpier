@@ -1,7 +1,7 @@
 ---
 title: 命令行
 description: Droidpier 网关命令的选项和环境变量。
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 变量 | 效果 |
 |---|---|
 | `ANDROID_HOME` | Android SDK 目录。如未设置，网关使用 `~/Library/Android/sdk`。 |
-| `ANDROID_AVD_HOME` | 存放 AVD 的目录。如未设置，网关使用 `~/.android/avd`。 |
+| `ANDROID_AVD_HOME` | 存放 AVD 的目录。如未设置，网关和模拟器一样使用 `ANDROID_USER_HOME` 里的 `avd`，或 `~/.android/avd`。 |
+| `ANDROID_USER_HOME` | Android 用户目录。如未设置，网关使用 `~/.android`。 |
 | `DEBUG=1` | 每秒为每个连接打印一行：已接收、已发送和已丢弃的帧数，平均帧大小，以及从模拟器到网关的延迟。 |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME` 在首次运行检查时读取。
 
-设置了 `ANDROID_HOME` 和 `ANDROID_AVD_HOME` 时，`droidpier start` 会把它们保存给后台运行的网关，因为 launchd 不读取你的 shell 配置。修改它们后请重新运行 `droidpier start`。
+设置了 `ANDROID_HOME`、`ANDROID_AVD_HOME` 和 `ANDROID_USER_HOME` 时，`droidpier start` 会把它们保存给后台运行的网关，因为 launchd 不读取你的 shell 配置。修改它们后请重新运行 `droidpier start`。
 
 ## 打印内容
 

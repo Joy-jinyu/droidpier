@@ -1,7 +1,7 @@
 ---
 title: 명령줄
 description: Droidpier 게이트웨이 명령의 옵션과 환경 변수.
-sourceHash: 6865e9bd6511
+sourceHash: eef348a17cbd
 ---
 
 <!-- verify: phase 3 -->
@@ -62,7 +62,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 변수 | 효과 |
 |---|---|
 | `ANDROID_HOME` | Android SDK 디렉터리입니다. 설정하지 않으면 게이트웨이는 `~/Library/Android/sdk`를 사용합니다. |
-| `ANDROID_AVD_HOME` | AVD가 들어 있는 디렉터리입니다. 설정하지 않으면 게이트웨이는 `~/.android/avd`를 사용합니다. |
+| `ANDROID_AVD_HOME` | AVD가 들어 있는 디렉터리입니다. 설정하지 않으면 게이트웨이는 에뮬레이터처럼 `ANDROID_USER_HOME` 안의 `avd` 또는 `~/.android/avd`를 사용합니다. |
+| `ANDROID_USER_HOME` | Android 사용자 디렉터리입니다. 설정하지 않으면 게이트웨이는 `~/.android`를 사용합니다. |
 | `DEBUG=1` | 연결마다 초당 한 줄씩 출력합니다: 받은 프레임, 보낸 프레임, 버린 프레임, 평균 프레임 크기, 에뮬레이터에서 게이트웨이까지의 지연. |
 
 <!-- verify: phase 2 -->
@@ -71,7 +72,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 <!-- verify: phase 3 -->
 `ANDROID_HOME`은 첫 실행 검사에서 읽습니다.
 
-`ANDROID_HOME`과 `ANDROID_AVD_HOME`이 설정되어 있으면 `droidpier start`가 백그라운드 게이트웨이용으로 저장합니다. launchd는 셸 설정을 읽지 않기 때문입니다. 값을 바꾼 뒤에는 `droidpier start`를 다시 실행하세요.
+`ANDROID_HOME`, `ANDROID_AVD_HOME`, `ANDROID_USER_HOME`이 설정되어 있으면 `droidpier start`가 백그라운드 게이트웨이용으로 저장합니다. launchd는 셸 설정을 읽지 않기 때문입니다. 값을 바꾼 뒤에는 `droidpier start`를 다시 실행하세요.
 
 ## 출력 내용
 

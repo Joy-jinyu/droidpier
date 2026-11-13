@@ -397,10 +397,14 @@ export async function startServer(opts: {
     return runChecked(ws, "安装", async () => {
       // 页面确认框已经拦过一次；这里按同一套算法再查，防止页面旧了或绕过页面
       const env = await checkEnv();
-      const reason = env.error ?? notAuto(env, ids) ?? spaceShort(env.missing.filter((m) => ids.includes(m.id)), env);
+      if (env.error) return { reason: env.error };
+      // 只装这次环境检查里缺的：已装好的包不重下、不替换（也就不会绕过磁盘检查）
+      const want = ids.filter((id) => env.missing.some((m) => m.id === id));
+      if (want.length === 0) return { reason: "要装的都不缺，没有安装" };
+      const reason = notAuto(env, want) ?? spaceShort(env.missing.filter((m) => want.includes(m.id)), env);
       // 装哪个系统镜像由这次环境检查决定（比如设备缺的那个），不信页面
-      const image = ids.includes("system-image") ? env.missing.find((m) => m.id === "system-image")?.pkg : undefined;
-      return reason ? { reason } : { ids, job: image ? { image } : {} };
+      const image = want.includes("system-image") ? env.missing.find((m) => m.id === "system-image")?.pkg : undefined;
+      return reason ? { reason } : { ids: want, job: image ? { image } : {} };
     });
   };
   const createAvd = (ws: WebSocket, m: { name: string; device: string; image: string }) =>

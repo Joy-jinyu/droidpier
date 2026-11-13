@@ -1467,6 +1467,27 @@ test("install 系统镜像：装环境检查里说的那个镜像（比如设备
   assert.deepEqual(f.specs, [{ image: pkg }]);
 });
 
+test("install 只装环境检查里缺的项：已装好的不重下，全都不缺时拒绝", async (t) => {
+  // 只缺 emulator：页面要 platform-tools 也不给装（那会替换掉已有的 adb，也绕过了磁盘检查）
+  const f = fakeSetup();
+  const c = await setupConnected(t, f);
+  c.ws.send(JSON.stringify({ t: "install", ids: ["platform-tools"] }));
+  await until(() => c.msgs.some((m) => m.t === "error"));
+  assert.match(c.msgs.find((m) => m.t === "error").message, /不缺/);
+  assert.deepEqual(f.runs, []);
+  c.ws.send(JSON.stringify({ t: "install", ids: ["platform-tools", "emulator"] }));
+  await until(() => f.runs.length === 1);
+  assert.deepEqual(f.runs, [["emulator"]]);
+});
+
+test("install system-image 但环境检查不缺镜像：拒绝，不会覆盖已装的 android-34", async (t) => {
+  const f = fakeSetup();
+  const c = await setupConnected(t, f);
+  c.ws.send(JSON.stringify({ t: "install", ids: ["system-image"] }));
+  await until(() => c.msgs.some((m) => m.t === "error"));
+  assert.deepEqual(f.runs, []);
+});
+
 test("install 不能自动装的项：拒绝", async (t) => {
   const f = fakeSetup({ missing: [{ id: "system-image", detail: "x86_64", pkg: "system-images;android-29;google_apis;x86_64", auto: false }] });
   const c = await setupConnected(t, f);

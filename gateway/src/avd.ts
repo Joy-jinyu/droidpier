@@ -280,12 +280,12 @@ const isDir = (p: string) => stat(p).then((s) => s.isDirectory(), () => false);
  * path= 是个已有目录就用它；否则 path.rel 相对 Android 用户目录，是个已有目录就用它；都不是返回 null（只有 .ini）。
  * 相对的 path= 会按网关的工作目录解析，指到哪里说不准，直接报错。
  */
-async function avdDataDir(ini: string, userHome: string): Promise<string | null> {
+export async function avdDataDir(ini: string, userHome: string, dirExists = isDir): Promise<string | null> {
   const path = iniValue(ini, "path");
   if (path !== undefined && !isAbsolute(path)) throw new Error(`数据目录 ${path} 不是绝对路径`);
-  if (path !== undefined && (await isDir(path))) return path;
+  if (path !== undefined && (await dirExists(path))) return path;
   const rel = iniValue(ini, "path.rel");
-  if (rel !== undefined && (await isDir(join(userHome, rel)))) return join(userHome, rel);
+  if (rel !== undefined && (await dirExists(join(userHome, rel)))) return join(userHome, rel);
   return null;
 }
 

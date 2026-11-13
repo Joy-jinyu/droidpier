@@ -1,7 +1,8 @@
-import { access, readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { avdHome, diskOf, IMAGE_ABI, manifestUrlFor, sdkRoot } from "./platform.ts";
+import { androidUserHome, avdHome, diskOf, IMAGE_ABI, manifestUrlFor, sdkRoot } from "./platform.ts";
 import { androidVersion, scanInstalledImages } from "./catalog.ts";
+import { avdDataDir } from "./avd.ts";
 import { AVD_DISK_MB } from "../../shared/avd-spec.ts";
 import type { EnvMissing, EnvReport } from "../../shared/protocol.ts";
 
@@ -25,7 +26,10 @@ const SIZE = {
 export type EnvDeps = {
   sdkRoot: string;
   avdHome: string;
+  /** Android 用户目录：AVD .ini 里的 path.rel 相对它。 */
+  userHome: string;
   exists(path: string): Promise<boolean>;
+  isDir(path: string): Promise<boolean>;
   readdir(dir: string): Promise<string[]>;
   readFile(path: string): Promise<string>;
   disk(dir: string): Promise<{ freeMb: number; dev: number }>;
@@ -36,7 +40,9 @@ export function realEnvDeps(): EnvDeps {
   return {
     sdkRoot: sdkRoot(),
     avdHome: avdHome(),
+    userHome: androidUserHome(),
     exists: (p) => access(p).then(() => true, () => false),
+    isDir: (p) => stat(p).then((s) => s.isDirectory(), () => false),
     readdir: (d) => readdir(d),
     readFile: (p) => readFile(p, "utf8"),
     disk: diskOf,
@@ -49,19 +55,26 @@ function ini(text: string, key: string): string | undefined {
   return line?.slice(line.indexOf("=") + 1).trim();
 }
 
-type AvdImage = { name: string; label: string; sysdir: string; ok: boolean };
+type AvdImage = { name: string; label: string; sysdir: string; ok: boolean; abi: string };
 
-/** avdHome 里每台 AVD 的镜像目录（config.ini 的 image.sysdir.1，相对 SDK）和它在不在；读不到 config.ini 或没写镜像目录的不算设备。 */
+/**
+ * avdHome 里每台 AVD 的镜像目录（config.ini 的 image.sysdir.1，相对 SDK）和它能不能开机：镜像是这台 Mac 能跑的 ABI，
+ * 而且 system.img 在（和 catalog.ts 认已装镜像的规则一样）。数据目录照 avdmanager 的顺序找（avd.ts 的 avdDataDir）；
+ * 找不到数据目录、读不到 config.ini 或没写镜像目录的不算设备。
+ */
 async function avdImages(deps: EnvDeps): Promise<AvdImage[]> {
   const names = (await deps.readdir(deps.avdHome).catch(() => [] as string[])).filter((n) => n.endsWith(".ini")).map((n) => n.slice(0, -4)).sort();
   const list: AvdImage[] = [];
   for (const name of names) {
     const top = await deps.readFile(join(deps.avdHome, `${name}.ini`)).catch(() => "");
-    const dir = ini(top, "path") || join(deps.avdHome, `${name}.avd`);
+    const dir = await avdDataDir(top, deps.userHome, deps.isDir).catch(() => null);
+    if (dir === null) continue;
     const config = await deps.readFile(join(dir, "config.ini")).catch(() => null);
     const sysdir = config === null ? undefined : ini(config, "image.sysdir.1")?.replace(/\\/g, "/").replace(/\/+$/, "");
     if (!config || !sysdir) continue;
-    list.push({ name, label: ini(config, "avd.ini.displayname") || name, sysdir, ok: await deps.exists(join(deps.sdkRoot, sysdir)) });
+    const abi = sysdir.slice(sysdir.lastIndexOf("/") + 1);
+    const ok = abi === IMAGE_ABI && (await deps.exists(join(deps.sdkRoot, sysdir, "system.img")));
+    list.push({ name, label: ini(config, "avd.ini.displayname") || name, sysdir, ok, abi });
   }
   return list;
 }
@@ -96,7 +109,10 @@ export async function checkEnv(deps: EnvDeps): Promise<EnvReport> {
       const auto = !!pkg && pkg.endsWith(`;${IMAGE_ABI}`) && manifestUrlFor(pkg) !== null;
       missing.push({
         id: "system-image", auto, ...(pkg ? { pkg } : {}), ...SIZE.otherImage,
-        detail: broken.map((a) => `设备 ${a.label} 的系统镜像 ${pkgOf(a.sysdir) ? androidVersion(apiOf(pkgOf(a.sysdir)!)) : a.sysdir} 不在了`).join("；"),
+        detail: broken.map((a) => {
+          const img = pkgOf(a.sysdir) ? androidVersion(apiOf(pkgOf(a.sysdir)!)) : a.sysdir;
+          return a.abi === IMAGE_ABI ? `设备 ${a.label} 的系统镜像 ${img} 不在了` : `设备 ${a.label} 的系统镜像 ${img} 是 ${a.abi} 的，这台 Mac 跑不了`;
+        }).join("；"),
       });
     } else {
       const installed = await scanInstalledImages(sdk, deps);

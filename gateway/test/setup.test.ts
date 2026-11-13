@@ -4,6 +4,7 @@ import { checkEnv, SYSTEM_IMAGE, type EnvDeps } from "../src/setup.ts";
 
 const SDK = "/fake/sdk";
 const AVD_HOME = "/fake/avd";
+const USER_HOME = "/fake/user";
 
 /** 假文件系统：files 的键是存在的文件（值是内容），它们的上级目录也存在。 */
 function fakeFs(files: Record<string, string>): EnvDeps & { freeAsked: string[] } {
@@ -16,7 +17,9 @@ function fakeFs(files: Record<string, string>): EnvDeps & { freeAsked: string[] 
     freeAsked,
     sdkRoot: SDK,
     avdHome: AVD_HOME,
+    userHome: USER_HOME,
     exists: async (p) => all.has(p.replace(/\/+$/, "")),
+    isDir: async (p) => all.has(p.replace(/\/+$/, "")) && !(p in files),
     disk: async (dir) => {
       freeAsked.push(dir);
       return { freeMb: dir === AVD_HOME ? 7000 : 5000, dev: dir === AVD_HOME ? 2 : 1 };
@@ -121,6 +124,41 @@ test("缺的镜像不是 arm64-v8a（这台 Mac 跑不了）：不能自动装",
 test("设备的 config.ini 读不到或没写镜像目录：当成没有设备", async () => {
   const r = await checkEnv(fakeFs({ ...TOOLS, ...image("34"), [`${AVD_HOME}/Broken.ini`]: "path=/nowhere/Broken.avd\n" }));
   assert.deepEqual(r.missing.map((m) => m.id), ["avd"]);
+});
+
+test("设备的 .ini 只写了 path.rel（相对 Android 用户目录）：照 avdmanager 的顺序找到数据目录", async () => {
+  const r = await checkEnv(fakeFs({
+    ...TOOLS, ...image("34"),
+    [`${AVD_HOME}/Rel.ini`]: "avd.ini.encoding=UTF-8\npath.rel=avd/Rel.avd\n",
+    [`${USER_HOME}/avd/Rel.avd/config.ini`]: "image.sysdir.1=system-images/android-34/google_apis/arm64-v8a/\n",
+  }));
+  assert.equal(r.ok, true);
+});
+
+test("设备的 path= 是相对路径：不知道指向哪里，不算设备", async () => {
+  const r = await checkEnv(fakeFs({
+    ...TOOLS, ...image("34"),
+    [`${AVD_HOME}/R.ini`]: "path=R.avd\n",
+    [`${AVD_HOME}/R.avd/config.ini`]: "image.sysdir.1=system-images/android-34/google_apis/arm64-v8a/\n",
+  }));
+  assert.deepEqual(r.missing.map((m) => m.id), ["avd"]);
+});
+
+test("设备的镜像目录还在但没有 system.img：开不了机，要装镜像", async () => {
+  const r = await checkEnv(fakeFs({
+    ...TOOLS, [`${SDK}/system-images/android-34/google_apis/arm64-v8a/source.properties`]: "",
+    ...avd("P", "system-images/android-34/google_apis/arm64-v8a/"),
+  }));
+  assert.deepEqual(r.missing.map((m) => m.id), ["system-image"]);
+  assert.equal(r.missing[0].pkg, "system-images;android-34;google_apis;arm64-v8a");
+});
+
+test("设备用的是已装好的 x86_64 镜像：这台 Mac 开不了，不算能启动", async () => {
+  const r = await checkEnv(fakeFs({ ...TOOLS, ...image("30", "google_apis", "x86_64"), ...avd("X", "system-images/android-30/google_apis/x86_64/") }));
+  assert.equal(r.ok, false);
+  const m = r.missing.find((x) => x.id === "system-image")!;
+  assert.equal(m.auto, false);
+  assert.match(m.detail, /x86_64/);
 });
 
 test("只缺 adb：只列 platform-tools，带大小", async () => {

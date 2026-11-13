@@ -15,15 +15,18 @@ export function loadController(port: number, token?: string): EmulatorController
   });
   const pkg = grpc.loadPackageDefinition(def) as any;
   const Ctor = pkg.android.emulation.control.EmulatorController;
-  let creds = grpc.credentials.createInsecure();
-  if (token) {
-    const call = grpc.credentials.createFromMetadataGenerator((_p, cb) => {
-      const md = new grpc.Metadata();
-      md.set("authorization", `Bearer ${token}`);
-      cb(null, md);
-    });
-    // 本机明文连接也要带 token：grpc-js 只允许在 insecure 通道上用 combineChannelCredentials 的变通写法
-    creds = grpc.credentials.combineChannelCredentials(grpc.credentials.createInsecure(), call);
-  }
-  return new Ctor(`127.0.0.1:${port}`, creds, { "grpc.max_receive_message_length": 64 * 1024 * 1024 });
+  // 本机明文通道：grpc-js 不允许把调用凭据叠到 insecure 通道上（会抛 Cannot compose insecure credentials），
+  // 所以 token 用拦截器在每次调用的元数据里加 Bearer 头
+  const interceptors: grpc.Interceptor[] = token
+    ? [
+        (options, next) =>
+          new grpc.InterceptingCall(next(options), {
+            start(md, listener, start) {
+              md.set("authorization", `Bearer ${token}`);
+              start(md, listener);
+            },
+          }),
+      ]
+    : [];
+  return new Ctor(`127.0.0.1:${port}`, grpc.credentials.createInsecure(), { "grpc.max_receive_message_length": 64 * 1024 * 1024, interceptors });
 }

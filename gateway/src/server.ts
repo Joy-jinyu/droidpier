@@ -778,13 +778,19 @@ export async function startServer(opts: {
           for (const p of installs.values()) send(ws, { t: "install", progress: p });
           if (license !== null) send(ws, { t: "licenses", licence: license });
         }
+        let failure: string | null = null;
         const session = await opts.getSession().catch((e) => {
-          log(`获取模拟器会话失败：${(e as Error).message}`);
+          failure = (e as Error).message;
+          log(`获取模拟器会话失败：${failure}`);
           return null;
         });
         if (ws.readyState !== ws.OPEN || conn.session) return;
         if (session) attach(session);
-        else send(ws, { t: "status", state: booting() ? "booting" : "no-emulator" });
+        else {
+          send(ws, { t: "status", state: booting() ? "booting" : "no-emulator" });
+          // 模拟器在运行但连不上（例如 gRPC 认证失败）时，把原因告诉页面，不要只显示“没有模拟器”
+          if (failure) send(ws, { t: "error", message: `连不上模拟器：${failure}` });
+        }
         return;
       }
       if (!m) {
@@ -850,9 +856,10 @@ export async function startServer(opts: {
           break;
         case "use": {
           if (!opts.avd) break;
-          const s = await opts.avd.use(m.name).catch((e: Error) => (log(`切换到 ${m.name} 失败：${e.message}`), null));
+          let failure: string | null = null;
+          const s = await opts.avd.use(m.name).catch((e: Error) => ((failure = e.message), log(`切换到 ${m.name} 失败：${e.message}`), null));
           if (s) switchTo(s);
-          else send(ws, { t: "error", message: `${m.name} 没有在运行或没开 gRPC` });
+          else send(ws, { t: "error", message: failure ? `${m.name} 连不上：${failure}` : `${m.name} 没有在运行或没开 gRPC` });
           break;
         }
         case "install":

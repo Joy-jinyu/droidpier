@@ -1868,3 +1868,29 @@ test("分片超过声明的大小：中止并删掉临时文件", async (t) => {
   assert.deepEqual(await u.tempEntries(), []);
   assert.equal(u.files.calls.length, 0);
 });
+
+test("连模拟器失败（不是没有模拟器）：hello 后除了 no-emulator 还收到带原因的 error", async (t) => {
+  const { connect } = await setup(t, null, async () => {
+    throw new Error("Cannot compose insecure credentials");
+  });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "error"));
+  assert.ok(c.msgs.some((m) => m.t === "status" && m.state === "no-emulator"));
+  const err = c.msgs.find((m) => m.t === "error");
+  assert.match(err.message, /连不上模拟器：Cannot compose insecure credentials/);
+});
+
+test("切换设备时连接失败：error 里带上真正的原因", async (t) => {
+  const ops = fakeAvd({}).ops;
+  ops.use = async () => {
+    throw new Error("UNAUTHENTICATED: bad token");
+  };
+  const { connect } = await setup(t, new FakeSession(), undefined, ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  c.ws.send(JSON.stringify({ t: "use", name: "B" }));
+  await until(() => c.msgs.some((m) => m.t === "error"));
+  assert.match(c.msgs.find((m) => m.t === "error").message, /B 连不上：UNAUTHENTICATED: bad token/);
+});

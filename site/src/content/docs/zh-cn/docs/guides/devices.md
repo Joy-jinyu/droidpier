@@ -1,7 +1,7 @@
 ---
 title: 设备
 description: 列出 Android 虚拟设备，从页面启动和停止它们，并接管已在运行的模拟器。
-sourceHash: 8d52f61e011c
+sourceHash: 6eaf456bc1f3
 ---
 
 这里的设备是指 Mac 上的 Android 虚拟设备（AVD）。页面每次显示一个设备。
@@ -61,3 +61,7 @@ emulator -avd <name> -no-window -grpc <port> -no-boot-anim -gpu host
 创建设备需要命令行工具（`avdmanager`）。如果缺少，对话框会先提供安装。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
 
 你也可以使用 `avdmanager` 或 Android Studio 创建设备；列表会自动识别它们。
+
+## 删除设备
+
+点设备旁边的垃圾桶图标并确认。这会删除设备和它的全部数据（已装的 App、文件、快照），不能恢复。系统镜像不会删除。正在运行或正在启动的设备不能删除：请先停止它。

@@ -1,7 +1,7 @@
 ---
 title: Dispositivos
 description: Liste seus dispositivos virtuais Android, inicie e pare-os pela página e assuma o controle de um emulador que já está em execução.
-sourceHash: 8d52f61e011c
+sourceHash: 6eaf456bc1f3
 ---
 
 Aqui, um dispositivo é um Android Virtual Device (AVD) no seu Mac. A página mostra um dispositivo por vez.
@@ -61,3 +61,7 @@ Crie dispositivos na página. Use o botão de novo dispositivo, escolha um model
 Criar um dispositivo exige as ferramentas de linha de comando (`avdmanager`). Se elas faltarem, a caixa de diálogo oferece instalá-las primeiro. Veja [Primeira execução](/pt-br/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
 Você também pode criar dispositivos com o `avdmanager` ou o Android Studio; a lista os detecta.
+
+## Excluir um dispositivo
+
+Clique no ícone de lixeira ao lado de um dispositivo e confirme. Isso exclui o dispositivo e todos os seus dados (apps instalados, arquivos, snapshots); não é possível desfazer. A imagem do sistema continua instalada. Um dispositivo em execução ou inicializando não pode ser excluído: pare-o primeiro.

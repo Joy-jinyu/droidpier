@@ -60,3 +60,7 @@ Create devices on the page. Use the button for a new device, then pick a device 
 Creating a device needs the command line tools (`avdmanager`). If they are missing, the dialog offers to install them first. See [First run](/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
 You can also create devices with `avdmanager` or Android Studio; the list picks them up.
+
+## Delete a device
+
+Click the trash icon next to a device and confirm. This deletes the device and all its data (installed apps, files, snapshots); it cannot be undone. The system image stays installed. A device that is running or booting cannot be deleted: stop it first.

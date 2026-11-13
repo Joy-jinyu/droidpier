@@ -1,7 +1,7 @@
 ---
 title: Appareils
 description: Listez vos appareils virtuels Android, démarrez-les et arrêtez-les depuis la page, et prenez la main sur un émulateur déjà en cours d’exécution.
-sourceHash: 8d52f61e011c
+sourceHash: 6eaf456bc1f3
 ---
 
 Ici, un appareil est un Android Virtual Device (AVD) sur votre Mac. La page affiche un appareil à la fois.
@@ -61,3 +61,7 @@ Créez les appareils sur la page. Utilisez le bouton pour un nouvel appareil, ch
 Créer un appareil nécessite les outils en ligne de commande (`avdmanager`). S’ils manquent, la boîte de dialogue propose de les installer d’abord. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
 Vous pouvez aussi créer des appareils avec `avdmanager` ou Android Studio ; la liste les détecte.
+
+## Supprimer un appareil
+
+Cliquez sur l'icône de corbeille à côté d'un appareil et confirmez. L'appareil et toutes ses données (applications installées, fichiers, instantanés) sont supprimés ; c'est irréversible. L'image système reste installée. Un appareil en cours d'exécution ou de démarrage ne peut pas être supprimé : arrêtez-le d'abord.

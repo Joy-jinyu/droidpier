@@ -1,7 +1,7 @@
 ---
 title: Geräte
 description: Listen Sie Ihre virtuellen Android-Geräte auf, starten und stoppen Sie sie über die Seite und übernehmen Sie einen Emulator, der bereits läuft.
-sourceHash: 8d52f61e011c
+sourceHash: 6eaf456bc1f3
 ---
 
 Ein Gerät ist hier ein Android Virtual Device (AVD) auf Ihrem Mac. Die Seite zeigt jeweils ein Gerät.
@@ -61,3 +61,7 @@ Geräte erstellen Sie auf der Seite. Verwenden Sie die Schaltfläche für ein ne
 Zum Erstellen eines Geräts braucht es die Befehlszeilentools (`avdmanager`). Fehlen sie, bietet der Dialog an, sie zuerst zu installieren. Siehe [Erster Start](/de/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
 Sie können Geräte auch mit `avdmanager` oder Android Studio erstellen; die Liste erkennt sie.
+
+## Ein Gerät löschen
+
+Klicke auf das Papierkorb-Symbol neben einem Gerät und bestätige. Damit werden das Gerät und alle seine Daten (installierte Apps, Dateien, Snapshots) gelöscht; das lässt sich nicht rückgängig machen. Das System-Image bleibt installiert. Ein Gerät, das läuft oder gerade startet, kann nicht gelöscht werden: Stoppe es zuerst.

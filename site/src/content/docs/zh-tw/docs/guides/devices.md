@@ -1,7 +1,7 @@
 ---
 title: 裝置
 description: 列出 Android 虛擬裝置，從頁面啟動和停止它們，並接管已在執行的模擬器。
-sourceHash: 8d52f61e011c
+sourceHash: 6eaf456bc1f3
 ---
 
 這裡的裝置是指 Mac 上的 Android 虛擬裝置（AVD）。頁面每次顯示一個裝置。
@@ -61,3 +61,7 @@ emulator -avd <name> -no-window -grpc <port> -no-boot-anim -gpu host
 建立裝置需要命令列工具（`avdmanager`）。如果缺少，對話框會先提供安裝。請參閱[首次執行](/zh-tw/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
 
 你也可以使用 `avdmanager` 或 Android Studio 建立裝置；清單會自動識別它們。
+
+## 刪除裝置
+
+點裝置旁邊的垃圾桶圖示並確認。這會刪除裝置和它的全部資料（已安裝的 App、檔案、快照），無法復原。系統映像不會刪除。正在執行或正在啟動的裝置不能刪除：請先停止它。

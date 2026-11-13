@@ -13,7 +13,7 @@ Droidpier replaces the Android Studio emulator window with a page in Chrome or E
 - Back, Home, Recents, volume, power, rotate (the whole device turns), screenshots, restart; the Android Studio emulator's
   shortcuts for these keys work once you click the screen (⌘⌫ Back, ⇧⌘H Home, ⌘O Recents, ⌘P power, ⌘= / ⌘- volume,
   ⌘→ rotate, ⌘S screenshot)
-- Device list: start and stop AVDs, create a device by picking a model and Android version
+- Device list: start and stop AVDs, rename and delete them, create a device by picking a model and Android version
 - H5 debugging: inspect a WebView page in an embedded DevTools, see its network requests, point it at a local dev server
 - First-run guide in the page: checks the Android SDK pieces and installs what is missing, after you confirm and accept each licence yourself
 

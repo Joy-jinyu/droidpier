@@ -316,12 +316,16 @@ test("两个连接各自独立：关掉一个之后，另一个还能收到新�
 });
 
 test("emulator 断开后会话报告 closed：所有客户端收到 status emulator-closed", async (t) => {
-  const { connect, session } = await setup(t);
+  // 退出后就发现不到它了；否则轮询会马上重新接上，最后一条变成 ready / orientation
+  let gone = false;
+  const s = new FakeSession();
+  const { connect, session } = await setup(t, s, async () => (gone ? null : s));
   const a = await connect();
   const b = await connect();
   hello(a);
   hello(b);
   await until(() => session!.subs.length === 2);
+  gone = true;
   session!.fireClosed();
   const want = { t: "status", state: "emulator-closed" };
   await until(() => [a, b].every((c) => c.msgs.some((m) => m.t === "status")));

@@ -160,7 +160,9 @@ export function createInstaller(deps: InstallerDeps): Installer {
       const tops = (await readdir(staging, { withFileTypes: true })).filter((d) => d.name !== "__MACOSX");
       const src = tops.length === 1 && tops[0].isDirectory() ? join(staging, tops[0].name) : staging;
       emit({ id, phase: "install", logTail: `装到 ${target}` });
-      await writeFile(join(src, "package.xml"), pkg.packageXml);
+      // zip 里可能自带 package.xml（甚至是符号链接）：先删掉，再只新建不顺着链接写
+      await rm(join(src, "package.xml"), { force: true });
+      await writeFile(join(src, "package.xml"), pkg.packageXml, { flag: "wx" });
       await mkdir(dirname(target), { recursive: true });
       await replaceDir(src, target, join(tmp, "old"));
       emit({ id, phase: "done", logTail: `已装 ${pkgPath} ${pkg.revision} 到 ${target}` });
@@ -286,8 +288,12 @@ export function realInstallerDeps(opts: { sdkRoot: string; avdHome: string }): I
     avdHome: opts.avdHome,
     // 60 秒没有任何数据就算断了（清单和 zip 都是）
     fetch: (url, signal) => fetchWithIdle(url, 60_000, signal),
+    // -o：zip 里有同名文件时直接覆盖，不停下来问；stdin 立刻关掉，万一要问也读到 EOF 而不是一直等。
+    // 30 分钟的上限远大于本机解压 1.5 GB 系统镜像的时间，只防卡死
     unzip: async (zip, dest, signal) => {
-      await execFileP("/usr/bin/unzip", ["-q", zip, "-d", dest], { signal, maxBuffer: 16 * 2 ** 20 });
+      const p = execFileP("/usr/bin/unzip", ["-q", "-o", zip, "-d", dest], { signal, maxBuffer: 16 * 2 ** 20, timeout: 30 * 60_000 });
+      p.child.stdin?.end();
+      await p;
     },
   };
 }

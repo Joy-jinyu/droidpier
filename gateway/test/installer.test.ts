@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, lstatSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createServer } from "node:http";
-import { createInstaller, fetchWithIdle, replaceDir, type InstallerDeps, type Licence, type Progress } from "../src/installer.ts";
+import { createInstaller, fetchWithIdle, realInstallerDeps, replaceDir, type InstallerDeps, type Licence, type Progress } from "../src/installer.ts";
 import { licenceHashes } from "../src/sdk-repo.ts";
 import { H, REPO, SYS_IMG } from "./fixtures/repo-manifests.ts";
 
@@ -40,6 +41,8 @@ type FakeOpts = {
   body?: (zip: Buffer) => AsyncIterable<Uint8Array>;
   /** 请求地址 → 跳转后的最终地址。 */
   redirect?: Record<string, string>;
+  /** 假 unzip 解出文件后再调用，可以往解压目录里加东西。 */
+  afterUnzip?: (top: string) => Promise<void>;
   /** 开始下载 zip 前调用（这时临时目录已经建好）。 */
   beforeZip?: (sdk: string) => Promise<void>;
 };
@@ -72,6 +75,7 @@ async function fakes(t: import("node:test").TestContext, opts: FakeOpts = {}) {
       await mkdir(join(dest, top), { recursive: true });
       await writeFile(join(dest, top, file), "bin");
       await writeFile(join(dest, top, "source.properties"), "Pkg.Revision=1\n");
+      await opts.afterUnzip?.(join(dest, top));
     },
   };
   return { deps, sdk, avdHome, unzips, fetches };
@@ -197,6 +201,33 @@ test("回答带的 id 不是在等的那份：不算数，还在等", async (t) 
   inst.acceptLicenses(licence!.id);
   await done;
   assert.equal(lastOf(ps, "platform-tools")?.phase, "done");
+});
+
+test("zip 里带了 package.xml 符号链接：不顺着它写，换成我们写的普通文件", async (t) => {
+  const outside = join(await mkdtemp(join(tmpdir(), "emu-outside-")), "victim");
+  t.after(() => rm(dirname(outside), { recursive: true, force: true }));
+  await writeFile(outside, "keep");
+  const f = await fakes(t, { afterUnzip: (top) => symlink(outside, join(top, "package.xml")) });
+  const { ps } = await runWith(f.deps, ["platform-tools"]);
+  assert.equal(lastOf(ps, "platform-tools")?.phase, "done");
+  assert.equal(await readFile(outside, "utf8"), "keep");
+  assert.equal(lstatSync(join(f.sdk, "platform-tools/package.xml")).isSymbolicLink(), false);
+  assert.match(await readFile(join(f.sdk, "platform-tools/package.xml"), "utf8"), /<localPackage path="platform-tools"/);
+});
+
+test("真的 unzip：zip 里有重复的文件也不停下来问（-o，不读 stdin）", { timeout: 20_000 }, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "emu-unzip-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "src/pkg"), { recursive: true });
+  await writeFile(join(root, "src/pkg/a"), "1");
+  // 同一个文件加两次：解压第二个时 unzip 默认会问要不要覆盖
+  execFileSync("/usr/bin/zip", ["-q", join(root, "p.zip"), "pkg/a"], { cwd: join(root, "src") });
+  execFileSync("/usr/bin/zip", ["-q", "-g", join(root, "p.zip"), "pkg/a"], { cwd: join(root, "src") });
+  await mkdir(join(root, "out/pkg"), { recursive: true });
+  await writeFile(join(root, "out/pkg/a"), "old");
+  const deps = realInstallerDeps({ sdkRoot: root, avdHome: root });
+  await deps.unzip(join(root, "p.zip"), join(root, "out"), new AbortController().signal);
+  assert.equal(await readFile(join(root, "out/pkg/a"), "utf8"), "1");
 });
 
 test("emulator：下 macOS aarch64 的包；已有的残缺 emulator 目录换成新的", async (t) => {

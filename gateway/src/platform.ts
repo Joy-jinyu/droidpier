@@ -128,14 +128,19 @@ export async function findJavaHome(io: JavaIo = realJavaIo()): Promise<string | 
 /** 手动安装 cmdline-tools 用的 zip：清单里 cmdline-tools;22.0 的 macOS arm64 包（2026-11-12 读的 repository2-3.xml）。 */
 export const CMDLINE_TOOLS_ZIP_URL = "https://dl.google.com/android/repository/commandlinetools-mac_arm64-15859902_latest.zip";
 
-/** 用户显式设的 ANDROID_AVD_HOME；没设为 undefined。 */
+/** 用户显式设的 ANDROID_AVD_HOME；没设或设成空字符串为 undefined（空值不能当成当前目录）。 */
 export function explicitAvdHome(): string | undefined {
-  return process.env.ANDROID_AVD_HOME;
+  return process.env.ANDROID_AVD_HOME || undefined;
 }
 
 /** AVD 主目录：优先 ANDROID_AVD_HOME，其次 ~/.android/avd。 */
 export function avdHome(): string {
-  return process.env.ANDROID_AVD_HOME ?? join(homedir(), ".android/avd");
+  return explicitAvdHome() ?? join(homedir(), ".android/avd");
+}
+
+/** Android 用户目录：ANDROID_USER_HOME（非空），其次 ~/.android。AVD .ini 里的 path.rel 相对它。 */
+export function androidUserHome(): string {
+  return process.env.ANDROID_USER_HOME || join(homedir(), ".android");
 }
 
 /** 用系统默认浏览器打开网址（macOS 的 open 命令），失败只回调不抛。 */

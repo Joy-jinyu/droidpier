@@ -10,6 +10,7 @@ import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
 import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
+import { setupCardShown } from "./setup-card";
 
 type State =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
@@ -322,6 +323,8 @@ function H5Console(props: {
 
 const ICON_PATHS = {
   rotate: '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+  rotateLeft: '<path d="M20 9V7a2 2 0 0 0-2-2h-6"/><path d="m15 2-3 3 3 3"/><path d="M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/>',
+  rotateRight: '<path d="M12 5H6a2 2 0 0 0-2 2v3"/><path d="m9 8 3-3-3-3"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>',
   camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
   reboot: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
@@ -452,11 +455,14 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
       style={{ width: 560, maxWidth: "100%", gap: 10, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.warn }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <Text role="header" style={{ color: C.text, fontSize: 14, fontWeight: "bold" }}>环境检查</Text>
-        <If when={props.env.missing.length > 0} else={<If when={!busy()}><Btn label="收起" onPress={props.onDismiss} /></If>}>
-          <If when={installable().length > 0}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <If when={props.env.missing.length > 0 && installable().length > 0}>
             <Btn label={`全部安装（${sizeText(total())}）`} disabled={busy() || noJava()} onPress={() => props.onInstall({ ids: installable(), kind: "install" })} />
           </If>
-        </If>
+          <If when={!busy()}>
+            <Btn label="收起" onPress={props.onDismiss} />
+          </If>
+        </View>
       </View>
       <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>
         {props.env.missing.length > 0
@@ -912,8 +918,8 @@ function App() {
   const showSetup = () => {
     const e = env();
     if (!e) return null;
-    if (!e.ok || setupBusy() || installs().some((p) => p.phase === "failed")) return e;
-    return installs().length > 0 && !setupDismissed() ? e : null;
+    const failed = installs().some((p) => p.phase === "failed");
+    return setupCardShown({ ok: e.ok, busy: setupBusy(), failed, hasInstalls: installs().length > 0, dismissed: setupDismissed() }) ? e : null;
   };
   const startInstall = () => {
     const c = confirm();
@@ -1015,8 +1021,9 @@ function App() {
               <View style={{ flexDirection: "row", gap: DEVICE_GAP }}>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), left: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96 }}>
                   <KeyGroup label="工具">
-                    <Key icon="rotate" label="旋转" onPress={() => act(host.call("emu.rotate", {}))} />
-                    <Key icon="camera" label="截图" onPress={() => act(host.call("emu.screenshot", {}))} />
+                    <Key icon="rotateLeft" label="向左旋转" onPress={() => act(host.call("emu.rotate", { dir: "left" }))} />
+                    <Key icon="rotateRight" label="向右旋转" tip="点过屏幕后按 ⌘→" onPress={() => act(host.call("emu.rotate", { dir: "right" }))} />
+                    <Key icon="camera" label="截图" tip="点过屏幕后按 ⌘S" onPress={() => act(host.call("emu.screenshot", {}))} />
                     <Key icon="reboot" label={state() === "rebooting" ? "重启中" : "重启"} disabled={state() !== "connected"} onPress={() => rebootAsk.set(true)} />
                     <Key icon="install" label="安装 APK" disabled={!!installBlocked()} tip={installBlocked() ?? "选 APK 安装，也可以直接把文件拖到屏幕上"}
                       onPress={() => act(host.call("emu.pickApk", {}))} />
@@ -1045,11 +1052,11 @@ function App() {
                 </View>
                 <View onLayout={({ bounds }) => sideKeys.set({ ...sideKeys(), right: bounds.size.width })} style={{ alignSelf: "flex-start", marginTop: 96, gap: 12 }}>
                   <KeyGroup label="电源键">
-                    <Key icon="power" label="电源" onPress={() => key("Power")} />
+                    <Key icon="power" label="电源" tip="点过屏幕后按 ⌘P" onPress={() => key("Power")} />
                   </KeyGroup>
                   <KeyGroup label="音量键">
-                    <Key icon="volUp" label="音量+" onPress={() => key("AudioVolumeUp")} />
-                    <Key icon="volDown" label="音量−" onPress={() => key("AudioVolumeDown")} />
+                    <Key icon="volUp" label="音量+" tip="点过屏幕后按 ⌘=" onPress={() => key("AudioVolumeUp")} />
+                    <Key icon="volDown" label="音量−" tip="点过屏幕后按 ⌘-" onPress={() => key("AudioVolumeDown")} />
                   </KeyGroup>
                 </View>
               </View>
@@ -1057,9 +1064,9 @@ function App() {
               </Scroll>
             </View>
             <KeyGroup label="系统导航" row>
-              <Key icon="back" label="返回" onPress={() => key("GoBack")} />
-              <Key icon="home" label="主页" onPress={() => key("GoHome")} />
-              <Key icon="recents" label="最近" onPress={() => key("AppSwitch")} />
+              <Key icon="back" label="返回" tip="点过屏幕后按 ⌘⌫" onPress={() => key("GoBack")} />
+              <Key icon="home" label="主页" tip="点过屏幕后按 ⇧⌘H" onPress={() => key("GoHome")} />
+              <Key icon="recents" label="最近" tip="点过屏幕后按 ⌘O" onPress={() => key("AppSwitch")} />
             </KeyGroup>
           </View>
           <View style={{ position: "absolute", top: 8, left: 0, right: 0, alignItems: "center", gap: 8 }}>

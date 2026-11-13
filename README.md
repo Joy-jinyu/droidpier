@@ -10,7 +10,9 @@ Droidpier replaces the Android Studio emulator window with a page in Chrome or E
 
 - Sharp, low-latency screen at your display's pixel density, with mouse, wheel scrolling and keyboard input
 - Paste text from your Mac (including Chinese) and copy text out of the emulator
-- Back, Home, Recents, volume, power, rotate (the whole device turns), screenshots, restart
+- Back, Home, Recents, volume, power, rotate (the whole device turns), screenshots, restart; the Android Studio emulator's
+  shortcuts for these keys work once you click the screen (⌘⌫ Back, ⇧⌘H Home, ⌘O Recents, ⌘P power, ⌘= / ⌘- volume,
+  ⌘→ rotate, ⌘S screenshot)
 - Device list: start and stop AVDs, create a device by picking a model and Android version
 - H5 debugging: inspect a WebView page in an embedded DevTools, see its network requests, point it at a local dev server
 - First-run guide in the page: checks the Android SDK pieces and installs what is missing, after you confirm and accept each licence yourself
@@ -47,6 +49,7 @@ Chrome / Edge                    your Mac
 
 ```sh
 droidpier [--port <port>] [--local] [--no-open]
+droidpier --version | --help
 ```
 
 | Option | Effect |
@@ -54,6 +57,10 @@ droidpier [--port <port>] [--local] [--no-open]
 | `--port <port>` | Listen on another port (default `7300`). The page address then ends in `#port=<port>`. |
 | `--local` | Open the page the gateway serves itself, `http://127.0.0.1:<port>/app/`. |
 | `--no-open` | Do not open the browser; just print the address. |
+| `--version` | Print the version (the build time of the release binary) and exit. |
+| `-h`, `--help` | Print the options and exit. |
+
+An unknown option or a stray argument makes `droidpier` exit with a message instead of being ignored.
 
 More in the [command line reference](https://droid.devpier.dev/docs/reference/cli/) and [troubleshooting](https://droid.devpier.dev/docs/guides/troubleshooting/).
 

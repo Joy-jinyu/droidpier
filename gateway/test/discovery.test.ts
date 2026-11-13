@@ -123,3 +123,14 @@ test("ownFilter：发现文件没有 avd.dir 或没有 .ini → 不接管", () =
   assert.equal(accept({ serial: 5560, grpcPort: 8560 }), false);
   assert.equal(logs.length, 3);
 });
+
+test("parseDiscovery 的 avdName 取 avd.id：avd.name 是显示名，可能带空格和括号", () => {
+  const d = parseDiscovery("port.serial=5554\navd.id=Resizable_Experimental\navd.name=Resizable (Experimental)\ngrpc.port=8554\n");
+  assert.equal(d.avdName, "Resizable_Experimental");
+});
+
+test("findRunning 按 avd.id 找得到显示名不同的 AVD", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "emu-disc-"));
+  await writeFile(join(dir, "pid_5.ini"), "port.serial=5554\ngrpc.port=8554\navd.id=Resizable_Experimental\navd.name=Resizable (Experimental)\n");
+  assert.equal((await findRunning(dir, () => true, "Resizable_Experimental"))?.pid, 5);
+});

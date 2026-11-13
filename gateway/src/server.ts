@@ -99,7 +99,7 @@ export type DeviceDebug = {
 
 /** WebView 调试依赖。forDevice 每台设备只调一次，换设备或设备退出时网关关掉旧的。 */
 export type DebugDeps = {
-  forDevice(serial: number): DeviceDebug;
+  forDevice(id: string): DeviceDebug;
   connectCdp(wsUrl: string): Promise<CdpClient>;
   /**
    * navigate 整体超时（毫秒）；超时后关 CDP 连接并回复"页面加载超时"。
@@ -111,7 +111,7 @@ export type DebugDeps = {
 /** 页面拖进来的文件：先落到临时文件，再装到（或放进）设备里。 */
 export type FileOps = {
   /** 在这台设备上跑一条长 adb 命令（install / push），返回 stdout；失败时 Error.message 带着 adb 的输出。 */
-  adb(serial: number, args: string[]): Promise<string>;
+  adb(id: string, args: string[]): Promise<string>;
   /** 临时文件建在这下面，默认 os.tmpdir()。 */
   tmpRoot?: string;
   /** 收分片阶段多久没有新分片就中止，默认 30 秒。 */
@@ -137,7 +137,7 @@ export async function startServer(opts: {
   portOf?: (socket: string) => number | undefined;
   files?: FileOps;
   /** 发出重启指令后等开机完成；不传时不等，直接按 adb-down 结束。 */
-  rebootWait?: (serial: number) => Promise<"done" | "adb-down">;
+  rebootWait?: (id: string) => Promise<"done" | "adb-down">;
   /** 开机进度广播和无会话时重新发现的间隔，默认 1000ms。 */
   pollMs?: number;
   log?: (s: string) => void;
@@ -158,12 +158,12 @@ export async function startServer(opts: {
   const tickets = opts.tickets ?? createTickets();
 
   // 当前设备的调试工具：首次用到时创建，换设备、设备退出、网关关闭时收掉
-  type Debug = { serial: number; d: DeviceDebug; disposed: boolean; listing?: Promise<WebViewPage[]>; proxies: Set<WebSocket> };
+  type Debug = { id: string; d: DeviceDebug; disposed: boolean; listing?: Promise<WebViewPage[]>; proxies: Set<WebSocket> };
   let debug: Debug | undefined;
   let disposals: Promise<void> = Promise.resolve();
-  const dropDebug = (serial?: number) => {
+  const dropDebug = (id?: string) => {
     const cur = debug;
-    if (!cur || (serial !== undefined && cur.serial !== serial)) return;
+    if (!cur || (id !== undefined && cur.id !== id)) return;
     debug = undefined;
     cur.disposed = true;
     // 这些 DevTools 窗口连的是旧设备的转发，不能让它们悄悄留着
@@ -176,10 +176,10 @@ export async function startServer(opts: {
     })();
     disposals = disposals.then(() => done);
   };
-  const debugFor = (serial: number): Debug => {
-    if (debug?.serial === serial) return debug;
+  const debugFor = (id: string): Debug => {
+    if (debug?.id === id) return debug;
     dropDebug();
-    debug = { serial, d: opts.debug!.forDevice(serial), disposed: false, proxies: new Set() };
+    debug = { id, d: opts.debug!.forDevice(id), disposed: false, proxies: new Set() };
     return debug;
   };
   // 同一设备的并发 list 共用一次：两次同时跑会给同一个 socket 各建一个转发
@@ -268,8 +268,8 @@ export async function startServer(opts: {
   const adbFail = (prefix: string, e: unknown): { error: string; code?: "adb-unresponsive" } =>
     e instanceof AdbUnresponsive ? { error: e.message, code: "adb-unresponsive" } : { error: `${prefix}${(e as Error).message}` };
   // 正在重启的设备：同时只有一台、一次
-  let rebooting: { serial: number } | null = null;
-  const isRebooting = (s: EmulatorSession) => rebooting?.serial === s.serial;
+  let rebooting: { id: string } | null = null;
+  const isRebooting = (s: EmulatorSession) => rebooting?.id === s.id;
   const REBOOTING = "模拟器正在重启，等它开机后再试";
   const send = (ws: WebSocket, m: ServerMsg) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m));
@@ -281,7 +281,7 @@ export async function startServer(opts: {
   const booting = () => [...jobs].some((j) => j.progress === "spawning" || j.progress === "booting");
   const sendBoot = (j: StartJob) => broadcast({ t: "boot", name: j.name, progress: j.progress, ...(j.error ? { error: j.error } : {}) });
   const switchTo = (s: EmulatorSession) => {
-    if (debug && debug.serial !== s.serial) dropDebug();
+    if (debug && debug.id !== s.id) dropDebug();
     for (const c of live()) c.attach(s);
   };
   // 会话退出：解绑它的连接并告知页面，连接保持打开，等下一台出现
@@ -299,7 +299,7 @@ export async function startServer(opts: {
       for (const c of live()) if (c.session === s) send(c.ws, { t: "clip", text });
     });
     s.onClosed(() => {
-      dropDebug(s.serial);
+      dropDebug(s.id);
       for (const c of conns) {
         if (c.session !== s) continue;
         c.detach();
@@ -504,7 +504,7 @@ export async function startServer(opts: {
       // 按着的手指属于旧会话，新会话里没有按下
       lastTouch = null;
       watch(s);
-      send(ws, { t: "ready", version: PROTOCOL_VERSION, device: s.device, serial: s.serial });
+      send(ws, { t: "ready", version: PROTOCOL_VERSION, device: s.device, serial: s.serial, deviceId: s.id });
       send(ws, { t: "orientation", rotation: s.rotation });
       if (isRebooting(s)) send(ws, { t: "status", state: "rebooting" });
       subscribe();
@@ -521,7 +521,7 @@ export async function startServer(opts: {
       if (!s) return send(ws, { t: "webviews", rid, list: [], error: "没有连接设备" });
       if (isRebooting(s)) return send(ws, { t: "webviews", rid, list: [], error: REBOOTING });
       try {
-        send(ws, { t: "webviews", rid, list: await listPages(debugFor(s.serial)) });
+        send(ws, { t: "webviews", rid, list: await listPages(debugFor(s.id)) });
       } catch (e) {
         send(ws, { t: "webviews", rid, list: [], ...adbFail("读取 WebView 列表失败：", e) });
       }
@@ -529,7 +529,7 @@ export async function startServer(opts: {
     const findPage = async (socket: string, id: string) => {
       const s = conn.session;
       if (!opts.debug || !s) return null;
-      const h = debugFor(s.serial);
+      const h = debugFor(s.id);
       const page = (await listPages(h)).find((p) => p.socket === socket && p.id === id);
       return page ? { h, page } : null;
     };
@@ -666,7 +666,7 @@ export async function startServer(opts: {
       };
       upload = u;
       touchIdle(u);
-      log(`页面传来 ${name}（${m.size} 字节），${k.kind === "apk" ? "安装到" : "放进"} emulator-${s.serial}`);
+      log(`页面传来 ${name}（${m.size} 字节），${k.kind === "apk" ? "安装到" : "放进"} ${s.id}`);
       u.chain = (async () => {
         try {
           u.dir = await mkdtemp(join(files.tmpRoot ?? tmpdir(), UPLOAD_DIR_PREFIX));
@@ -710,19 +710,19 @@ export async function startServer(opts: {
       await u.fh?.close().catch(() => {});
       u.fh = null;
       const path = join(u.dir!, u.name);
-      const serial = u.session.serial;
+      const id = u.session.id;
       try {
         const s = conn.session;
         if (wsClosed) return;
         if (!s) return uploadMsg(u.id, "failed", { error: "设备已断开" });
-        // 同一个 emulator-<serial> 可能已换成另一台 AVD，按会话认人
+        // 同一个设备 id（emulator-<serial>）可能已换成另一台 AVD，按会话认人
         if (s !== u.session) return uploadMsg(u.id, "failed", { error: "设备已切换，没有安装" });
         if (isRebooting(s)) return uploadMsg(u.id, "failed", { error: REBOOTING });
         uploadMsg(u.id, u.kind === "apk" ? "installing" : "pushing");
         try {
           const out = u.kind === "apk"
-            ? await files.adb(serial, ["install", "-r", "-t", path])
-            : await files.adb(serial, ["push", path, `${PUSH_DIR}/${u.name}`]);
+            ? await files.adb(id, ["install", "-r", "-t", path])
+            : await files.adb(id, ["push", path, `${PUSH_DIR}/${u.name}`]);
           // 有的 adb 版本装失败也退出 0，只在输出里写 Failure
           if (u.kind === "apk" && /Failure \[/.test(out)) throw new Error(out);
           log(`${u.name} ${u.kind === "apk" ? "已安装" : `已放到 ${PUSH_DIR}`}`);
@@ -742,23 +742,23 @@ export async function startServer(opts: {
       const s = conn.session;
       if (!s) return send(ws, { t: "error", message: "重启失败：没有连接设备" });
       if (rebooting) return send(ws, { t: "error", message: "模拟器正在重启，等这一轮结束再试" });
-      rebooting = { serial: s.serial };
-      log(`页面确认重启 emulator-${s.serial}`);
+      rebooting = { id: s.id };
+      log(`页面确认重启 ${s.id}`);
       const onIt = (c: Conn) => c.session === s;
       broadcast({ t: "status", state: "rebooting" }, onIt);
       // 重启后设备里的 adb reverse 和 WebView socket 都没了，旧的转发不能再用
-      dropDebug(s.serial);
+      dropDebug(s.id);
       let result: "done" | "adb-down" | "failed";
       let error: string | undefined;
       try {
         await s.reboot();
-        result = await (opts.rebootWait?.(s.serial) ?? Promise.resolve("adb-down" as const));
+        result = await (opts.rebootWait?.(s.id) ?? Promise.resolve("adb-down" as const));
       } catch (e) {
         result = "failed";
         error = (e as Error).message;
       }
       rebooting = null;
-      log(`emulator-${s.serial} 重启结束：${result}${error ? `（${error}）` : ""}`);
+      log(`${s.id} 重启结束：${result}${error ? `（${error}）` : ""}`);
       broadcast({ t: "status", state: "connected" }, onIt);
       broadcast({ t: "reboot", result, ...(error ? { error } : {}) }, onIt);
     };
@@ -973,7 +973,7 @@ export async function startServer(opts: {
           }
           conn.session.screenshot().then(
             (png) => {
-              const device = conn.session!.avdName ?? `emulator-${conn.session!.serial}`;
+              const device = conn.session!.avdName ?? conn.session!.id;
               const name = screenshotName(device);
               send(ws, { t: "screenshot", name, size: png.byteLength });
               // 4 字节 kind + PNG 数据

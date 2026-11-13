@@ -139,8 +139,8 @@ const srv = await startServer({
   staticDir: STATIC_DIR,
   getSession,
   // 开机完成以 sys.boot_completed 为准；adb 一直不通时最多等 120 秒，之后以画面为准
-  rebootWait: (serial) => waitForReboot({
-    check: () => adb.device(serial)(["shell", "getprop", "sys.boot_completed"]),
+  rebootWait: (id) => waitForReboot({
+    check: () => adb.device(id)(["shell", "getprop", "sys.boot_completed"]),
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     maxMs: 120_000,
@@ -154,13 +154,13 @@ const srv = await startServer({
     catalog: () => buildCatalog(catalogDeps),
   },
   // 装大 APK 要几分钟；走单独的长任务队列，不挡 H5 列表这类短命令（gateway/src/adb.ts）
-  files: { adb: (serial, args) => adb.long(serial)(args, 10 * 60_000) },
+  files: { adb: (id, args) => adb.long(id)(args, 10 * 60_000) },
   debug: {
-    forDevice: (serial) => {
-      const exec = makeAdbExec(serial);
+    forDevice: (id) => {
+      const exec = makeAdbExec(id);
       return {
         // freePort 保留的端口只有 releasePort 才放回，两个必须成对传
-        webviews: createWebViews({ serial, exec, fetchJson: defaultFetchJson, freePort: findFreePort, releasePort }),
+        webviews: createWebViews({ exec, fetchJson: defaultFetchJson, freePort: findFreePort, releasePort }),
         reverses: createReverses(exec),
       };
     },

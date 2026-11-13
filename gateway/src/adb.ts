@@ -65,14 +65,19 @@ export function createAdb(opts: { exec?: (args: string[], timeoutMs?: number) =>
 
   return {
     run,
-    /** 这台设备上的 adb：参数是 `adb -s emulator-<serial>` 之后的部分。 */
-    device: (serial: number) => (args: string[]) => run(["-s", `emulator-${serial}`, ...args]),
+    /** 这台设备上的 adb：参数是 `adb -s <设备 id>` 之后的部分。 */
+    device: (id: string) => (args: string[]) => run(["-s", id, ...args]),
     /** 这台设备上的长任务（install、push），超时由调用方给。 */
-    long: (serial: number) => (args: string[], timeoutMs: number) => {
-      const full = ["-s", `emulator-${serial}`, ...args];
-      return queued(`long:emulator-${serial}`, () => exec(full, timeoutMs));
+    long: (id: string) => (args: string[], timeoutMs: number) => {
+      const full = ["-s", id, ...args];
+      return queued(`long:${id}`, () => exec(full, timeoutMs));
     },
   };
+}
+
+/** 模拟器在 adb 里的设备 id：emulator-<控制台端口>。网关里只在这里拼这个前缀。 */
+export function emulatorId(serial: number): string {
+  return `emulator-${serial}`;
 }
 
 /** 网关进程里唯一的 adb 入口：所有模块共用同一组设备队列。 */

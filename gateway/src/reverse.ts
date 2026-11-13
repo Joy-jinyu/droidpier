@@ -1,5 +1,5 @@
 /** 管理本网关建立的 adb reverse 映射。
- * exec 接收 adb -s emulator-<serial> 之后的参数（与 makeAdbExec 返回的函数一致）。
+ * exec 接收 adb -s <设备 id> 之后的参数（与 makeAdbExec 返回的函数一致）。
  */
 export function createReverses(exec: (args: string[]) => Promise<string>) {
   const ports = new Set<number>();

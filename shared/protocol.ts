@@ -244,8 +244,8 @@ export type ClientMsg =
 
 /** 服务端发给客户端的消息。 */
 export type ServerMsg =
-  /** serial：当前会话的模拟器串口号，对应 AvdInfo.serial。 */
-  | { t: "ready"; version: number; device: { width: number; height: number }; serial: number }
+  /** serial：当前会话的模拟器串口号，对应 AvdInfo.serial。deviceId：adb 里的设备名（emulator-5554、真机序列号），旧网关不发。 */
+  | { t: "ready"; version: number; device: { width: number; height: number }; serial: number; deviceId?: string }
   /** rebooting：模拟器系统正在重启，结束后回到 connected。 */
   | { t: "status"; state: "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" }
   | { t: "avds"; list: AvdInfo[] }

@@ -73,11 +73,11 @@ function makeDeps(opts: {
 
   const freePort = async (): Promise<number> => portCounter++;
 
-  return { exec, execLog, fetchJson, freePort, serial: 5554 };
+  return { exec, execLog, fetchJson, freePort };
 }
 
 test("列表按 visible 排序并带上包名", async () => {
-  const { exec, execLog, fetchJson, freePort, serial } = makeDeps({
+  const { exec, execLog, fetchJson, freePort } = makeDeps({
     procNetUnix: `
 0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642
 `.trim(),
@@ -85,7 +85,7 @@ test("列表按 visible 排序并带上包名", async () => {
     pkgName: "com.example.app.debug",
   });
 
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   const pages = await wv.list();
 
   assert.equal(pages.length, 2);
@@ -107,14 +107,14 @@ test("列表按 visible 排序并带上包名", async () => {
 test("socket 消失后移除转发", async () => {
   // 第一次 list：有 webview_devtools_remote_6642
   // 第二次 list：socket 不见了
-  const { exec, execLog, fetchJson, freePort, serial } = makeDeps({
+  const { exec, execLog, fetchJson, freePort } = makeDeps({
     procNetUnix: `0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642`,
     procNetUnixSecond: "",
     pagesJson: PAGES_JSON,
     pagesJsonSecond: [],
   });
 
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   await wv.list();
   const pages2 = await wv.list();
 
@@ -129,12 +129,12 @@ test("socket 消失后移除转发", async () => {
 });
 
 test("同一个 socket 只 forward 一次", async () => {
-  const { exec, execLog, fetchJson, freePort, serial } = makeDeps({
+  const { exec, execLog, fetchJson, freePort } = makeDeps({
     procNetUnix: `0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642`,
     pagesJson: PAGES_JSON,
   });
 
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   await wv.list();
   await wv.list();
 
@@ -145,12 +145,12 @@ test("同一个 socket 只 forward 一次", async () => {
 });
 
 test("close 移除全部转发", async () => {
-  const { exec, execLog, fetchJson, freePort, serial } = makeDeps({
+  const { exec, execLog, fetchJson, freePort } = makeDeps({
     procNetUnix: `0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642`,
     pagesJson: PAGES_JSON,
   });
 
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   await wv.list();
   await wv.close();
 
@@ -161,7 +161,7 @@ test("close 移除全部转发", async () => {
 });
 
 test("description 非法 JSON 时 visible 按 false 处理不抛错", async () => {
-  const { exec, fetchJson, freePort, serial } = makeDeps({
+  const { exec, fetchJson, freePort } = makeDeps({
     procNetUnix: `0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642`,
     pagesJson: [
       {
@@ -174,7 +174,7 @@ test("description 非法 JSON 时 visible 按 false 处理不抛错", async () =
     ],
   });
 
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   await assert.doesNotReject(() => wv.list());
   const pages = await wv.list();
   assert.equal(pages[0].visible, false);
@@ -221,7 +221,7 @@ test("close 中某个转发移除失败：其余转发照样移除、端口照�
     if (args[0] === "shell" && args[1] === "ps") return "com.example.app\n";
     return "";
   };
-  const wv = createWebViews({ serial: 5554, exec, fetchJson: async () => [], freePort: async () => port++, releasePort: (p) => void released.push(p) });
+  const wv = createWebViews({ exec, fetchJson: async () => [], freePort: async () => port++, releasePort: (p) => void released.push(p) });
   await wv.list();
   await assert.rejects(() => wv.close(), /9300.*device offline/);
   const removed = execLog.filter((a) => a[0] === "forward" && a[1] === "--remove").map((a) => a[2]);
@@ -232,7 +232,7 @@ test("close 中某个转发移除失败：其余转发照样移除、端口照�
 });
 
 test("socket 还在但这次 /json 没答上来：沿用上一次的页面，不让页面从列表里消失", async () => {
-  const { exec, freePort, serial } = makeDeps({
+  const { exec, freePort } = makeDeps({
     procNetUnix: `
 0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642
 `.trim(),
@@ -242,7 +242,7 @@ test("socket 还在但这次 /json 没答上来：沿用上一次的页面，不
     if (++n === 2) throw new Error("timeout");
     return PAGES_JSON;
   };
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   const first = await wv.list();
   const second = await wv.list();
   assert.deepEqual(second.map((p) => p.id), first.map((p) => p.id));
@@ -251,7 +251,7 @@ test("socket 还在但这次 /json 没答上来：沿用上一次的页面，不
 
 // Fix 1: never_attached:true 或 empty:true 时 visible 应为 false
 test("description 含 never_attached:true 或 empty:true 时即便 visible:true 也视为不可见", async () => {
-  const { exec, fetchJson, freePort, serial } = makeDeps({
+  const { exec, fetchJson, freePort } = makeDeps({
     procNetUnix: `0000000000000000: 00000003 00000000 00000000 0001 03 11111 @webview_devtools_remote_6642`,
     pagesJson: [
       {
@@ -271,7 +271,7 @@ test("description 含 never_attached:true 或 empty:true 时即便 visible:true 
       },
     ],
   });
-  const wv = createWebViews({ serial, exec, fetchJson, freePort });
+  const wv = createWebViews({ exec, fetchJson, freePort });
   const pages = await wv.list();
   assert.equal(pages.length, 2);
   const normal = pages.find((p) => p.id === "normal-page");
@@ -308,7 +308,7 @@ test("adb forward 失败：端口被释放，下次 freePort 可重用该端口"
   const releasePort = (p: number) => released.push(p);
   const fetchJson = async () => [] as any[];
 
-  const wv = createWebViews({ serial: 5554, exec, fetchJson, freePort, releasePort });
+  const wv = createWebViews({ exec, fetchJson, freePort, releasePort });
   // 第一次 list 应抛出（forward 失败）
   await assert.rejects(() => wv.list());
   // 被分配的第一个端口（9300）应该被 release
@@ -328,7 +328,6 @@ test("连续 list 失败时退避：第一次失败后短时间内不再调用 a
   let portCounter = 9300;
   // 注入短退避序列（200ms），方便测试
   const wv = createWebViews({
-    serial: 5554,
     exec,
     fetchJson: async () => [],
     freePort: async () => portCounter++,

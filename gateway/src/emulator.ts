@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pidAlive, type Running } from "./discovery.ts";
 import { loadController } from "./sdk.ts";
-import { adb } from "./adb.ts";
+import { adb, emulatorId } from "./adb.ts";
 import type { FrameHeader, RotateDir, Rotation } from "../../shared/protocol.ts";
 
 type Size = { width: number; height: number };
@@ -11,7 +11,9 @@ type Size = { width: number; height: number };
 /** 一台已连上的模拟器：订阅画面、注入输入、感知退出。 */
 export interface EmulatorSession {
   device: Size;
-  /** 控制台端口，adb 里是 emulator-<serial>。 */
+  /** 设备 id：adb 里的设备名，模拟器是 emulator-<serial>。 */
+  id: string;
+  /** 控制台端口，只有模拟器有。 */
   serial: number;
   /** AVD 名称（来自发现文件，见 discoveryAvdName），未知时为 undefined。 */
   avdName?: string;
@@ -167,6 +169,7 @@ export async function connectEmulator(running: Running, timeoutMs = 3000): Promi
 
   const session: EmulatorSession = {
     device,
+    id: emulatorId(running.serial),
     serial: running.serial,
     avdName: running.avdName,
     rotation: rotationFromZ(initial[2] ?? 0),
@@ -254,7 +257,7 @@ export async function connectEmulator(running: Running, timeoutMs = 3000): Promi
     // sendKey({key:"Paste"}) 不生效；adb `input keyevent 279`（KEYCODE_PASTE）生效，所以用 adb。
     async text(text) {
       await session.setClipboard(text);
-      await adb.device(running.serial)(["shell", "input", "keyevent", "279"]);
+      await adb.device(emulatorId(running.serial))(["shell", "input", "keyevent", "279"]);
     },
 
     // gRPC setPhysicalModel 在 32.1.14 上实测生效，不需要退到 adb emu rotate；保留 x、y 两轴的倾角

@@ -8,6 +8,7 @@ import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import { createWebViews, defaultFetchJson, findFreePort, makeAdbExec } from "../src/webviews.ts";
 import { adbBin } from "../src/platform.ts";
+import { emulatorId } from "../src/adb.ts";
 
 if (!process.env.EMU_IT) {
   process.exit(0);
@@ -69,8 +70,7 @@ before(async () => {
   await new Promise((r) => setTimeout(r, 4000));
 
   wv = createWebViews({
-    serial: SERIAL,
-    exec: makeAdbExec(SERIAL),
+    exec: makeAdbExec(emulatorId(SERIAL)),
     fetchJson: defaultFetchJson,
     freePort: findFreePort,
   });

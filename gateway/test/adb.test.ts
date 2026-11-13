@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AdbUnresponsive, createAdb, execAdb, killAdbChildren } from "../src/adb.ts";
+import { AdbUnresponsive, createAdb, emulatorId, execAdb, killAdbChildren } from "../src/adb.ts";
 import { ADB_UNRESPONSIVE } from "../../shared/protocol.ts";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -33,7 +33,7 @@ function gatedExec() {
 test("同一台设备的 adb 命令一次只跑一个，按到达顺序", async () => {
   const f = gatedExec();
   const adb = createAdb({ exec: f.exec });
-  const dev = adb.device(5554);
+  const dev = adb.device("emulator-5554");
   const a = dev(["shell", "cat", "/proc/net/unix"]);
   const b = dev(["shell", "input", "keyevent", "279"]);
   await sleep(10);
@@ -50,8 +50,8 @@ test("同一台设备的 adb 命令一次只跑一个，按到达顺序", async 
 test("不同设备、不带 -s 的命令互不排队", async () => {
   const f = gatedExec();
   const adb = createAdb({ exec: f.exec });
-  void adb.device(5554)(["shell", "true"]);
-  void adb.device(5556)(["shell", "true"]);
+  void adb.device("emulator-5554")(["shell", "true"]);
+  void adb.device("emulator-5556")(["shell", "true"]);
   void adb.run(["forward", "--list"]);
   await sleep(10);
   assert.equal(f.running, 3);
@@ -61,7 +61,7 @@ test("不同设备、不带 -s 的命令互不排队", async () => {
 test("前一个失败（包括超时）后队列继续往下走", async () => {
   const f = gatedExec();
   const adb = createAdb({ exec: f.exec });
-  const dev = adb.device(5554);
+  const dev = adb.device("emulator-5554");
   const a = dev(["shell", "a"]);
   const b = dev(["shell", "b"]);
   await sleep(10);
@@ -117,9 +117,9 @@ test("网关退出时结束还在跑的 adb 进程，不留孤儿", async () => 
 test("长任务另走一条队列：安装没结束时，同一台设备的短命令照常跑；长任务之间仍一次一个", async () => {
   const f = gatedExec();
   const adb = createAdb({ exec: f.exec });
-  const install = adb.long(5554)(["install", "-r", "-t", "/tmp/a.apk"], 600_000);
-  const push = adb.long(5554)(["push", "/tmp/b.txt", "/sdcard/Download/b.txt"], 600_000);
-  const list = adb.device(5554)(["shell", "cat", "/proc/net/unix"]);
+  const install = adb.long("emulator-5554")(["install", "-r", "-t", "/tmp/a.apk"], 600_000);
+  const push = adb.long("emulator-5554")(["push", "/tmp/b.txt", "/sdcard/Download/b.txt"], 600_000);
+  const list = adb.device("emulator-5554")(["shell", "cat", "/proc/net/unix"]);
   await sleep(10);
   assert.deepEqual(f.calls, ["-s emulator-5554 install -r -t /tmp/a.apk", "-s emulator-5554 shell cat /proc/net/unix"]);
   f.gates[1].ok("L");
@@ -135,7 +135,19 @@ test("长任务另走一条队列：安装没结束时，同一台设备的短�
 test("长任务用调用方给的超时", async () => {
   const seen: Array<number | undefined> = [];
   const adb = createAdb({ exec: async (_args, timeoutMs) => (seen.push(timeoutMs), "") });
-  await adb.long(5554)(["install", "x.apk"], 600_000);
-  await adb.device(5554)(["shell", "true"]);
+  await adb.long("emulator-5554")(["install", "x.apk"], 600_000);
+  await adb.device("emulator-5554")(["shell", "true"]);
   assert.deepEqual(seen, [600_000, undefined]);
+});
+
+test("设备 id 原样放进 -s，不加前缀（真机序列号）", async () => {
+  const calls: string[] = [];
+  const adb = createAdb({ exec: async (args) => (calls.push(args.join(" ")), "") });
+  await adb.device("R5CR10WN52H")(["shell", "true"]);
+  await adb.long("192.168.1.5:5555")(["install", "x.apk"], 600_000);
+  assert.deepEqual(calls, ["-s R5CR10WN52H shell true", "-s 192.168.1.5:5555 install x.apk"]);
+});
+
+test("emulatorId 拼出模拟器在 adb 里的名字", () => {
+  assert.equal(emulatorId(5554), "emulator-5554");
 });

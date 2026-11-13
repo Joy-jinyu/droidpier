@@ -7,7 +7,7 @@ import { listAvds, repairAvdTarget } from "./avd.ts";
 import { findOwnRunning, pidAlive, type Running } from "./discovery.ts";
 import { emulatorBin, emulatorEnv, emulatorLogPath } from "./platform.ts";
 import { bootLogHint, bootLogReason, bootStuckDetail } from "./boot-log.ts";
-import { adb, ADB_TIMEOUT_MS } from "./adb.ts";
+import { adb, ADB_TIMEOUT_MS, emulatorId } from "./adb.ts";
 import type { AvdInfo } from "../../shared/protocol.ts";
 
 const GRPC_BASE_PORT = 8554;
@@ -201,7 +201,7 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
         job.serial = running.serial;
         // adb 卡住时按“还没开机”处理，不能拖过开机期限
         const out = await Promise.race([
-          d.adb(["-s", `emulator-${running.serial}`, "shell", "getprop", "sys.boot_completed"]).catch(() => ""),
+          d.adb(["-s", emulatorId(running.serial), "shell", "getprop", "sys.boot_completed"]).catch(() => ""),
           d.sleep(ADB_TIMEOUT_MS).then(() => ""),
         ]);
         if (out.trim() === "1") return running;
@@ -240,5 +240,5 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
 /** 关闭指定串口的模拟器（adb emu kill）。 */
 export async function stopAvd(serial: number, deps?: Partial<LifecycleDeps>): Promise<void> {
   const d = { ...defaults, ...deps };
-  await d.adb(["-s", `emulator-${serial}`, "emu", "kill"]);
+  await d.adb(["-s", emulatorId(serial), "emu", "kill"]);
 }

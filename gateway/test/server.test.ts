@@ -24,6 +24,7 @@ type Sub = { size: { width: number; height: number }; onFrame: (h: FrameHeader, 
 class FakeSession implements EmulatorSession {
   device = { width: 1080, height: 2340 };
   serial = 5554;
+  id = "emulator-5554";
   avdName: string | undefined = "Pixel_5_API_34";
   rotation: 0 | 90 | 180 | 270 = 0;
   subs: Sub[] = [];
@@ -253,7 +254,7 @@ test("hello 后收到 ready，且 device 等于假会话的尺寸", async (t) =>
   const c = await connect();
   hello(c);
   await until(() => c.msgs.length > 0);
-  assert.deepEqual(c.msgs[0], { t: "ready", version: PROTOCOL_VERSION, device: { width: 1080, height: 2340 }, serial: 5554 });
+  assert.deepEqual(c.msgs[0], { t: "ready", version: PROTOCOL_VERSION, device: { width: 1080, height: 2340 }, serial: 5554, deviceId: "emulator-5554" });
 });
 
 test("客户端不读时连推 100 帧，服务端发出的帧数不超过 3，且最后收到的那一帧的 seq 是 99", async (t) => {
@@ -400,12 +401,12 @@ test("模拟器退出后：已有连接收到 emulator-closed 并保持打开，
   assert.deepEqual(c1.msgs[2], { t: "status", state: "emulator-closed" });
   assert.equal(a.subs[0].active, false);
   await until(() => c1.msgs.length === 5);
-  assert.deepEqual(c1.msgs[3], { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554 });
+  assert.deepEqual(c1.msgs[3], { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554, deviceId: "emulator-5554" });
   assert.equal(c1.ws.readyState, WebSocket.OPEN);
   const c2 = await connect();
   hello(c2);
   await until(() => c2.msgs.length > 0);
-  assert.deepEqual(c2.msgs[0], { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554 });
+  assert.deepEqual(c2.msgs[0], { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554, deviceId: "emulator-5554" });
   await until(() => b.subs.length === 2);
   b.push(3);
   await until(() => c2.frames.length === 1 && c1.frames.length === 1);
@@ -653,7 +654,7 @@ test("start：所有连接收到 booting 和 boot 进度；就绪后切到新会
   for (const c of [c1, c2]) {
     assert.ok(c.msgs.some((m) => m.t === "boot" && m.progress === "ready"));
     await until(() => c.msgs.at(-1).t === "orientation");
-    assert.deepEqual(c.msgs.at(-2), { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554 });
+    assert.deepEqual(c.msgs.at(-2), { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554, deviceId: "emulator-5554" });
   }
   await until(() => b.subs.length === 2);
   b.push(9);
@@ -672,7 +673,7 @@ test("use：切到另一台运行中的 AVD，旧订阅取消，重新 ready", a
   c.ws.send(JSON.stringify({ t: "use", name: "B" }));
   await until(() => b.subs.length === 1);
   assert.equal(a.subs[0].active, false);
-  assert.deepEqual(c.msgs.at(-2), { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554 });
+  assert.deepEqual(c.msgs.at(-2), { t: "ready", version: PROTOCOL_VERSION, device: { width: 720, height: 1600 }, serial: 5554, deviceId: "emulator-5554" });
   assert.deepEqual(c.msgs.at(-1), { t: "orientation", rotation: 0 });
 });
 
@@ -945,18 +946,18 @@ function fakeDebug(pages: WebViewPage[] = [PAGE]) {
     deps: undefined as unknown as DebugDeps,
   };
   f.deps = {
-    forDevice: (serial) => ({
+    forDevice: (id) => ({
       webviews: {
-        list: async () => (calls.push(`list ${serial}`), f.pages),
+        list: async () => (calls.push(`list ${id}`), f.pages),
         portOf: (socket) => (f.pages.some((p) => p.socket === socket) ? f.port : undefined),
-        close: async () => void calls.push(`close ${serial}`),
+        close: async () => void calls.push(`close ${id}`),
       },
       reverses: {
         ensure: async (port) => {
-          calls.push(`ensure ${serial} ${port}`);
+          calls.push(`ensure ${id} ${port}`);
           if (f.ensureError) throw f.ensureError;
         },
-        removeAll: async () => void calls.push(`removeAll ${serial}`),
+        removeAll: async () => void calls.push(`removeAll ${id}`),
       },
     }),
     connectCdp: async (wsUrl) => {
@@ -1035,8 +1036,8 @@ test("webviews 请求返回列表，rid 原样带回", async (t) => {
 test("webviews 读列表失败：回复带 error，不当成空列表", async (t) => {
   const f = fakeDebug();
   const { c } = await debugSetup(t, f);
-  f.deps.forDevice = ((orig) => (serial: number) => {
-    const d = orig(serial);
+  f.deps.forDevice = ((orig) => (id: string) => {
+    const d = orig(id);
     return { ...d, webviews: { ...d.webviews, list: async () => { throw new Error("adb 超时"); } } };
   })(f.deps.forDevice);
   c.ws.send(JSON.stringify({ t: "webviews", rid: 21 }));
@@ -1049,7 +1050,7 @@ test("navigate localhost:5173：先 ensure(5173) 再 navigate，成功后关闭 
   c.ws.send(JSON.stringify({ t: "navigate", rid: 3, socket: PAGE.socket, id: "p1", address: "localhost:5173" }));
   await until(() => !!reply(c, "navigate", 3));
   assert.deepEqual(reply(c, "navigate", 3), { t: "navigate", rid: 3, ok: true, href: "http://localhost:5173/", title: "Dev", bridge: true });
-  const ensureAt = f.calls.indexOf("ensure 5554 5173");
+  const ensureAt = f.calls.indexOf("ensure emulator-5554 5173");
   const navAt = f.calls.indexOf("navigate http://localhost:5173/");
   assert.ok(ensureAt >= 0 && navAt > ensureAt, f.calls.join(" | "));
   assert.ok(f.calls.includes(`cdp ws://127.0.0.1:9300/devtools/page/p1`));
@@ -1142,15 +1143,16 @@ test("切换到另一台设备：旧设备的转发和 reverse 被移除，之�
   const a = new FakeSession();
   const b = new FakeSession();
   b.serial = 5556;
+  b.id = "emulator-5556";
   const fa = fakeAvd({ B: b });
   const { c, f } = await debugSetup(t, fakeDebug(), a, fa.ops);
   c.ws.send(JSON.stringify({ t: "webviews", rid: 1 }));
   await until(() => !!reply(c, "webviews", 1));
   c.ws.send(JSON.stringify({ t: "use", name: "B" }));
-  await until(() => f.calls.includes("close 5554") && f.calls.includes("removeAll 5554"));
+  await until(() => f.calls.includes("close emulator-5554") && f.calls.includes("removeAll emulator-5554"));
   c.ws.send(JSON.stringify({ t: "webviews", rid: 2 }));
   await until(() => !!reply(c, "webviews", 2));
-  assert.ok(f.calls.includes("list 5556"), f.calls.join(" | "));
+  assert.ok(f.calls.includes("list emulator-5556"), f.calls.join(" | "));
 });
 
 test("模拟器退出：这台设备的转发和 reverse 被移除", async (t) => {
@@ -1158,7 +1160,7 @@ test("模拟器退出：这台设备的转发和 reverse 被移除", async (t) =
   c.ws.send(JSON.stringify({ t: "webviews", rid: 1 }));
   await until(() => !!reply(c, "webviews", 1));
   session!.fireClosed();
-  await until(() => f.calls.includes("close 5554") && f.calls.includes("removeAll 5554"));
+  await until(() => f.calls.includes("close emulator-5554") && f.calls.includes("removeAll emulator-5554"));
 });
 
 test("网关关闭时移除转发和 reverse", async (t) => {
@@ -1166,7 +1168,7 @@ test("网关关闭时移除转发和 reverse", async (t) => {
   c.ws.send(JSON.stringify({ t: "navigate", rid: 1, socket: PAGE.socket, id: "p1", address: "localhost:5173" }));
   await until(() => !!reply(c, "navigate", 1));
   await srv.close();
-  assert.ok(f.calls.includes("close 5554") && f.calls.includes("removeAll 5554"), f.calls.join(" | "));
+  assert.ok(f.calls.includes("close emulator-5554") && f.calls.includes("removeAll emulator-5554"), f.calls.join(" | "));
 });
 
 test("网关关闭不会被已升级但没发消息的连接卡住", async (t) => {
@@ -1190,6 +1192,7 @@ test("切换设备时断开指向旧设备的 DevTools 代理连接", async (t) 
   const a = new FakeSession();
   const b = new FakeSession();
   b.serial = 5556;
+  b.id = "emulator-5556";
   const fa = fakeAvd({ B: b });
   const { c, srv } = await debugSetup(t, f, a, fa.ops);
   const dt = new WebSocket(await inspectWs(c, srv.port), { headers: { Origin: APPSPOT } });
@@ -1589,8 +1592,8 @@ test("install 不再接受 avd：建设备要走 createAvd", async (t) => {
 test("webviews：adb 无响应时回复统一的话和 code，不带“读取失败”前缀", async (t) => {
   const f = fakeDebug();
   const { c } = await debugSetup(t, f);
-  f.deps.forDevice = ((orig) => (serial: number) => {
-    const d = orig(serial);
+  f.deps.forDevice = ((orig) => (id: string) => {
+    const d = orig(id);
     return { ...d, webviews: { ...d.webviews, list: async () => { throw new AdbUnresponsive(); } } };
   })(f.deps.forDevice);
   c.ws.send(JSON.stringify({ t: "webviews", rid: 31 }));
@@ -1633,8 +1636,8 @@ test("模拟器拒绝按键时把原因告诉页面，不再只写网关日志",
 
 /** 可控的开机等待：resolve 前一直在“重启中”。 */
 function gatedWait() {
-  const g = { calls: [] as number[], finish: (_r: "done" | "adb-down") => {} };
-  const wait = (serial: number) => new Promise<"done" | "adb-down">((r) => { g.calls.push(serial); g.finish = r; });
+  const g = { calls: [] as string[], finish: (_r: "done" | "adb-down") => {} };
+  const wait = (id: string) => new Promise<"done" | "adb-down">((r) => { g.calls.push(id); g.finish = r; });
   return { g, wait };
 }
 
@@ -1664,7 +1667,7 @@ test("reboot：重启中广播 rebooting，开机完成后恢复 connected 并�
   c.ws.send(JSON.stringify({ t: "reboot" }));
   await until(() => c.msgs.some((m) => m.t === "status" && m.state === "rebooting") && other.msgs.some((m) => m.t === "status" && m.state === "rebooting"));
   assert.equal(session.reboots, 1);
-  assert.deepEqual(g.calls, [5554]);
+  assert.deepEqual(g.calls, ["emulator-5554"]);
   g.finish("done");
   for (const x of [c, other]) {
     await until(() => x.msgs.some((m) => m.t === "reboot"));
@@ -1694,7 +1697,7 @@ test("reboot：重启中丢掉输入、H5 列表直接回“正在重启”，�
   await until(() => !!reply(c, "webviews", 1));
   c.ws.send(JSON.stringify({ t: "reboot" }));
   await until(() => c.msgs.some((m) => m.state === "rebooting"));
-  await until(() => f.calls.includes("close 5554") && f.calls.includes("removeAll 5554"));
+  await until(() => f.calls.includes("close emulator-5554") && f.calls.includes("removeAll emulator-5554"));
   c.ws.send(JSON.stringify({ t: "touch", x: 1, y: 2, down: true }));
   c.ws.send(JSON.stringify({ t: "key", key: "GoHome", eventType: "keypress" }));
   c.ws.send(JSON.stringify({ t: "webviews", rid: 2 }));
@@ -1754,17 +1757,17 @@ import type { FileOps } from "../src/server.ts";
 /** 假 adb：记下参数和调用时临时文件的内容；out / err 决定结果，gate 为真时挂起到 release()。 */
 function fakeFiles(root: string) {
   const f = {
-    calls: [] as Array<{ serial: number; args: string[]; content: string | null }>,
+    calls: [] as Array<{ id: string; args: string[]; content: string | null }>,
     out: "Success\n",
     err: null as Error | null,
     gate: false,
     release: () => {},
     ops: {
       tmpRoot: root,
-      adb: async (serial: number, args: string[]) => {
+      adb: async (id: string, args: string[]) => {
         const local = args[0] === "install" ? args[3] : args[1];
         const content = await readFileFs(local, "utf8").catch(() => null);
-        f.calls.push({ serial, args, content });
+        f.calls.push({ id, args, content });
         if (f.gate) await new Promise<void>((r) => (f.release = r));
         if (f.err) throw f.err;
         return f.out;
@@ -1805,7 +1808,7 @@ test("传 APK：分片逐片确认，收齐后 adb install -r -t 临时文件，
   assert.deepEqual(u.ups(1).filter((m) => m.state === "uploading").map((m) => m.received), [0, UPLOAD_CHUNK_BYTES, 2 * UPLOAD_CHUNK_BYTES, body.byteLength]);
   assert.equal(u.files.calls.length, 1);
   const call = u.files.calls[0];
-  assert.equal(call.serial, 5554);
+  assert.equal(call.id, "emulator-5554");
   assert.deepEqual(call.args.slice(0, 3), ["install", "-r", "-t"]);
   assert.ok(call.args[3].startsWith(u.root) && call.args[3].endsWith("/app-debug.apk"));
   assert.equal(call.content, body.toString("utf8"));

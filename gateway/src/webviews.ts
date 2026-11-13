@@ -24,7 +24,6 @@ export function parseDevtoolsSockets(procNetUnix: string): string[] {
 export type { WebViewPage };
 
 type WebViewsDeps = {
-  serial: number;
   exec: (args: string[]) => Promise<string>;
   fetchJson: (port: number) => Promise<any[]>;
   freePort: () => Promise<number>;
@@ -292,7 +291,7 @@ export async function defaultFetchJson(port: number): Promise<any[]> {
   }
 }
 
-/** 生产用 exec：adb -s emulator-<serial> <args>，和网关里其他 adb 调用共用这台设备的队列。 */
-export function makeAdbExec(serial: number) {
-  return adb.device(serial);
+/** 生产用 exec：adb -s <设备 id> <args>，和网关里其他 adb 调用共用这台设备的队列。 */
+export function makeAdbExec(id: string) {
+  return adb.device(id);
 }

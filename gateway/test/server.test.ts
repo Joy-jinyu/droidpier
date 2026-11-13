@@ -456,8 +456,11 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
   let reject!: (e: Error) => void;
   let displayName: string | undefined;
   let deleted = false;
+  let running: "no" | "grpc" | "no-grpc" = "no";
+  // 设了 gate 时 delete 等它放行，用来测删除进行中的请求
+  let gate: Promise<void> | null = null;
   const ops: AvdOps = {
-    list: async () => (deleted ? [] : [{ name: "A", running: "no", ...(displayName ? { displayName } : {}) }]),
+    list: async () => (deleted ? [] : [{ name: "A", running, ...(displayName ? { displayName } : {}) }]),
     start: (name) => {
       calls.push(`start ${name}`);
       if (job && job.name === name && job.progress === "booting") return job;
@@ -471,11 +474,13 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
       return sessions[name] ?? null;
     },
     rename: async (name, d) => {
+      calls.push(`rename ${name}`);
       if (name !== "A") throw new Error(`没有这个设备：${name}`);
       displayName = d;
     },
     delete: async (name) => {
       calls.push(`delete ${name}`);
+      if (gate) await gate;
       if (name !== "A" || deleted) throw new Error(`没有这个设备：${name}`);
       deleted = true;
     },
@@ -483,6 +488,12 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
   return {
     ops,
     calls,
+    setRunning: (r: typeof running) => void (running = r),
+    hold: () => {
+      let release!: () => void;
+      gate = new Promise((r) => (release = r));
+      return () => { gate = null; release(); };
+    },
     finish: () => {
       job.progress = "ready";
       resolve({ pid: 1, serial: 5556, grpcPort: 8556, avdName: job.name });
@@ -559,8 +570,48 @@ test("deleteAvd：正在开机的设备不删，也不去问 AvdOps", async (t) 
   await until(() => c.msgs.some((m) => m.t === "boot"));
   c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 11, name: "A" }));
   await until(() => c.msgs.some((m) => m.t === "deleteAvd"));
-  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 11, ok: false, error: "这台设备正在启动，先关闭再删除" });
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 11, ok: false, error: "这台设备正在开机，等它开机后先关闭再删除" });
   assert.equal(f.calls.includes("delete A"), false);
+});
+
+test("deleteAvd：列表里显示在运行（比如只有 adb 看得到的 no-grpc）时不删", async (t) => {
+  const f = fakeAvd({});
+  f.setRunning("no-grpc");
+  const { connect } = await setup(t, new FakeSession(), undefined, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 12, name: "A" }));
+  await until(() => c.msgs.some((m) => m.t === "deleteAvd"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 12, ok: false, error: "先关闭这台设备再删除" });
+  assert.equal(f.calls.includes("delete A"), false);
+});
+
+test("deleteAvd 进行中：同一台再删、启动、切换、改名都拒绝，不去问 AvdOps", async (t) => {
+  const f = fakeAvd({});
+  const release = f.hold();
+  const { connect } = await setup(t, new FakeSession(), undefined, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 13, name: "A" }));
+  await until(() => f.calls.includes("delete A"));
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 14, name: "A" }));
+  c.ws.send(JSON.stringify({ t: "start", name: "A" }));
+  c.ws.send(JSON.stringify({ t: "use", name: "A" }));
+  c.ws.send(JSON.stringify({ t: "renameAvd", rid: 15, name: "A", displayName: "x" }));
+  await until(() => c.msgs.some((m) => m.t === "renameAvd") && c.msgs.filter((m) => m.t === "error").length >= 2 && c.msgs.some((m) => m.t === "deleteAvd"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd"), { t: "deleteAvd", rid: 14, ok: false, error: "正在删除这台设备" });
+  assert.deepEqual(c.msgs.find((m) => m.t === "renameAvd"), { t: "renameAvd", rid: 15, ok: false, error: "正在删除这台设备" });
+  assert.deepEqual(c.msgs.filter((m) => m.t === "error").map((m) => m.message), ["正在删除这台设备", "正在删除这台设备"]);
+  assert.deepEqual(f.calls, ["delete A"]);
+  release();
+  await until(() => c.msgs.some((m) => m.t === "deleteAvd" && m.rid === 13));
+  assert.deepEqual(c.msgs.find((m) => m.t === "deleteAvd" && m.rid === 13), { t: "deleteAvd", rid: 13, ok: true });
+  // 删完就放开了：再删一次走到 AvdOps（这次是“没有这个设备”）
+  c.ws.send(JSON.stringify({ t: "deleteAvd", rid: 16, name: "A" }));
+  await until(() => c.msgs.some((m) => m.t === "deleteAvd" && m.rid === 16));
+  assert.equal(f.calls.filter((x) => x === "delete A").length, 2);
 });
 
 test("renameAvd：失败时回复原因，不广播 avds", async (t) => {

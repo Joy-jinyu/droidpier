@@ -153,6 +153,9 @@ export async function startServer(opts: {
   const conns = new Set<Conn>();
   const watched = new WeakSet<EmulatorSession>();
   const jobs = new Set<StartJob>();
+  // 正在删除的 AVD：删完之前同名的启动、切换、改名、再删都拒绝
+  const deleting = new Set<string>();
+  const DELETING = "正在删除这台设备";
   let gatewayPort = opts.port;
   const tickets = opts.tickets ?? createTickets();
 
@@ -848,7 +851,9 @@ export async function startServer(opts: {
           );
           break;
         case "start":
-          if (opts.avd) startJob(m.name);
+          if (!opts.avd) break;
+          if (deleting.has(m.name)) send(ws, { t: "error", message: DELETING });
+          else startJob(m.name);
           break;
         case "stop":
           if (!opts.avd) break;
@@ -860,6 +865,10 @@ export async function startServer(opts: {
           break;
         case "use": {
           if (!opts.avd) break;
+          if (deleting.has(m.name)) {
+            send(ws, { t: "error", message: DELETING });
+            break;
+          }
           let failure: string | null = null;
           const s = await opts.avd.use(m.name).catch((e: Error) => ((failure = e.message), log(`切换到 ${m.name} 失败：${e.message}`), null));
           if (s) switchTo(s);
@@ -897,7 +906,7 @@ export async function startServer(opts: {
             break;
           }
           const avd = opts.avd;
-          const done = await avd.rename(m.name, m.displayName).then(() => null, (e: Error) => e.message);
+          const done = deleting.has(m.name) ? DELETING : await avd.rename(m.name, m.displayName).then(() => null, (e: Error) => e.message);
           send(ws, { t: "renameAvd", rid: m.rid, ok: done === null, ...(done === null ? {} : { error: done }) });
           // 别的页面也要看到新名字
           if (done === null) avd.list().then((list) => broadcast({ t: "avds", list }), (e: Error) => log(`改名后读取 AVD 列表失败：${e.message}`));
@@ -909,10 +918,25 @@ export async function startServer(opts: {
             break;
           }
           const avd = opts.avd;
-          // 开机任务进行中时发现文件可能还没写出来，AvdOps 看不出它在运行
-          const done = [...jobs].some((j) => j.name === m.name)
-            ? "这台设备正在启动，先关闭再删除"
-            : await avd.delete(m.name).then(() => null, (e: Error) => e.message);
+          const name = m.name;
+          const tryDelete = async (): Promise<string | null> => {
+            if (deleting.has(name)) return DELETING;
+            // 开机任务进行中时发现文件可能还没写出来，AvdOps 看不出它在运行
+            if ([...jobs].some((j) => j.name === name)) return "这台设备正在开机，等它开机后先关闭再删除";
+            deleting.add(name);
+            try {
+              // 最后再按列表看一次：它还认 adb 里看得到、没开 gRPC 的模拟器（no-grpc）
+              const info = (await avd.list()).find((a) => a.name === name);
+              if (info && info.running !== "no") return "先关闭这台设备再删除";
+              await avd.delete(name);
+              return null;
+            } catch (e) {
+              return (e as Error).message;
+            } finally {
+              deleting.delete(name);
+            }
+          };
+          const done = await tryDelete();
           log(done === null ? `已删除设备 ${m.name}` : `删除设备 ${m.name} 失败：${done}`);
           send(ws, { t: "deleteAvd", rid: m.rid, ok: done === null, ...(done === null ? {} : { error: done }) });
           if (done === null) avd.list().then((list) => broadcast({ t: "avds", list }), (e: Error) => log(`删除后读取 AVD 列表失败：${e.message}`));

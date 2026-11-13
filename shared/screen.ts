@@ -16,7 +16,7 @@ export function fitSize(box: Size, device: Size, rotation: Rotation): Size {
 
 /**
  * 画在屏幕外面的机身：屏幕区（四边各去掉 bezel）按转过之后的宽高比、整个机身放进容器时的尺寸，取整。
- * zoom 只缩放屏幕区，机身边框宽度不变，屏幕区保持设备的宽高比；大于 1 时会超出容器。
+ * zoom 只缩放屏幕区，机身边框宽度不变，屏幕区保持设备的宽高比。
  */
 export function deviceFrame(box: Size, device: Size, rotation: Rotation, bezel: number, zoom = 1): Size {
   const inner = fitSize({ width: box.width - 2 * bezel, height: box.height - 2 * bezel }, device, rotation);

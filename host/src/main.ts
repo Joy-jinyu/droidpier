@@ -364,8 +364,6 @@ export async function createHost(player: Player) {
 
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    // 画面上的滚轮只给设备：nsh 在根元素上自己滚动滚动视图、不看 preventDefault，不拦住的话放大后设备区会跟着滚
-    e.stopPropagation();
     if (pointerIsDown || !device.width) return;
     // deltaMode 转换：PIXEL(0) 不变；LINE(1) ×40px；PAGE(2) × canvas CSS 高度
     let dy = e.deltaY;

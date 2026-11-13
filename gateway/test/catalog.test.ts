@@ -1,48 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { buildCatalog, parseDeviceList, parseSysImgManifest, realCatalogDeps, scanInstalledImages, type CatalogDeps } from "../src/catalog.ts";
+import { buildCatalog, parseSysImgManifest, scanInstalledImages, type CatalogDeps } from "../src/catalog.ts";
 
-// 2026-11-12 用 Android Studio 自带的 AvdManagerCli 跑 `avdmanager list device` 的原样输出
-const LIST = await readFile(new URL("./fixtures/avdmanager-list-device.txt", import.meta.url), "utf8");
-// 新版 cmdline-tools 才有的几种，格式同上
-const NEWER = `---------
-id: 59 or "pixel_tablet"
-    Name: Pixel Tablet
-    OEM : Google
----------
-id: 60 or "pixel_9"
-    Name: Pixel 9
-    OEM : Google
----------
-id: 61 or "xr_headset_device"
-    Name: XR Headset
-    OEM : Google
-    Tag : google-xr
----------
-id: 62 or "medium_phone"
-    Name: Medium Phone
-    OEM : Generic
-`;
-
-test("机型：排除 TV、手表、车机、桌面、XR 和平板，Pixel 在前", () => {
-  const list = parseDeviceList(LIST + NEWER);
-  const ids = list.map((d) => d.id);
-  for (const gone of ["tv_1080p", "wearos_rect", "automotive_1024p_landscape", "desktop_small", "desktop_large", "xr_headset_device",
-    "pixel_c", "pixel_tablet", "Nexus 7", "Nexus 7 2013", "Nexus 9", "Nexus 10", "7in WSVGA (Tablet)", "10.1in WXGA (Tablet)", "13.5in Freeform", "resizable"]) {
-    assert.ok(!ids.includes(gone), gone);
-  }
-  assert.deepEqual(list.find((d) => d.id === "pixel_5"), { id: "pixel_5", name: "Pixel 5", oem: "Google" });
-  assert.deepEqual(list.find((d) => d.id === "Nexus 5X"), { id: "Nexus 5X", name: "Nexus 5X", oem: "Google" });
-  assert.ok(ids.includes("4.65in 720p (Galaxy Nexus)"));
-  assert.ok(ids.includes("medium_phone"));
-  // Pixel 一组排在最前，按 avdmanager 的顺序
-  const firstOther = list.findIndex((d) => !d.id.startsWith("pixel"));
-  assert.ok(list.slice(firstOther).every((d) => !d.id.startsWith("pixel")));
-  assert.deepEqual(ids.slice(0, 3), ["pixel", "pixel_2", "pixel_2_xl"]);
-  assert.ok(ids.includes("pixel_9"));
+test("机型：内置的手机表，Pixel 在前，默认 Pixel 5", async () => {
+  const c = await buildCatalog(deps());
+  assert.deepEqual(c.devices.find((d) => d.id === "pixel_5"), { id: "pixel_5", name: "Pixel 5", oem: "Google" });
+  assert.ok(c.devices.slice(0, 3).every((d) => d.id.startsWith("pixel")));
+  assert.equal(c.defaultDevice, "pixel_5");
 });
 
 // 结构照抄 https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml（2026-11-12）
@@ -123,7 +87,6 @@ test("已安装：扫描 system-images，只要 arm64-v8a，tag 先 google_apis�
 });
 
 const deps = (over: Partial<CatalogDeps> = {}): CatalogDeps => ({
-  listDevices: async () => LIST,
   installed: async () => [
     { pkg: "system-images;android-29;google_apis;arm64-v8a", api: "29", apiLevel: 29, tag: "google_apis", installed: true, version: "Android 10" },
     { pkg: "system-images;android-33;google_apis_playstore;arm64-v8a", api: "33", apiLevel: 33, tag: "google_apis_playstore", installed: true, version: "Android 13" },
@@ -144,7 +107,6 @@ test("目录：已安装的在前，可下载的去掉已装的同一个包；�
   assert.equal(c.defaultDevice, "pixel_5");
   assert.equal(c.defaultImage, "system-images;android-34;google_apis;arm64-v8a");
   assert.deepEqual(c.existing, ["emu_web_default"]);
-  assert.equal(c.needTools, false);
 });
 
 test("目录：没装任何镜像时默认选 android-34", async () => {
@@ -152,19 +114,11 @@ test("目录：没装任何镜像时默认选 android-34", async () => {
   assert.equal(c.defaultImage, "system-images;android-34;google_apis;arm64-v8a");
 });
 
-test("目录：没有 avdmanager 时机型为空、needTools；清单读不到时只列已安装的并给出原因", async () => {
-  const c = await buildCatalog(deps({ listDevices: async () => null, manifest: async () => { throw new Error("HTTP 503"); } }));
-  assert.equal(c.needTools, true);
-  assert.deepEqual(c.devices, []);
-  assert.equal(c.defaultDevice, null);
+test("目录：清单读不到时只列已安装的并给出原因，机型照常", async () => {
+  const c = await buildCatalog(deps({ manifest: async () => { throw new Error("HTTP 503"); } }));
+  assert.ok(c.devices.length > 0);
   assert.deepEqual(c.images.map((i) => i.api), ["33", "29"]);
   assert.match(c.imagesError!, /读取可下载的系统版本失败：HTTP 503/);
-});
-
-test("目录：avdmanager 出错时给出原因", async () => {
-  const c = await buildCatalog(deps({ listDevices: async () => { throw new Error("找不到 Java"); } }));
-  assert.equal(c.needTools, false);
-  assert.match(c.devicesError!, /读取机型失败：找不到 Java/);
 });
 
 test("系统镜像清单：修订号按 major.minor.micro 比数字；大小取 macosx 或不限系统的 complete 包，不取补丁和别的系统", () => {
@@ -187,24 +141,4 @@ test("系统镜像清单：修订号按 major.minor.micro 比数字；大小取 
   assert.equal(img.sizeMb, 400);
   assert.equal(parseSysImgManifest(`<channel id="channel-0">stable</channel>${body("<major>2</major>", any(123))}`)[0].sizeMb, 123);
   assert.equal(parseSysImgManifest(`<channel id="channel-0">stable</channel>${body("<major>2</major>", linux)}`).length, 0);
-});
-
-test("realCatalogDeps：并发读机型只跑一次 avdmanager；失败后下次重跑", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "emu-cat-"));
-  const count = join(dir, "count");
-  const bin = join(dir, "avdmanager");
-  await writeFile(bin, `#!/bin/sh\necho x >> "${count}"\nsleep 0.2\nif [ -f "${dir}/fail" ]; then echo boom >&2; exit 1; fi\ncat <<'EOF'\n${LIST}EOF\n`);
-  await chmod(bin, 0o755);
-  const make = () => realCatalogDeps({ sdkRoot: dir, avdHome: dir, avdmanager: bin, manifestUrl: "x", findJava: async () => "/jdk", fetchText: async () => "" });
-  const d = make();
-  const [a, b] = await Promise.all([d.listDevices(), d.listDevices()]);
-  assert.equal(a, b);
-  assert.match(a!, /pixel_5/);
-  assert.equal((await readFile(count, "utf8")).trim().split("\n").length, 1);
-  const f = make();
-  await writeFile(join(dir, "fail"), "");
-  await assert.rejects(f.listDevices(), /boom/);
-  await rm(join(dir, "fail"));
-  assert.match((await f.listDevices())!, /pixel_5/);
-  await rm(dir, { recursive: true });
 });

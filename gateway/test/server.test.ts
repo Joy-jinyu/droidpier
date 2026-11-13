@@ -7,7 +7,7 @@ import net from "node:net";
 import WebSocket, { WebSocketServer } from "ws";
 import { startServer, type AvdOps, type DebugDeps, type SetupOps } from "../src/server.ts";
 import type { CdpClient } from "../src/cdp.ts";
-import type { AvdCatalog, WebViewPage } from "../../shared/protocol.ts";
+import type { AvdCatalog, EnvMissing, WebViewPage } from "../../shared/protocol.ts";
 import { cachedSession } from "../src/session-cache.ts";
 import type { EmulatorSession } from "../src/emulator.ts";
 import { BIN_SCREENSHOT, binKind, CLOSE_BAD_TOKEN, CLOSE_NO_HELLO, CLOSE_ORIGIN, CLOSE_VERSION, decodeFrameHeader, PROTOCOL_VERSION, type FrameHeader } from "../../shared/protocol.ts";
@@ -1315,7 +1315,7 @@ test("/devtools/：Origin 不是 appspot 也不在白名单 → 4003，票据不
 });
 
 /** 假的环境检查和安装器：记下 run 的调用，进度和许可证由测试手动推。 */
-function fakeSetup(opts: { freeMb?: number; java?: boolean; checkThrows?: boolean; catalog?: AvdCatalog } = {}) {
+function fakeSetup(opts: { freeMb?: number; checkThrows?: boolean; catalog?: AvdCatalog; missing?: EnvMissing[] } = {}) {
   const runs: string[][] = [];
   const specs: unknown[] = [];
   const accepted: number[] = [];
@@ -1323,20 +1323,19 @@ function fakeSetup(opts: { freeMb?: number; java?: boolean; checkThrows?: boolea
   let progress: ((p: { id: string; phase: "download" | "unpack" | "license" | "install" | "done" | "failed"; pct?: number; logTail: string }) => void) | undefined;
   let license: ((l: { id: number; name: string; text: string }) => void) | undefined;
   let finish!: () => void;
-  let missing: Array<{ id: "emulator" | "java"; detail: string; sizeMb?: number; diskMb?: number; command?: string; auto: boolean }> = [
+  let missing: EnvMissing[] = opts.missing ?? [
     { id: "emulator", detail: "没有模拟器程序", sizeMb: 400, diskMb: 1200, command: 'sdkmanager "emulator"', auto: true },
   ];
-  if (opts.java === false) missing.unshift({ id: "java", detail: "需要 Java", auto: false });
   const free = opts.freeMb ?? 100_000;
   const ops: SetupOps = {
     check: async () => {
       if (opts.checkThrows) throw new Error("读不了目录");
-      return { ok: missing.length === 0, missing, sdkRoot: "/sdk", avdHome: "/avd", androidCli: false, javaHome: opts.java === false ? null : "/jdk", freeMb: free, avdFreeMb: free, sameDisk: true };
+      return { ok: missing.length === 0, missing, sdkRoot: "/sdk", avdHome: "/avd", freeMb: free, avdFreeMb: free, sameDisk: true };
     },
     installer: {
-      run: (ids, onProgress, onLicense, spec) => {
+      run: (ids, onProgress, onLicense, job) => {
         runs.push(ids);
-        specs.push(spec);
+        specs.push(job);
         progress = onProgress;
         license = onLicense;
         return new Promise<void>((r) => (finish = () => { missing = []; r(); }));
@@ -1459,15 +1458,21 @@ test("磁盘不够：网关拒绝 install，和页面用同一套算法给出还
   assert.deepEqual(f.runs, []);
 });
 
-test("没有 Java：网关拒绝要 sdkmanager 的安装", async (t) => {
-  const f = fakeSetup({ java: false });
-  const { connect } = await setup(t, null, undefined, undefined, undefined, f.ops);
-  const c = await connect();
-  hello(c);
-  await until(() => c.msgs.some((m) => m.t === "env"));
-  c.ws.send(JSON.stringify({ t: "install", ids: ["emulator"] }));
+test("install 系统镜像：装环境检查里说的那个镜像（比如设备缺的 Android 15）", async (t) => {
+  const pkg = "system-images;android-35;google_apis;arm64-v8a";
+  const f = fakeSetup({ missing: [{ id: "system-image", detail: "设备 A 的系统镜像 Android 15 不在了", pkg, sizeMb: 1800, diskMb: 5400, auto: true }] });
+  const c = await setupConnected(t, f);
+  c.ws.send(JSON.stringify({ t: "install", ids: ["system-image"] }));
+  await until(() => f.runs.length === 1);
+  assert.deepEqual(f.specs, [{ image: pkg }]);
+});
+
+test("install 不能自动装的项：拒绝", async (t) => {
+  const f = fakeSetup({ missing: [{ id: "system-image", detail: "x86_64", pkg: "system-images;android-29;google_apis;x86_64", auto: false }] });
+  const c = await setupConnected(t, f);
+  c.ws.send(JSON.stringify({ t: "install", ids: ["system-image"] }));
   await until(() => c.msgs.some((m) => m.t === "error"));
-  assert.match(c.msgs.find((m) => m.t === "error").message, /需要 Java/);
+  assert.match(c.msgs.find((m) => m.t === "error").message, /不能自动安装/);
   assert.deepEqual(f.runs, []);
 });
 
@@ -1477,7 +1482,7 @@ const IMG36 = { pkg: "system-images;android-36;google_apis;arm64-v8a", api: "36"
 const CATALOG: AvdCatalog = {
   devices: [{ id: "pixel_5", name: "Pixel 5", oem: "Google" }, { id: "Nexus 5X", name: "Nexus 5X", oem: "Google" }],
   images: [IMG34, IMG27, IMG36], existing: ["emu_web_default"],
-  defaultDevice: "pixel_5", defaultImage: IMG34.pkg, needTools: false,
+  defaultDevice: "pixel_5", defaultImage: IMG34.pkg,
 };
 const createMsg = (over: object = {}) => JSON.stringify({ t: "createAvd", name: "Pixel_5_API_36", device: "pixel_5", image: IMG36.pkg, ...over });
 
@@ -1505,7 +1510,7 @@ test("createAvd：镜像没装时先装镜像再建设备，spec 带名字、机
   c.ws.send(createMsg());
   await until(() => f.runs.length === 1);
   assert.deepEqual(f.runs, [["system-image", "avd"]]);
-  assert.deepEqual(f.specs, [{ name: "Pixel_5_API_36", device: "pixel_5", image: IMG36.pkg, ramMb: 4096 }]);
+  assert.deepEqual(f.specs, [{ avd: { name: "Pixel_5_API_36", device: "pixel_5", image: IMG36.pkg, ramMb: 4096 } }]);
 });
 
 test("createAvd：镜像已装只建设备；低于 API 28 的内存 2048", async (t) => {
@@ -1514,7 +1519,7 @@ test("createAvd：镜像已装只建设备；低于 API 28 的内存 2048", asyn
   c.ws.send(createMsg({ name: "Nexus_5X_API_27", device: "Nexus 5X", image: IMG27.pkg }));
   await until(() => f.runs.length === 1);
   assert.deepEqual(f.runs, [["avd"]]);
-  assert.deepEqual(f.specs, [{ name: "Nexus_5X_API_27", device: "Nexus 5X", image: IMG27.pkg, ramMb: 2048 }]);
+  assert.deepEqual(f.specs, [{ avd: { name: "Nexus_5X_API_27", device: "Nexus 5X", image: IMG27.pkg, ramMb: 2048 } }]);
 });
 
 test("createAvd：重名、名字不合法、机型或镜像不在目录里，都拒绝且不安装", async (t) => {
@@ -1547,15 +1552,6 @@ test("createAvd：磁盘不够时网关拒绝，算上没装的镜像", async (t
   c.ws.send(createMsg({ image: IMG34.pkg, name: "Pixel_5_API_34" }));
   await until(() => f.runs.length === 1);
   assert.deepEqual(f.runs, [["avd"]]);
-});
-
-test("createAvd：没有命令行工具时拒绝", async (t) => {
-  const f = fakeSetup({ catalog: { ...CATALOG, devices: [], defaultDevice: null, needTools: true } });
-  const c = await setupConnected(t, f);
-  c.ws.send(createMsg());
-  await until(() => c.msgs.some((m) => m.t === "error"));
-  assert.match(c.msgs.find((m) => m.t === "error").message, /先安装命令行工具/);
-  assert.deepEqual(f.runs, []);
 });
 
 test("install 不再接受 avd：建设备要走 createAvd", async (t) => {

@@ -94,10 +94,15 @@ export type AvdInfo = {
   grpcPort?: number;
 };
 
-/** 环境检查的一个缺失项。command 是手动安装命令，sizeMb 是大致下载量，auto 表示用户确认后网关能自动装。 */
+/**
+ * 环境检查的一个缺失项。command 只有旧网关会带（sdkmanager / avdmanager 的手动命令），sizeMb 是大致下载量，
+ * auto 表示用户确认后网关能自动装。
+ */
 export type EnvMissing = {
   id: EnvItemId;
   detail: string;
+  /** system-image：要装的镜像包路径，如 system-images;android-34;google_apis;arm64-v8a。 */
+  pkg?: string;
   sizeMb?: number;
   /** 装好后大约占多少磁盘（MB）；avd 是模拟器第一次启动时要求的空闲空间。 */
   diskMb?: number;
@@ -105,26 +110,23 @@ export type EnvMissing = {
   auto: boolean;
 };
 
-/** 缺失项 id 的固定顺序，也是安装顺序：后面的依赖前面的。 */
-export const ENV_ITEM_IDS = ["java", "sdk", "cmdline-tools", "emulator", "platform-tools", "system-image", "avd"] as const;
+/**
+ * 缺失项 id 的固定顺序，也是安装顺序：设备要在系统镜像之后建。
+ * 旧网关还会发 java、sdk、cmdline-tools，页面按不认识的项显示；它们发来的 install 新网关会滤掉。
+ */
+export const ENV_ITEM_IDS = ["emulator", "platform-tools", "system-image", "avd"] as const;
 export type EnvItemId = (typeof ENV_ITEM_IDS)[number];
-/** 网关能自动装的项，按安装顺序；java 只能用户自己装。 */
-export const INSTALL_IDS = ENV_ITEM_IDS.filter((id) => id !== "java");
+/** 网关能自动装的项，按安装顺序。 */
+export const INSTALL_IDS = ENV_ITEM_IDS;
 
-/** 装这些项要跑 sdkmanager 或 avdmanager，也就要 Java。 */
-export const NEEDS_JAVA: readonly EnvItemId[] = ["emulator", "platform-tools", "system-image", "avd"];
-
-/** 一份等用户同意的许可证。id 每份递增，页面回答时原样带回。 */
+/** 一份等用户同意的许可证：name 是清单里的许可证 id（如 android-sdk-license），text 是全文。id 每份递增，页面回答时原样带回。 */
 export type Licence = { id: number; name: string; text: string };
 
-/** 环境检查里手动建设备命令用的名字和机型。 */
-export const DEFAULT_AVD = { name: "emu_web_default", device: "pixel_5" } as const;
-
-/** avdmanager list device 里的一个机型。 */
+/** 创建设备对话框里的一个机型（网关内置的手机表）。 */
 export type DeviceModel = { id: string; name: string; oem: string };
 
 /**
- * 一个 arm64-v8a 系统镜像。pkg 是 sdkmanager / avdmanager 用的包路径；api 是路径里的级别（如 "34"、"36.1"），apiLevel 是它的整数部分。
+ * 一个 arm64-v8a 系统镜像。pkg 是 SDK 仓库清单里的包路径；api 是路径里的级别（如 "34"、"36.1"），apiLevel 是它的整数部分。
  * 没安装的带 sizeMb（下载大小）和 diskMb（安装后大约占用）。
  */
 export type SystemImage = {
@@ -139,15 +141,13 @@ export type SystemImage = {
   diskMb?: number;
 };
 
-/** 创建设备对话框用的目录。needTools：没有 avdmanager，要先装命令行工具；existing：已有的 AVD 名字。 */
+/** 创建设备对话框用的目录。existing：已有的 AVD 名字。 */
 export type AvdCatalog = {
   devices: DeviceModel[];
   images: SystemImage[];
   existing: string[];
   defaultDevice: string | null;
   defaultImage: string | null;
-  needTools: boolean;
-  devicesError?: string;
   imagesError?: string;
 };
 
@@ -160,10 +160,6 @@ export type EnvReport = {
   missing: EnvMissing[];
   sdkRoot: string;
   avdHome: string;
-  /** 已有的 cmdline-tools 是 23 及以上：sdkmanager 换成了 Android CLI，可能不问就接受许可证。 */
-  androidCli: boolean;
-  /** 找到的 Java（sdkmanager / avdmanager 要用）；没找到为 null，缺失项里会有 java。 */
-  javaHome: string | null;
   /** sdkRoot 所在磁盘的剩余空间（MB）。 */
   freeMb: number;
   /** avdHome 所在磁盘的剩余空间（MB），sameDisk 时和 freeMb 是同一块盘。 */

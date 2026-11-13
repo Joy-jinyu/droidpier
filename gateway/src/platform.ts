@@ -1,5 +1,5 @@
-import { execFile, spawn } from "node:child_process";
-import { access, readdir, stat, statfs } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { stat, statfs } from "node:fs/promises";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -52,81 +52,43 @@ export function adbBin(): string {
   return adbPath();
 }
 
-/** sdkmanager 的绝对路径（cmdline-tools/latest）。 */
-export function sdkmanagerBin(sdk = sdkRoot()): string {
-  return join(sdk, "cmdline-tools/latest/bin/sdkmanager");
-}
-
-/** avdmanager 的绝对路径（cmdline-tools/latest）。 */
-export function avdmanagerBin(sdk = sdkRoot()): string {
-  return join(sdk, "cmdline-tools/latest/bin/avdmanager");
-}
-
 /**
- * Google 官方 SDK 仓库清单，sdkmanager 自己读的也是这份（https://dl.google.com/android/repository/repository2-3.xml）。
- * cmdline-tools 的 zip 地址相对它解析，sha1 在 <checksum type="sha1">。
+ * Google 官方 SDK 仓库清单（sdkmanager 和 Android Studio 读的也是它）：emulator、platform-tools 的 zip 地址相对它解析，
+ * sha1 在 <checksum type="sha1">，许可证全文在 <license>（2026-11-13 读的）。
  */
-export function cmdlineToolsManifestUrl(): string {
-  return "https://dl.google.com/android/repository/repository2-3.xml";
+export const REPO_MANIFEST_URL = "https://dl.google.com/android/repository/repository2-3.xml";
+
+/** 系统镜像 tag 对应的清单目录：sys-img/<目录>/sys-img2-3.xml（addons_list-5.xml 列出的，2026-11-13 读的）。 */
+const SYS_IMG_DIRS: Record<string, string> = { google_apis: "google_apis", google_apis_playstore: "google_apis_playstore", default: "android" };
+
+/** tag 的系统镜像清单地址；不认识的 tag 返回 null。 */
+export function sysImgManifestUrl(tag: string): string | null {
+  return Object.hasOwn(SYS_IMG_DIRS, tag) ? `https://dl.google.com/android/repository/sys-img/${SYS_IMG_DIRS[tag]}/sys-img2-3.xml` : null;
 }
 
 /**
- * Google 的 google_apis 系统镜像清单（2026-11-12 读的）：addons_list-5.xml 里 “Google API add-on System Images” 指向它，
- * 包路径是 system-images;android-<级别>;google_apis;<abi>，下载大小在 <archive><complete><size>，稳定通道是 channel-0。
+ * Google 的 google_apis 系统镜像清单（2026-11-12 读的）：包路径是 system-images;android-<级别>;google_apis;<abi>，
+ * 下载大小在 <archive><complete><size>，稳定通道是 channel-0。
  */
-export const SYS_IMG_MANIFEST_URL = "https://dl.google.com/android/repository/sys-img/google_apis/sys-img2-3.xml";
+export const SYS_IMG_MANIFEST_URL = sysImgManifestUrl("google_apis")!;
 
-/**
- * 固定安装的 cmdline-tools 版本。23.0 起 sdkmanager 换成 Android CLI 的包装：不再逐项询问许可证、自己写 licenses/，
- * 还往 ~/.android/bin、~/.android/cli 装东西（2026-11-12 实测）；22.0 是最后一个逐项问 Accept? (y/N) 的 Java 版（同日实测）。
- */
-export const CMDLINE_TOOLS_REVISION = "22.0";
+/** 包路径（emulator、platform-tools、system-images;android-34;google_apis;arm64-v8a）在哪份清单里；不认识的返回 null。 */
+export function manifestUrlFor(pkg: string): string | null {
+  if (pkg === "emulator" || pkg === "platform-tools") return REPO_MANIFEST_URL;
+  const tag = /^system-images;[^;]+;([^;]+);[^;]+$/.exec(pkg)?.[1];
+  return tag ? sysImgManifestUrl(tag) : null;
+}
+
+/** 包装到 SDK 里的目录：包路径的 ; 换成 /（sdkmanager 的规则）。 */
+export function packageDir(sdk: string, pkg: string): string {
+  return join(sdk, ...pkg.split(";"));
+}
 
 /** 清单里本机对应的 host-os / host-arch（第一版只做 darwin-arm64）。 */
 export const MANIFEST_HOST = { os: "macosx", arch: "aarch64" };
 
-/** 找 Java 用到的外部依赖，测试里换成假的。 */
-export type JavaIo = {
-  home: string;
-  /** JAVA_HOME 环境变量。 */
-  env: string | undefined;
-  exists(path: string): Promise<boolean>;
-  readdir(dir: string): Promise<string[]>;
-  /** /usr/libexec/java_home 成功时的输出；失败为 null。 */
-  javaHomeCmd(): Promise<string | null>;
-};
-
-const STUDIO_JBR = "Android Studio.app/Contents/jbr/Contents/Home";
-
-const realJavaIo = (): JavaIo => ({
-  home: homedir(),
-  env: process.env.JAVA_HOME,
-  exists: (p) => access(p).then(() => true, () => false),
-  readdir: (d) => readdir(d),
-  // 只问 java_home 有没有装 JDK；不跑 /usr/bin/java（没装 JDK 时它会弹系统安装框）
-  javaHomeCmd: () =>
-    new Promise((res) => execFile("/usr/libexec/java_home", { timeout: 5000 }, (e, out) => res(e ? null : out.trim() || null))),
-});
-
-/**
- * sdkmanager / avdmanager 用的 Java：JAVA_HOME → /Applications 和 ~/Applications 里 Android Studio 自带的 JBR
- * → JetBrains Toolbox 装的 Android Studio → /usr/libexec/java_home。都没有返回 null。
- */
-export async function findJavaHome(io: JavaIo = realJavaIo()): Promise<string | null> {
-  const toolbox = join(io.home, "Library/Application Support/JetBrains/Toolbox/apps/AndroidStudio/ch-0");
-  const builds = await io.readdir(toolbox).catch(() => [] as string[]);
-  const candidates = [
-    io.env,
-    join("/Applications", STUDIO_JBR),
-    join(io.home, "Applications", STUDIO_JBR),
-    ...builds.sort().reverse().map((b) => join(toolbox, b, STUDIO_JBR)),
-  ];
-  for (const c of candidates) if (c && (await io.exists(join(c, "bin/java")))) return c;
-  return io.javaHomeCmd();
-}
-
-/** 手动安装 cmdline-tools 用的 zip：清单里 cmdline-tools;22.0 的 macOS arm64 包（2026-11-12 读的 repository2-3.xml）。 */
-export const CMDLINE_TOOLS_ZIP_URL = "https://dl.google.com/android/repository/commandlinetools-mac_arm64-15859902_latest.zip";
+/** 本机能跑的系统镜像 ABI。 */
+export const IMAGE_ABI = "arm64-v8a";
 
 /** 用户显式设的 ANDROID_AVD_HOME；没设或设成空字符串为 undefined（空值不能当成当前目录）。 */
 export function explicitAvdHome(): string | undefined {

@@ -16,7 +16,7 @@ export function defaultAvdName(modelName: string, api: string): string {
 export function avdNameError(name: string, existing: string[]): string | null {
   if (name === "") return "请输入设备名";
   if (!/^[A-Za-z0-9._-]+$/.test(name)) return "设备名只能用英文字母、数字、点、下划线和短横线";
-  // 开头是 - 时 avdmanager 会把它当成选项
+  // 开头是 - 时命令行（emulator -avd、avdmanager）会把它当成选项
   if (!/^[A-Za-z0-9]/.test(name)) return "设备名要以英文字母或数字开头";
   const same = existing.find((n) => n.toLowerCase() === name.toLowerCase());
   return same ? `已有同名设备 ${same}` : null;

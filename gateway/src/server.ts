@@ -10,7 +10,7 @@ import { DEV_SERVER_DOWN, navigateAndCheck, type CdpClient } from "./cdp.ts";
 import { normalizeTarget } from "../../shared/target-url.ts";
 import type { EmulatorSession } from "./emulator.ts";
 import type { StartJob } from "./lifecycle.ts";
-import type { Installer } from "./installer.ts";
+import type { InstallJob, Installer } from "./installer.ts";
 import { AdbUnresponsive } from "./adb.ts";
 import { gbText, spaceCheck } from "../../shared/disk-space.ts";
 import { avdNameError, createItems, ramMbFor } from "../../shared/avd-spec.ts";
@@ -30,12 +30,10 @@ import {
   PROTOCOL_VERSION,
   type AvdCatalog,
   type AvdInfo,
-  type AvdSpec,
   type EnvReport,
   type FrameHeader,
   type InstallProgress,
   type Licence,
-  NEEDS_JAVA,
   type ServerMsg,
   type UploadState,
   type WebViewPage,
@@ -351,19 +349,19 @@ export async function startServer(opts: {
     log(`环境检查失败：${e.message}`);
     return {
       ok: false, missing: [], error: `环境检查失败：${e.message}`, sdkRoot: "", avdHome: "",
-      androidCli: false, javaHome: null, freeMb: 0, avdFreeMb: 0, sameDisk: true,
+      freeMb: 0, avdFreeMb: 0, sameDisk: true,
     };
   });
-  const javaMissing = (env: EnvReport, ids: string[]) =>
-    env.missing.some((m) => m.id === "java") && ids.some((id) => (NEEDS_JAVA as readonly string[]).includes(id))
-      ? env.missing.find((m) => m.id === "java")!.detail
-      : null;
+  const notAuto = (env: EnvReport, ids: string[]) => {
+    const m = env.missing.find((x) => ids.includes(x.id) && !x.auto);
+    return m ? `${m.detail}，不能自动安装` : null;
+  };
   const spaceShort = (items: Parameters<typeof spaceCheck>[0], env: EnvReport) => {
     const { shortMb } = spaceCheck(items, env);
     return shortMb > 0 ? `磁盘空间不足：还需要约 ${gbText(shortMb)}` : null;
   };
   // 安装和建设备共用：先占住 installing，再按 check 给的理由拒绝或开始
-  const runChecked = async (ws: WebSocket, what: string, check: () => Promise<{ reason: string } | { ids: string[]; spec?: AvdSpec }>) => {
+  const runChecked = async (ws: WebSocket, what: string, check: () => Promise<{ reason: string } | { ids: string[]; job: InstallJob }>) => {
     const setup = opts.setup;
     if (!setup) return;
     if (installing) return send(ws, { t: "error", message: "正在安装，等这一轮结束再试" });
@@ -375,7 +373,8 @@ export async function startServer(opts: {
       return send(ws, { t: "error", message: r.reason });
     }
     installs.clear();
-    log(`页面确认${what}：${r.ids.join(", ")}${r.spec ? `（${r.spec.name} · ${r.spec.device} · ${r.spec.image}）` : ""}`);
+    const spec = r.job.avd;
+    log(`页面确认${what}：${r.ids.join(", ")}${spec ? `（${spec.name} · ${spec.device} · ${spec.image}）` : r.job.image ? `（${r.job.image}）` : ""}`);
     setup.installer.run(
       r.ids,
       (p) => {
@@ -384,7 +383,7 @@ export async function startServer(opts: {
         broadcast({ t: "install", progress: p });
       },
       (l) => setLicense(l),
-      r.spec,
+      r.job,
     ).catch((e: Error) => log(`安装出错：${e.message}`)).finally(async () => {
       installing = false;
       setLicense(null);
@@ -398,8 +397,10 @@ export async function startServer(opts: {
     return runChecked(ws, "安装", async () => {
       // 页面确认框已经拦过一次；这里按同一套算法再查，防止页面旧了或绕过页面
       const env = await checkEnv();
-      const reason = env.error ?? javaMissing(env, ids) ?? spaceShort(env.missing.filter((m) => ids.includes(m.id)), env);
-      return reason ? { reason } : { ids };
+      const reason = env.error ?? notAuto(env, ids) ?? spaceShort(env.missing.filter((m) => ids.includes(m.id)), env);
+      // 装哪个系统镜像由这次环境检查决定（比如设备缺的那个），不信页面
+      const image = ids.includes("system-image") ? env.missing.find((m) => m.id === "system-image")?.pkg : undefined;
+      return reason ? { reason } : { ids, job: image ? { image } : {} };
     });
   };
   const createAvd = (ws: WebSocket, m: { name: string; device: string; image: string }) =>
@@ -408,14 +409,12 @@ export async function startServer(opts: {
       const image = cat.images.find((i) => i.pkg === m.image);
       const ids = [...(image && !image.installed ? ["system-image"] : []), "avd"];
       const reason = env.error
-        ?? (cat.needTools ? "需要先安装命令行工具（cmdline-tools）才能创建设备" : null)
-        ?? javaMissing(env, ids)
         ?? (cat.devices.some((d) => d.id === m.device) ? null : `没有这个机型：${m.device}`)
         ?? (image ? null : `没有这个系统版本：${m.image}`)
         ?? avdNameError(m.name, cat.existing)
         ?? spaceShort(createItems(image!), env);
       if (reason) return { reason };
-      return { ids, spec: { name: m.name, device: m.device, image: image!.pkg, ramMb: ramMbFor(image!.apiLevel) } };
+      return { ids, job: { avd: { name: m.name, device: m.device, image: image!.pkg, ramMb: ramMbFor(image!.apiLevel) } } };
     });
 
   // 每个周期：广播进行中的开机进度；没有在开机时，给没会话的连接重新发现模拟器（接管外部启动的）

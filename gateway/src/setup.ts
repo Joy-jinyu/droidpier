@@ -1,20 +1,26 @@
 import { access, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { avdHome, avdmanagerBin, CMDLINE_TOOLS_REVISION, CMDLINE_TOOLS_ZIP_URL, diskOf, findJavaHome, sdkmanagerBin, sdkRoot } from "./platform.ts";
+import { avdHome, diskOf, IMAGE_ABI, manifestUrlFor, sdkRoot } from "./platform.ts";
+import { androidVersion, scanInstalledImages } from "./catalog.ts";
 import { AVD_DISK_MB } from "../../shared/avd-spec.ts";
-import { DEFAULT_AVD, NEEDS_JAVA, type EnvMissing, type EnvReport } from "../../shared/protocol.ts";
+import type { EnvMissing, EnvReport } from "../../shared/protocol.ts";
 
 export type { EnvMissing, EnvReport };
 
-/** 默认设备用的系统镜像。 */
+/** 没有能用的系统镜像时默认装的镜像。 */
 export const SYSTEM_IMAGE = "system-images;android-34;google_apis;arm64-v8a";
 
-
 /**
- * 装好后的占用（MB），2026-11-12 在本机量的：cmdline-tools 22.0 解压后 173M、emulator 1.2G、platform-tools 37M（du 临时 SDK），
- * 系统镜像 android-34 google_apis arm64-v8a 3.0G（du 用户 SDK 里同一个包）；avd 见 AVD_DISK_MB。
+ * 下载大小和装好后的占用（MB）。emulator 37.2 的 macOS aarch64 包 397 MB、platform-tools 37.0.1 的 16 MB（2026-11-13 读的清单）；
+ * 装好后 emulator 1.2G、platform-tools 37M（2026-11-12 du 临时 SDK）；android-34 镜像下载 1536 MB、装好 3.0G（du 同一个包）。
+ * 别的镜像没量过，按新镜像的大小估（android-36 下载 1786 MB，装好按 catalog.ts 的 3 倍算）。
  */
-const DISK_MB = { "cmdline-tools": 173, emulator: 1200, "platform-tools": 37, "system-image": 3072, avd: AVD_DISK_MB };
+const SIZE = {
+  emulator: { sizeMb: 400, diskMb: 1200 },
+  "platform-tools": { sizeMb: 16, diskMb: 37 },
+  defaultImage: { sizeMb: 1536, diskMb: 3072 },
+  otherImage: { sizeMb: 1800, diskMb: 5400 },
+};
 
 export type EnvDeps = {
   sdkRoot: string;
@@ -23,11 +29,7 @@ export type EnvDeps = {
   readdir(dir: string): Promise<string[]>;
   readFile(path: string): Promise<string>;
   disk(dir: string): Promise<{ freeMb: number; dev: number }>;
-  findJava(): Promise<string | null>;
 };
-
-/** 没有 Java 时 java 缺失项的说明。 */
-export const NEED_JAVA = "需要 Java 才能运行 sdkmanager：安装 Android Studio（自带 Java）或安装 JDK 17 以上，然后重新打开页面";
 
 /** 读真实文件系统的依赖。 */
 export function realEnvDeps(): EnvDeps {
@@ -38,52 +40,83 @@ export function realEnvDeps(): EnvDeps {
     readdir: (d) => readdir(d),
     readFile: (p) => readFile(p, "utf8"),
     disk: diskOf,
-    findJava: () => findJavaHome(),
   };
 }
 
-/** 检查本机 SDK 和 AVD 缺什么；所有项都能在用户确认后由网关自动装。 */
+/** ini 文本里 key 的值（第一行），没有为 undefined。 */
+function ini(text: string, key: string): string | undefined {
+  const line = text.split(/\r?\n/).find((l) => l.includes("=") && l.slice(0, l.indexOf("=")).trim() === key);
+  return line?.slice(line.indexOf("=") + 1).trim();
+}
+
+type AvdImage = { name: string; label: string; sysdir: string; ok: boolean };
+
+/** avdHome 里每台 AVD 的镜像目录（config.ini 的 image.sysdir.1，相对 SDK）和它在不在；读不到 config.ini 或没写镜像目录的不算设备。 */
+async function avdImages(deps: EnvDeps): Promise<AvdImage[]> {
+  const names = (await deps.readdir(deps.avdHome).catch(() => [] as string[])).filter((n) => n.endsWith(".ini")).map((n) => n.slice(0, -4)).sort();
+  const list: AvdImage[] = [];
+  for (const name of names) {
+    const top = await deps.readFile(join(deps.avdHome, `${name}.ini`)).catch(() => "");
+    const dir = ini(top, "path") || join(deps.avdHome, `${name}.avd`);
+    const config = await deps.readFile(join(dir, "config.ini")).catch(() => null);
+    const sysdir = config === null ? undefined : ini(config, "image.sysdir.1")?.replace(/\\/g, "/").replace(/\/+$/, "");
+    if (!config || !sysdir) continue;
+    list.push({ name, label: ini(config, "avd.ini.displayname") || name, sysdir, ok: await deps.exists(join(deps.sdkRoot, sysdir)) });
+  }
+  return list;
+}
+
+/** 镜像目录 system-images/android-35/google_apis/arm64-v8a 对应的包路径；认不出返回 null。 */
+function pkgOf(sysdir: string): string | null {
+  const m = /^system-images\/(android-[^/]+)\/([^/]+)\/([^/]+)$/.exec(sysdir);
+  return m ? `system-images;${m[1]};${m[2]};${m[3]}` : null;
+}
+
+const apiOf = (pkg: string) => /;android-([^;]+);/.exec(pkg)?.[1] ?? "?";
+
+/**
+ * 检查这台 Mac 能不能开一台设备：要有 emulator、platform-tools 的 adb，以及至少一台镜像目录还在的 AVD（任何 Android 版本都行）。
+ * 不能时只列真缺的：模拟器、adb、系统镜像、设备。SDK 目录不存在不算缺（安装时自己建）。
+ */
 export async function checkEnv(deps: EnvDeps): Promise<EnvReport> {
   const sdk = deps.sdkRoot;
-  const imageDir = join(sdk, "system-images", ...SYSTEM_IMAGE.split(";").slice(1));
-  const hasAvd = await deps.readdir(deps.avdHome).then((names) => names.some((n) => n.endsWith(".ini")), () => false);
-  const all: Array<EnvMissing & { present: boolean }> = [
-    {
-      id: "sdk", present: await deps.exists(sdk), auto: true,
-      detail: `没有 Android SDK 目录 ${sdk}`, command: `mkdir -p "${sdk}"`,
-    },
-    {
-      id: "cmdline-tools", present: await deps.exists(sdkmanagerBin(sdk)) && await deps.exists(avdmanagerBin(sdk)), auto: true, sizeMb: 150, diskMb: DISK_MB["cmdline-tools"],
-      detail: `没有命令行工具（cmdline-tools），所以没有 sdkmanager 和 avdmanager。在页面上点“安装”会装 ${CMDLINE_TOOLS_REVISION} 版（会逐项询问许可证）`,
-      command: `curl -fLo /tmp/cmdline-tools.zip ${CMDLINE_TOOLS_ZIP_URL} && rm -rf /tmp/cmdline-tools-unzip && unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools-unzip && mkdir -p "${sdk}/cmdline-tools" && mv /tmp/cmdline-tools-unzip/cmdline-tools "${sdk}/cmdline-tools/latest"`,
-    },
-    {
-      id: "emulator", present: await deps.exists(join(sdk, "emulator/emulator")), auto: true, sizeMb: 400, diskMb: DISK_MB.emulator,
-      detail: "没有模拟器程序（emulator）", command: 'sdkmanager "emulator"',
-    },
-    {
-      id: "platform-tools", present: await deps.exists(join(sdk, "platform-tools/adb")), auto: true, sizeMb: 15, diskMb: DISK_MB["platform-tools"],
-      detail: "没有 adb（platform-tools）", command: 'sdkmanager "platform-tools"',
-    },
-    {
-      id: "system-image", present: await deps.exists(join(imageDir, "system.img")), auto: true, sizeMb: 1500, diskMb: DISK_MB["system-image"],
-      detail: `没有系统镜像 Android 14（${SYSTEM_IMAGE}）`, command: `sdkmanager "${SYSTEM_IMAGE}"`,
-    },
-    {
-      id: "avd", present: hasAvd, auto: true, diskMb: DISK_MB.avd,
-      detail: `没有模拟器设备（${deps.avdHome} 下没有 AVD）`,
-      command: `avdmanager create avd -n ${DEFAULT_AVD.name} -k "${SYSTEM_IMAGE}" -d ${DEFAULT_AVD.device}`,
-    },
-  ];
-  // 23 起的 sdkmanager 是 Android CLI 的包装，会自己接受许可证；已经装了就照用，只让页面提示一句
-  const props = await deps.readFile(join(sdk, "cmdline-tools/latest/source.properties")).catch(() => "");
-  const major = Number(/^Pkg\.Revision=(\d+)/m.exec(props)?.[1] ?? 0);
-  const missing = all.filter((m) => !m.present).map(({ present: _, ...m }) => m);
-  const javaHome = await deps.findJava();
-  if (!javaHome && missing.some((m) => NEEDS_JAVA.includes(m.id))) missing.unshift({ id: "java", auto: false, detail: NEED_JAVA });
+  const missing: EnvMissing[] = [];
+  if (!(await deps.exists(join(sdk, "emulator/emulator")))) {
+    missing.push({ id: "emulator", auto: true, ...SIZE.emulator, detail: "没有模拟器程序" });
+  }
+  if (!(await deps.exists(join(sdk, "platform-tools/adb")))) {
+    missing.push({ id: "platform-tools", auto: true, ...SIZE["platform-tools"], detail: "没有 adb" });
+  }
+  const avds = await avdImages(deps);
+  if (!avds.some((a) => a.ok)) {
+    const broken = avds.filter((a) => !a.ok);
+    if (broken.length > 0) {
+      // 有设备，但镜像都不在了：说清楚哪台缺哪个，装第一台的
+      const pkg = pkgOf(broken[0].sysdir);
+      const auto = !!pkg && pkg.endsWith(`;${IMAGE_ABI}`) && manifestUrlFor(pkg) !== null;
+      missing.push({
+        id: "system-image", auto, ...(pkg ? { pkg } : {}), ...SIZE.otherImage,
+        detail: broken.map((a) => `设备 ${a.label} 的系统镜像 ${pkgOf(a.sysdir) ? androidVersion(apiOf(pkgOf(a.sysdir)!)) : a.sysdir} 不在了`).join("；"),
+      });
+    } else {
+      const installed = await scanInstalledImages(sdk, deps);
+      if (installed.length === 0) {
+        missing.push({
+          id: "system-image", auto: true, pkg: SYSTEM_IMAGE, ...SIZE.defaultImage,
+          detail: "没有系统镜像，会装 Android 14",
+        });
+      }
+      missing.push({
+        id: "avd", auto: true, diskMb: AVD_DISK_MB,
+        detail: installed.length
+          ? `还没有模拟器设备，可以用已装的 ${androidVersion(installed[0].api)} 建一台`
+          : "还没有模拟器设备",
+      });
+    }
+  }
   const [sdkDisk, avdDisk] = await Promise.all([deps.disk(sdk), deps.disk(deps.avdHome)]);
   return {
-    ok: missing.length === 0, missing, sdkRoot: sdk, avdHome: deps.avdHome, androidCli: major >= 23, javaHome,
+    ok: missing.length === 0, missing, sdkRoot: sdk, avdHome: deps.avdHome,
     freeMb: sdkDisk.freeMb, avdFreeMb: avdDisk.freeMb, sameDisk: sdkDisk.dev === avdDisk.dev,
   };
 }

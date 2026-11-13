@@ -1,11 +1,11 @@
-import { execFile } from "node:child_process";
 import { access, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { pickDefaultImage } from "../../shared/avd-spec.ts";
 import type { AvdCatalog, DeviceModel, SystemImage } from "../../shared/protocol.ts";
-import { MANIFEST_HOST } from "./platform.ts";
+import { IMAGE_ABI, MANIFEST_HOST } from "./platform.ts";
+import { DEVICE_MODELS } from "./avd-create.ts";
 
-const ABI = "arm64-v8a";
+const ABI = IMAGE_ABI;
 const MIN_API = 26;
 /** 已安装镜像的 tag 优先顺序。 */
 const TAGS = ["google_apis", "google_apis_playstore", "default"];
@@ -23,24 +23,9 @@ const ANDROID: Record<number, string> = {
 };
 const versionOf = (apiLevel: number) => (ANDROID[apiLevel] ? { version: `Android ${ANDROID[apiLevel]}` } : {});
 
-// 不是手机的机型：Tag 行是这些的，以及名字或 id 认得出的平板、桌面、可调尺寸
-const NON_PHONE_TAG = /tv|wear|automotive|desktop|xr/i;
-const NON_PHONE_ID = /tablet|freeform|resizable|desktop|^pixel_c$|^Nexus (7|9|10)\b/i;
-
-/** 解析 `avdmanager list device` 的输出，只留手机；Pixel 在前，其余按原顺序。 */
-export function parseDeviceList(text: string): DeviceModel[] {
-  const list: DeviceModel[] = [];
-  for (const block of text.split(/^-{3,}\s*$/m)) {
-    const id = /^id: \d+ or "(.+)"$/m.exec(block)?.[1];
-    if (!id) continue;
-    const name = /^\s+Name: (.*)$/m.exec(block)?.[1]?.trim() ?? id;
-    const oem = /^\s+OEM : (.*)$/m.exec(block)?.[1]?.trim() ?? "";
-    const tag = /^\s+Tag : (.*)$/m.exec(block)?.[1]?.trim();
-    if ((tag && NON_PHONE_TAG.test(tag)) || NON_PHONE_ID.test(id) || /tablet/i.test(name)) continue;
-    list.push({ id, name, oem });
-  }
-  const pixel = (d: DeviceModel) => /^pixel/i.test(d.id);
-  return [...list.filter(pixel), ...list.filter((d) => !pixel(d))];
+/** 镜像目录里的级别（如 "35"、"36.1"）对应的叫法：Android 15；不认识的写 API <级别>。 */
+export function androidVersion(api: string): string {
+  return versionOf(Math.floor(Number(api))).version ?? `API ${api}`;
 }
 
 /** <revision> 里的 major.minor.micro，缺的记 0。 */
@@ -111,8 +96,6 @@ export async function scanInstalledImages(sdk: string, fs: Fs): Promise<SystemIm
 }
 
 export type CatalogDeps = {
-  /** `avdmanager list device` 的输出；没有 avdmanager 时 null。 */
-  listDevices(): Promise<string | null>;
   installed(): Promise<SystemImage[]>;
   /** 系统镜像清单的 XML。 */
   manifest(): Promise<string>;
@@ -122,60 +105,37 @@ export type CatalogDeps = {
 
 /** 组出创建设备对话框的目录：已安装的镜像在前，可下载的去掉已安装的同一个包。 */
 export async function buildCatalog(deps: CatalogDeps): Promise<AvdCatalog> {
-  const [devices, installed, remote, existing] = await Promise.all([
-    deps.listDevices().then((t) => (t === null ? null : { list: parseDeviceList(t) }), (e: Error) => ({ error: `读取机型失败：${e.message}` })),
+  const [installed, remote, existing] = await Promise.all([
     deps.installed(),
     deps.manifest().then((x) => ({ list: parseSysImgManifest(x) }), (e: Error) => ({ error: `读取可下载的系统版本失败：${e.message}` })),
     deps.existing(),
   ]);
   const have = new Set(installed.map((i) => i.pkg));
   const images = [...[...installed].sort((a, b) => Number(b.api) - Number(a.api)), ...("list" in remote ? remote.list.filter((i) => !have.has(i.pkg)) : [])];
-  const list = devices && "list" in devices ? devices.list : [];
+  const list = DEVICE_MODELS.map(({ id, name, oem }) => ({ id, name, oem }));
   return {
     devices: list,
     images,
     existing,
     defaultDevice: list.find((d) => d.id === DEFAULT_DEVICE)?.id ?? list[0]?.id ?? null,
     defaultImage: pickDefaultImage(images)?.pkg ?? null,
-    needTools: devices === null,
-    ...(devices && "error" in devices ? { devicesError: devices.error } : {}),
     ...("error" in remote ? { imagesError: remote.error } : {}),
   };
 }
 
-/** 真实依赖：跑 avdmanager、扫 SDK 目录、读清单、列 avdHome 里的 .ini。机型和清单读成功一次后就缓存。 */
-export function realCatalogDeps(opts: {
-  sdkRoot: string;
-  avdHome: string;
-  avdmanager: string;
-  manifestUrl: string;
-  findJava(): Promise<string | null>;
-  fetchText(url: string): Promise<string>;
-}): CatalogDeps {
+/** 真实依赖：扫 SDK 目录、读清单、列 avdHome 里的 .ini。清单读成功一次后就缓存，失败了下次重读。 */
+export function realCatalogDeps(opts: { sdkRoot: string; avdHome: string; manifestUrl: string; fetchText(url: string): Promise<string> }): CatalogDeps {
   const exists = (p: string) => access(p).then(() => true, () => false);
-  // 进行中或已成功的那次；同时来的请求共用它（只起一个 avdmanager），失败后清掉，下次重跑
-  let devices: Promise<string | null> | null = null;
   let manifest: Promise<string> | null = null;
-  const share = <T,>(get: () => Promise<T>, keep: (v: T) => boolean, set: (p: Promise<T> | null) => void) => {
-    const p = get();
-    set(p);
-    p.then((v) => { if (!keep(v)) set(null); }, () => set(null));
-    return p;
-  };
-  const runAvdmanager = async (): Promise<string | null> => {
-    if (!(await exists(opts.avdmanager))) return null;
-    const java = await opts.findJava();
-    if (!java) throw new Error("没有找到 Java");
-    const env = { ...process.env, JAVA_HOME: java, ANDROID_HOME: opts.sdkRoot, ANDROID_SDK_ROOT: opts.sdkRoot, ANDROID_AVD_HOME: opts.avdHome };
-    return new Promise<string>((res, rej) =>
-      execFile(opts.avdmanager, ["list", "device"], { env, timeout: 60_000, maxBuffer: 4 * 2 ** 20 }, (e, out, err) =>
-        e ? rej(new Error(String(err).trim().split("\n").at(-1) || e.message)) : res(out)));
-  };
   return {
-    // 没有 avdmanager（null）也不缓存：用户装好命令行工具后再打开对话框能拿到
-    listDevices: () => devices ?? share(runAvdmanager, (v) => v !== null, (p) => (devices = p)),
     installed: () => scanInstalledImages(opts.sdkRoot, { readdir: (d) => readdir(d), exists }),
-    manifest: () => manifest ?? share(() => opts.fetchText(opts.manifestUrl), () => true, (p) => (manifest = p)),
+    manifest: () => {
+      if (manifest) return manifest;
+      const p = opts.fetchText(opts.manifestUrl);
+      manifest = p;
+      p.catch(() => { if (manifest === p) manifest = null; });
+      return p;
+    },
     existing: async () => (await readdir(opts.avdHome).catch(() => [] as string[])).filter((n) => n.endsWith(".ini")).map((n) => n.slice(0, -4)),
   };
 }

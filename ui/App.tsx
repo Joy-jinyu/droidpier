@@ -4,7 +4,7 @@ import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
 import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, displayNameError, ramMbFor } from "../shared/avd-spec";
-import { ADB_UNRESPONSIVE, NEEDS_JAVA, type Rotation } from "../shared/protocol";
+import { ADB_UNRESPONSIVE, type Rotation } from "../shared/protocol";
 import { parseTheme, type Theme } from "../shared/theme";
 import { deviceFrame } from "../shared/screen";
 import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
@@ -28,10 +28,10 @@ type Inspected = { key: string; title: string; serial: number };
 type NavigateResult = { ok: boolean; title?: string; bridge?: boolean; error?: string; adbStuck?: boolean };
 type WebViewsResult = { list: Page[]; error?: string; adbStuck?: boolean };
 type Msg = { text: string; error?: boolean; adbStuck?: boolean };
-type EnvId = "java" | "sdk" | "cmdline-tools" | "emulator" | "platform-tools" | "system-image" | "avd";
-type Missing = { id: EnvId; detail: string; sizeMb?: number; diskMb?: number; command?: string; auto: boolean };
+type EnvId = "emulator" | "platform-tools" | "system-image" | "avd";
+type Missing = { id: EnvId; detail: string; pkg?: string; sizeMb?: number; diskMb?: number; command?: string; auto: boolean };
 type Env = {
-  ok: boolean; missing: Missing[]; sdkRoot: string; avdHome: string; androidCli: boolean;
+  ok: boolean; missing: Missing[]; sdkRoot: string; avdHome: string;
   freeMb: number; avdFreeMb: number; sameDisk: boolean; error?: string;
 };
 type Licence = { id: number; name: string; text: string };
@@ -41,7 +41,7 @@ type DeviceModel = { id: string; name: string; oem: string };
 type SystemImage = { pkg: string; api: string; apiLevel: number; tag: string; installed: boolean; version?: string; sizeMb?: number; diskMb?: number };
 type Catalog = {
   devices: DeviceModel[]; images: SystemImage[]; existing: string[]; defaultDevice: string | null; defaultImage: string | null;
-  needTools: boolean; devicesError?: string; imagesError?: string;
+  imagesError?: string;
 };
 type NewAvd = { name: string; device: DeviceModel; image: SystemImage };
 type Upload = {
@@ -135,24 +135,24 @@ const PROBLEM: Partial<Record<State, string>> = {
   "no-gateway": "还没连上本机的 Droidpier",
 };
 
-const ENV_NAME: Record<EnvId, string> = {
-  java: "Java",
-  sdk: "Android SDK 目录",
-  "cmdline-tools": "命令行工具（cmdline-tools）",
+// 旧网关还会报 java、sdk、cmdline-tools，查不到时直接显示 id
+const ENV_NAME: Record<string, string> = {
   emulator: "模拟器程序（emulator）",
   "platform-tools": "adb (platform-tools)",
   "system-image": "系统镜像",
   avd: "模拟器设备",
 };
-// 装一项之前要先有的项，按安装顺序；网关按同样的顺序装
-const ENV_NEEDS: Record<EnvId, EnvId[]> = {
-  java: [],
-  sdk: [],
-  "cmdline-tools": ["sdk"],
-  emulator: ["sdk", "cmdline-tools"],
-  "platform-tools": ["sdk", "cmdline-tools"],
-  "system-image": ["sdk", "cmdline-tools"],
-  avd: ["sdk", "cmdline-tools", "system-image"],
+const envName = (id: string) => ENV_NAME[id] ?? id;
+// 手动安装：不用页面时在 Android Studio 里怎么装（Settings → Languages & Frameworks → Android SDK 就是 SDK Manager），以及装到哪里
+const manualHint = (m: Missing, env: Env): string | null => {
+  if (m.id === "emulator") return `在 Android Studio 的 SDK Manager → SDK Tools 里勾选 Android Emulator，点 Apply。装在 ${env.sdkRoot}/emulator`;
+  if (m.id === "platform-tools") return `在 Android Studio 的 SDK Manager → SDK Tools 里勾选 Android SDK Platform-Tools，点 Apply。装在 ${env.sdkRoot}/platform-tools`;
+  if (m.id === "system-image") {
+    const pkg = m.pkg ?? "需要的系统镜像";
+    return `在 Android Studio 的 SDK Manager → SDK Platforms 里勾选 Show Package Details，再勾选 ${pkg}，点 Apply。装在 ${env.sdkRoot}/${m.pkg ? m.pkg.split(";").join("/") : "system-images"}`;
+  }
+  if (m.id === "avd") return `在 Android Studio 的 Device Manager 里点 +（Create Virtual Device），选一个手机机型和已装的系统镜像。设备放在 ${env.avdHome}`;
+  return null;
 };
 const PHASE: Record<InstallProgress["phase"], string> = {
   download: "下载中",
@@ -510,22 +510,20 @@ function CopyCmd(props: { cmd: string }) {
 /** 画面上方的环境检查卡片：缺什么、多大、手动命令，以及安装进度。安装只在确认框里确认后才开始。 */
 function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c: Confirm) => void; onCreate: () => void; onDismiss: () => void }) {
   const busy = () => props.installs.some(isActive);
-  const missingIds = () => props.env.missing.map((m) => m.id);
-  const withNeeds = (id: EnvId): EnvId[] => [...ENV_NEEDS[id], id].filter((x) => missingIds().includes(x));
-  const total = () => props.env.missing.reduce((n, m) => n + (m.sizeMb ?? 0), 0);
-  // 没有 Java 时要跑 sdkmanager / avdmanager 的项都装不了，等用户装好 Java 再来
-  const noJava = () => missingIds().includes("java");
-  const blocked = (id: EnvId) => noJava() && NEEDS_JAVA.includes(id);
   // 设备要在“创建设备”对话框里选机型和系统版本，不在“全部安装”里
-  const installable = () => missingIds().filter((id) => id !== "java" && id !== "avd");
+  const installable = () => props.env.missing.filter((m) => m.auto && m.id !== "avd");
+  const total = () => installable().reduce((n, m) => n + (m.sizeMb ?? 0), 0);
+  // 展开了“手动安装”的项；默认都收起
+  const manualOpen = signal<string[]>([]);
+  const toggleManual = (id: string) => manualOpen.set(manualOpen().includes(id) ? manualOpen().filter((x) => x !== id) : [...manualOpen(), id]);
   return (
     <View role="region" accessibilityLabel="环境检查"
       style={{ width: 560, maxWidth: "100%", gap: 10, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.warn }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <Text role="header" style={{ color: C.text, fontSize: 14, fontWeight: "bold" }}>环境检查</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <If when={props.env.missing.length > 0 && installable().length > 0}>
-            <Btn label={`全部安装（${sizeText(total())}）`} disabled={busy() || noJava()} onPress={() => props.onInstall({ ids: installable(), kind: "install" })} />
+          <If when={installable().length > 1}>
+            <Btn label={`全部安装（${sizeText(total())}）`} disabled={busy()} onPress={() => props.onInstall({ ids: installable().map((m) => m.id), kind: "install" })} />
           </If>
           <If when={!busy()}>
             <Btn label="收起" onPress={props.onDismiss} />
@@ -534,7 +532,7 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
       </View>
       <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>
         {props.env.missing.length > 0
-          ? `本机缺 ${props.env.missing.length} 项。点“安装”会先让你确认要下载什么、装到哪里。`
+          ? `还不能启动设备，缺 ${props.env.missing.length} 项。点“安装”会先让你确认要下载什么、装到哪里。`
           : props.env.error ? "" : "环境已经齐全。"}
       </Text>
       <If when={props.env.error}>
@@ -546,18 +544,30 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
             <View style={{ gap: 6, padding: 10, borderRadius: 8, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Text style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: "bold" }}>
-                  {`${ENV_NAME[m().id]}${m().sizeMb ? ` · ${sizeText(m().sizeMb!)}` : ""}`}
+                  {`${envName(m().id)}${m().sizeMb ? ` · ${sizeText(m().sizeMb!)}` : ""}`}
                 </Text>
                 <If when={m().auto}>
                   <If when={m().id === "avd"} else={
-                    <Btn label="安装" disabled={busy() || blocked(m().id)} onPress={() => props.onInstall({ ids: withNeeds(m().id), kind: "install" })} />
+                    <Btn label="安装" disabled={busy()} onPress={() => props.onInstall({ ids: [m().id], kind: "install" })} />
                   }>
-                    <Btn label="创建设备" disabled={busy() || blocked("avd")} onPress={props.onCreate} />
+                    <Btn label="创建设备" disabled={busy()} onPress={props.onCreate} />
                   </If>
                 </If>
               </View>
               <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>{m().detail}</Text>
-              <If when={m().command}>{(cmd) => <CopyCmd cmd={cmd()} />}</If>
+              <If when={manualHint(m(), props.env) !== null || !!m().command}>
+                <View style={{ gap: 6 }}>
+                  <View onPress={() => toggleManual(m().id)} role="button" accessibilityLabel="手动安装" accessibilityState={{ expanded: manualOpen().includes(m().id) }}
+                    hoverStyle={{ opacity: 0.8 }} style={{ flexDirection: "row", alignSelf: "flex-start", gap: 4 }}>
+                    <Text style={{ color: C.muted, fontSize: 12 }}>{`${manualOpen().includes(m().id) ? "▾" : "▸"} 手动安装`}</Text>
+                  </View>
+                  <If when={manualOpen().includes(m().id)}>
+                    <If when={manualHint(m(), props.env)}>{(h) => <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18, userSelect: "text" }}>{h()}</Text>}</If>
+                    {/* 旧网关给的 sdkmanager / avdmanager 命令 */}
+                    <If when={m().command}>{(cmd) => <CopyCmd cmd={cmd()} />}</If>
+                  </If>
+                </View>
+              </If>
             </View>
           )}
         </Each>
@@ -568,7 +578,7 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
               {(p) => (
                 <View style={{ gap: 4, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: p().phase === "failed" ? C.danger : C.line }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ flex: 1, color: C.text, fontSize: 13 }}>{ENV_NAME[p().id as EnvId] ?? p().id}</Text>
+                    <Text style={{ flex: 1, color: C.text, fontSize: 13 }}>{envName(p().id)}</Text>
                     <Text style={{ color: p().phase === "failed" ? C.danger : p().phase === "done" ? C.ok : C.warn, fontSize: 12 }}>
                       {`${PHASE[p().phase]}${p().pct !== undefined && p().phase === "download" ? ` ${p().pct}%` : ""}`}
                     </Text>
@@ -617,7 +627,7 @@ const reveal = async (scroller: Scroller | undefined, item: Focusable | undefine
 const imageLabel = (i: SystemImage) => `${i.version ?? "Android"}（API ${i.api}）`;
 
 /** 创建设备对话框的内容：目录由 App 在打开时向网关要，选好后点“下一步”交给确认框。 */
-function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; onCancel: () => void; onNext: (a: NewAvd) => void; onInstallTools: () => void }) {
+function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; onCancel: () => void; onNext: (a: NewAvd) => void }) {
   const catalog = () => props.catalog;
   const device = signal<string | null>(null);
   const image = signal<string | null>(null);
@@ -674,26 +684,16 @@ function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; o
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
             <View style={{ flex: 1, minWidth: 240, gap: 8 }}>
             <Text style={{ color: C.muted, fontSize: 12 }}>{pickedDevice() ? `机型：${pickedDevice()!.name}` : "机型"}</Text>
-            <If when={!c().needTools} else={
-              <View style={{ gap: 8 }}>
-                <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>读取机型要用 avdmanager，本机还没有命令行工具（cmdline-tools）。先装好它，再回来选机型。</Text>
-                <View style={{ flexDirection: "row" }}>
-                  <Btn label="安装命令行工具" onPress={props.onInstallTools} />
-                </View>
-              </View>
-            }>
-              <If when={c().devicesError}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 13, lineHeight: 20 }}>{e()}</Text>}</If>
-              <Scroll ref={(r) => (deviceScroll = r)} style={{ height: 248, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface }}>
-                <RadioGroup style={{ gap: 4 }}>
-                  <Each of={c().devices} key={(d) => d.id}>
-                    {(d) => (
-                      <Choice label={d().name} detail={d().oem} checked={pickedDevice()?.id === d().id} onPress={() => device.set(d().id)}
-                        ref={(r) => deviceRefs.set(d().id, r)} />
-                    )}
-                  </Each>
-                </RadioGroup>
-              </Scroll>
-            </If>
+            <Scroll ref={(r) => (deviceScroll = r)} style={{ height: 248, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface }}>
+              <RadioGroup style={{ gap: 4 }}>
+                <Each of={c().devices} key={(d) => d.id}>
+                  {(d) => (
+                    <Choice label={d().name} detail={d().oem} checked={pickedDevice()?.id === d().id} onPress={() => device.set(d().id)}
+                      ref={(r) => deviceRefs.set(d().id, r)} />
+                  )}
+                </Each>
+              </RadioGroup>
+            </Scroll>
             </View>
             <View style={{ flex: 1, minWidth: 240, gap: 8 }}>
             <Text style={{ color: C.muted, fontSize: 12 }}>{pickedImage() ? `系统版本：${imageLabel(pickedImage()!)}` : "系统版本"}</Text>
@@ -1013,13 +1013,6 @@ function App() {
     if (c.kind === "install") gw(host.call("emu.install", { ids: c.ids }));
     else gw(host.call("emu.createAvd", { name: c.avd.name, device: c.avd.device.id, image: c.avd.image.pkg }));
   };
-  // 对话框里点“安装命令行工具”：走环境检查同一个确认框，缺的前置项一起装
-  const installTools = () => {
-    createOpen.set(false);
-    const missing = (env()?.missing ?? []).map((m) => m.id);
-    const ids: EnvId[] = [...ENV_NEEDS["cmdline-tools"], "cmdline-tools"];
-    confirm.set({ kind: "install", ids: ids.filter((id) => missing.includes(id)) });
-  };
 
   // 重命名对话框：改的是显示名，id 不变
   const renameTarget = signal<Avd | null>(null);
@@ -1328,7 +1321,7 @@ function App() {
         <If when={confirm()}>
           {(c) => {
             // 确认框列出的项和磁盘检查用的项：安装取环境检查里的缺失项，建设备取 createItems（和网关同一套）
-            const items = (): Array<{ id: string; sizeMb?: number; diskMb?: number }> => {
+            const items = (): Array<{ id: string; pkg?: string; sizeMb?: number; diskMb?: number }> => {
               const x = c();
               if (x.kind === "avd") return createItems(x.avd.image);
               return x.ids.map((id) => env()?.missing.find((m) => m.id === id) ?? { id });
@@ -1345,7 +1338,7 @@ function App() {
                 <If when={avd()} else={
                   <View style={{ gap: 4 }}>
                     <Each of={items()} key={(i) => i.id}>
-                      {(i) => <Text style={{ color: C.text, fontSize: 13 }}>{`· ${ENV_NAME[i().id as EnvId]}${i().sizeMb ? `，${sizeText(i().sizeMb!)}` : ""}`}</Text>}
+                      {(i) => <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>{`· ${envName(i().id)}${i().pkg ? `（${i().pkg}）` : ""}${i().sizeMb ? `，${sizeText(i().sizeMb!)}` : ""}`}</Text>}
                     </Each>
                   </View>
                 }>
@@ -1363,7 +1356,7 @@ function App() {
                   )}
                 </If>
                 <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>
-                  {`${space().downloadMb ? `下载约 ${gbText(space().downloadMb)}，` : ""}安装后约占 ${gbText(space().diskMb)}，${env()?.sdkRoot ?? ""} 所在磁盘剩余 ${gbText(env()?.freeMb ?? 0)}`}
+                  {`${space().downloadMb ? `下载${sizeText(space().downloadMb)}，` : ""}安装后${sizeText(space().diskMb).replace("约", "约占")}，${env()?.sdkRoot ?? ""} 所在磁盘剩余 ${gbText(env()?.freeMb ?? 0)}`}
                 </Text>
                 <If when={hasAvd() && env() && !env()!.sameDisk}>
                   <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>{`${env()?.avdHome ?? ""} 所在磁盘剩余 ${gbText(env()?.avdFreeMb ?? 0)}`}</Text>
@@ -1376,9 +1369,7 @@ function App() {
                 </If>
                 <If when={downloads()}>
                   <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>
-                    {env()?.androidCli
-                      ? "本机的命令行工具是 23 及以上版本：它可能不询问就接受 Google 的许可证，会往 ~/.android/bin 装约 90 MB 的程序、建 ~/.android/cli，并默认上报使用数据。也可以先删除 cmdline-tools/latest，让页面安装会逐项询问的 22.0。"
-                      : "安装过程中会显示 Google 的许可证，你同意后才会继续。"}
+                    {"从 Google 的 SDK 仓库（dl.google.com）直接下载，校验 sha1 后再解压。下载前会显示 Google 的许可证，你同意后才会继续。"}
                   </Text>
                 </If>
                 <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
@@ -1394,7 +1385,7 @@ function App() {
         backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
         style={{ marginHorizontal: "auto", marginTop: "6%", width: 720, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
         <If when={createOpen()}>
-          <CreateAvd catalog={catalog()} loadError={catalogError()} onCancel={() => createOpen.set(false)} onInstallTools={installTools}
+          <CreateAvd catalog={catalog()} loadError={catalogError()} onCancel={() => createOpen.set(false)}
             onNext={(a) => {
               createOpen.set(false);
               confirm.set({ kind: "avd", avd: a });
@@ -1406,7 +1397,7 @@ function App() {
         style={{ marginHorizontal: "auto", marginTop: "6%", width: 680, maxWidth: "94%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
         <View role="group" accessibilityLabel="许可证" style={{ gap: 10 }}>
           <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>{`同意许可证 ${license()?.name ?? ""} 后继续安装`}</Text>
-          <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>下面是 sdkmanager 给出的许可证全文。不同意的话，这一项不会安装。</Text>
+          <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>下面是 Google 的 SDK 仓库清单里这份许可证的全文。同意后会记在 SDK 的 licenses 目录里，Android Studio 也认；不同意的话，这一项不会安装。</Text>
           <Scroll style={{ height: 420, borderRadius: 6, borderWidth: 1, borderColor: C.line, backgroundColor: C.bg }} contentStyle={{ padding: 10 }}>
             <Text style={{ color: C.text, fontSize: 12, lineHeight: 18, fontFamily: "monospace", userSelect: "text" }}>{license()?.text ?? ""}</Text>
           </Scroll>

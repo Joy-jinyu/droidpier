@@ -6,7 +6,7 @@ import { startServer } from "./server.ts";
 import { deleteAvd, listAvds, renameAvd } from "./avd.ts";
 import { startAvd, stopAvd } from "./lifecycle.ts";
 import { cachedSession } from "./session-cache.ts";
-import { avdHome, avdmanagerBin, serviceLogPath, cmdlineToolsManifestUrl, discoveryDir, emulatorBin, findJavaHome, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
+import { avdHome, serviceLogPath, discoveryDir, emulatorBin, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
@@ -117,13 +117,11 @@ const getSession = cachedSession(discover);
 
 void cleanStaleUploads(tmpdir(), Date.now());
 const env = await checkEnv(realEnvDeps());
-const installer = createInstaller(realInstallerDeps({ sdkRoot: sdkRoot(), avdHome: avdHome(), manifestUrl: cmdlineToolsManifestUrl(), findJava: () => findJavaHome() }));
+const installer = createInstaller(realInstallerDeps({ sdkRoot: sdkRoot(), avdHome: avdHome() }));
 const catalogDeps = realCatalogDeps({
   sdkRoot: sdkRoot(),
   avdHome: avdHome(),
-  avdmanager: avdmanagerBin(),
   manifestUrl: SYS_IMG_MANIFEST_URL,
-  findJava: () => findJavaHome(),
   fetchText: async (url) => {
     const r = await fetchWithIdle(url, 60_000);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -178,13 +176,13 @@ console.log(`droidpier: ${pageUrl}  (${first ? `emulator-${serial}` : "no emulat
 // 终端里只提示，不提问：安装要在页面上确认
 if (!env.ok) {
   console.log(`打开页面完成安装：${pageUrl}`);
-  for (const m of env.missing) console.log(`  缺 ${m.id}：${m.detail}${m.command ? `\n    手动安装：${m.command}` : ""}`);
+  for (const m of env.missing) console.log(`  缺 ${m.id}：${m.detail}`);
 }
 if (!noOpen) openBrowser(pageUrl, (e) => console.log(`打开浏览器失败：${e.message}`));
 
 const onSignal = exitHandler({
   cleanup: async () => {
-    // 正在跑的 sdkmanager / avdmanager 不能留在网关后面
+    // 正在进行的下载和解压不能留在网关后面
     installer.stop();
     // srv.close() 会收掉当前设备的 webviews.close() 和 reverses.removeAll()
     await srv.close();

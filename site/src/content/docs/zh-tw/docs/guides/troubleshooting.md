@@ -1,7 +1,7 @@
 ---
 title: 疑難排解
 description: 解決常見問題——Chrome 封鎖本機網路存取、連接埠被佔用、未找到模擬器、頁面無法連線、版本不符。
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome 封鎖了本機網路存取 {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Android Studio 安裝的 SDK 可能不包含 `cmdline-tools`（提供 `sdkmanage
 ## 畫面停止更新
 
 如果模擬器結束或重新啟動，頁面會顯示已中斷連線。閘道繼續執行。當模擬器恢復後，頁面會重新連接，畫面也會恢復。
+
+## 解除安裝 {#uninstall}
+
+先停止在背景執行的閘道，再刪除它用到的檔案：
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+如果 `droidpier` 已經刪掉了，但背景閘道還在執行或登入時還會啟動，就手動移除它：
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

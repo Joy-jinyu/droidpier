@@ -1,7 +1,7 @@
 ---
 title: سطر الأوامر
 description: الخيارات ومتغيرات البيئة لأمر بوابة Droidpier.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | المجموع الاختباري للإصدار المثبّت | `~/.local/share/droidpier/installed.sha256` |
 | إعدادات بوابة الخلفية | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | سجل بوابة الخلفية | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## إلغاء التثبيت {#uninstall}
+
+أوقف بوابة الخلفية، ثم احذف الملفات التي تستخدمها:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+إذا كنت قد حذفت `droidpier` بالفعل لكن بوابة الخلفية ما زالت تعمل أو تبدأ عند تسجيل الدخول، فأزلها يدويًا:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

@@ -1,7 +1,7 @@
 ---
 title: Dépannage
 description: Résoudre les problèmes courants - Chrome a bloqué l’accès au réseau local, port déjà utilisé, aucun émulateur trouvé, la page ne se connecte pas, versions incompatibles.
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome a bloqué l’accès au réseau local {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Lancez `droidpier --local` pour que la passerelle ouvre la page locale plutôt q
 ## L’écran ne se met plus à jour
 
 Si l’émulateur se ferme ou redémarre, la page indique qu’elle est déconnectée. La passerelle continue de tourner. Quand l’émulateur revient, la page se reconnecte et l’écran réapparaît.
+
+## Désinstaller {#uninstall}
+
+Arrêtez la passerelle en arrière-plan, puis supprimez les fichiers qu’elle utilise :
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Si `droidpier` est déjà supprimé mais que la passerelle en arrière-plan tourne encore ou démarre à l’ouverture de session, retirez-la à la main :
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

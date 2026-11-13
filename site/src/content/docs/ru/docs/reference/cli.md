@@ -1,7 +1,7 @@
 ---
 title: Командная строка
 description: Параметры и переменные окружения команды шлюза Droidpier.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | Контрольная сумма установленной версии | `~/.local/share/droidpier/installed.sha256` |
 | Настройки фонового шлюза | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | Журнал фонового шлюза | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## Удаление {#uninstall}
+
+Остановите фоновый шлюз, затем удалите файлы, которые он использует:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Если `droidpier` уже удалён, а фоновый шлюз всё ещё работает или запускается при входе в систему, удалите его вручную:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

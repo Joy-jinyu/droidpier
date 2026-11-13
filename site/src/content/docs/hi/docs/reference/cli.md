@@ -1,7 +1,7 @@
 ---
 title: कमांड लाइन
 description: Droidpier गेटवे कमांड के विकल्प और environment variables।
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | इंस्टॉल किए गए वर्ज़न का checksum | `~/.local/share/droidpier/installed.sha256` |
 | बैकग्राउंड गेटवे की सेटिंग | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | बैकग्राउंड गेटवे का लॉग | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## अनइंस्टॉल {#uninstall}
+
+बैकग्राउंड गेटवे बंद करें, फिर उसकी इस्तेमाल की गई फ़ाइलें मिटाएँ:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+अगर `droidpier` पहले ही मिटा दिया गया है, लेकिन बैकग्राउंड गेटवे अब भी चल रहा है या लॉग इन पर शुरू होता है, तो उसे हाथ से हटाएँ:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

@@ -102,3 +102,20 @@ Run `droidpier --local` to have the gateway open the local page instead of the p
 ## The screen stops updating
 
 If the emulator exits or restarts, the page shows that it is disconnected. The gateway keeps running. When the emulator comes back, the page reconnects and the screen returns.
+
+## Uninstall
+
+Stop the background gateway, then delete the files it uses:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+If `droidpier` is already deleted but the background gateway still runs or starts when you log in, remove it by hand:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

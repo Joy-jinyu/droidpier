@@ -68,6 +68,21 @@ droidpier --version | --help
 
 An unknown option or a stray argument makes `droidpier` exit with a message instead of being ignored.
 
+### Uninstall
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+If `droidpier` is already deleted but the background gateway still runs or starts at login, remove it by hand:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```
+
 More in the [command line reference](https://droid.devpier.dev/docs/reference/cli/) and [troubleshooting](https://droid.devpier.dev/docs/guides/troubleshooting/).
 
 ## Development

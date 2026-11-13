@@ -1,7 +1,7 @@
 ---
 title: समस्या निवारण
 description: आम समस्याएँ ठीक करें - Chrome ने लोकल नेटवर्क एक्सेस ब्लॉक किया, पोर्ट पहले से इस्तेमाल में है, कोई एमुलेटर नहीं मिला, पेज कनेक्ट नहीं होता, वर्शन मेल नहीं खाता।
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome ने लोकल नेटवर्क एक्सेस ब्लॉक किया {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Android Studio से इंस्टॉल किए गए SDK में `cmdl
 ## स्क्रीन अपडेट होना बंद हो जाती है
 
 अगर एमुलेटर बंद हो जाता है या रीस्टार्ट होता है, तो पेज दिखाता है कि वह डिसकनेक्ट हो गया है। गेटवे चलता रहता है। जब एमुलेटर वापस आता है, तो पेज फिर से कनेक्ट हो जाता है और स्क्रीन लौट आती है।
+
+## अनइंस्टॉल {#uninstall}
+
+बैकग्राउंड गेटवे बंद करें, फिर उसकी इस्तेमाल की गई फ़ाइलें मिटाएँ:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+अगर `droidpier` पहले ही मिटा दिया गया है, लेकिन बैकग्राउंड गेटवे अब भी चल रहा है या लॉग इन पर शुरू होता है, तो उसे हाथ से हटाएँ:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

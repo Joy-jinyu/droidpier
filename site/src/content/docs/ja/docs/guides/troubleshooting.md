@@ -1,7 +1,7 @@
 ---
 title: トラブルシューティング
 description: よくある問題の解決——Chrome がローカルネットワークアクセスをブロック・ポートが使用中・エミュレーターが見つからない・ページが接続しない・バージョン不一致。
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome がローカルネットワークアクセスをブロックした {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Android Studio でインストールした SDK には、`sdkmanager` と `avdman
 ## 画面が更新されなくなった
 
 エミュレーターが終了または再起動すると、ページに切断が表示されます。ゲートウェイは動き続けます。エミュレーターが戻ると、ページが再接続して画面も復帰します。
+
+## アンインストール {#uninstall}
+
+バックグラウンドのゲートウェイを止めてから、使っているファイルを削除します。
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+`droidpier` をすでに削除したのに、バックグラウンドのゲートウェイがまだ動いている、またはログイン時に起動する場合は、手動で取り除きます。
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

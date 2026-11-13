@@ -1,7 +1,7 @@
 ---
 title: Riga di comando
 description: Opzioni e variabili d’ambiente del comando del gateway Droidpier.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ Quando mancano parti dell’Android SDK, il gateway elenca ciascuna con un coman
 | Checksum della versione installata | `~/.local/share/droidpier/installed.sha256` |
 | Impostazioni del gateway in background | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | Log del gateway in background | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## Disinstallare {#uninstall}
+
+Arresta il gateway in background, poi elimina i file che usa:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Se hai già eliminato `droidpier` ma il gateway in background è ancora in esecuzione o si avvia all’accesso, rimuovilo a mano:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

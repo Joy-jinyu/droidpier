@@ -1,7 +1,7 @@
 ---
 title: Risoluzione dei problemi
 description: Risolvi i problemi comuni - Chrome ha bloccato l’accesso alla rete locale, porta già in uso, nessun emulatore trovato, la pagina non si connette, versioni non corrispondenti.
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome ha bloccato l’accesso alla rete locale {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Esegui `droidpier --local` per fare in modo che il gateway apra la pagina locale
 ## Lo schermo smette di aggiornarsi
 
 Se l’emulatore si chiude o si riavvia, la pagina mostra che è disconnessa. Il gateway continua a funzionare. Quando l’emulatore torna disponibile, la pagina si riconnette e lo schermo ricompare.
+
+## Disinstallare {#uninstall}
+
+Arresta il gateway in background, poi elimina i file che usa:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Se hai già eliminato `droidpier` ma il gateway in background è ancora in esecuzione o si avvia all’accesso, rimuovilo a mano:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

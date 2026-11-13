@@ -1,7 +1,7 @@
 ---
 title: استكشاف الأخطاء وإصلاحها
 description: إصلاح المشكلات الشائعة - حظر Chrome للوصول إلى الشبكة المحلية، والمنفذ مستخدم بالفعل، وعدم العثور على محاكٍ، وعدم اتصال الصفحة، وعدم تطابق الإصدارات.
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## حظر Chrome الوصول إلى الشبكة المحلية {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 ## توقف تحديث الشاشة
 
 إذا خرج المحاكي أو أُعيد تشغيله، تعرض الصفحة أنه غير متصل. تستمر البوابة في العمل. وعندما يعود المحاكي، تعيد الصفحة الاتصال وتعود الشاشة.
+
+## إلغاء التثبيت {#uninstall}
+
+أوقف بوابة الخلفية، ثم احذف الملفات التي تستخدمها:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+إذا كنت قد حذفت `droidpier` بالفعل لكن بوابة الخلفية ما زالت تعمل أو تبدأ عند تسجيل الدخول، فأزلها يدويًا:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

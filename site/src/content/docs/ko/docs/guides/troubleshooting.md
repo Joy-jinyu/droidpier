@@ -1,7 +1,7 @@
 ---
 title: 문제 해결
 description: 자주 발생하는 문제 해결 - Chrome의 로컬 네트워크 접근 차단, 이미 사용 중인 포트, 에뮬레이터를 찾을 수 없음, 페이지가 연결되지 않음, 버전 불일치.
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome이 로컬 네트워크 접근을 차단함 {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Android Studio로 설치한 SDK에는 `sdkmanager`와 `avdmanager`를 제공하�
 ## 화면이 더 이상 갱신되지 않음
 
 에뮬레이터가 종료되거나 다시 시작되면 페이지에 연결이 끊겼다고 표시됩니다. 게이트웨이는 계속 실행됩니다. 에뮬레이터가 다시 돌아오면 페이지가 다시 연결되고 화면이 돌아옵니다.
+
+## 제거 {#uninstall}
+
+백그라운드 게이트웨이를 중지한 뒤 사용하던 파일을 삭제하세요.
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+`droidpier`를 이미 삭제했는데 백그라운드 게이트웨이가 아직 실행 중이거나 로그인할 때 시작되면 직접 제거하세요.
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

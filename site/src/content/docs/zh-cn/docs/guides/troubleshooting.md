@@ -1,7 +1,7 @@
 ---
 title: 故障排除
 description: 解决常见问题——Chrome 阻止本地网络访问、端口被占用、未找到模拟器、页面无法连接、版本不匹配。
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome 阻止了本地网络访问 {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ Android Studio 安装的 SDK 可能不包含 `cmdline-tools`（提供 `sdkmanage
 ## 画面停止更新
 
 如果模拟器退出或重启，页面会显示已断开连接。网关继续运行。当模拟器恢复后，页面会重新连接，画面也会恢复。
+
+## 卸载 {#uninstall}
+
+先停止后台运行的网关，再删除它用到的文件：
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+如果 `droidpier` 已经删掉了，但后台网关还在运行或登录时还会启动，就手动移除它：
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

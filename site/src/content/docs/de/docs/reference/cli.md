@@ -1,7 +1,7 @@
 ---
 title: Befehlszeile
 description: Optionen und Umgebungsvariablen für den Befehl des Droidpier-Gateways.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ Fehlen Teile des Android SDK, listet das Gateway jedes davon mit einem Befehl zu
 | Prüfsumme der installierten Version | `~/.local/share/droidpier/installed.sha256` |
 | Einstellungen des Gateways im Hintergrund | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | Log des Gateways im Hintergrund | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## Deinstallieren {#uninstall}
+
+Stoppen Sie das Gateway im Hintergrund und löschen Sie dann die Dateien, die es verwendet:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Ist `droidpier` bereits gelöscht, läuft das Gateway im Hintergrund aber noch oder startet bei der Anmeldung, entfernen Sie es von Hand:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

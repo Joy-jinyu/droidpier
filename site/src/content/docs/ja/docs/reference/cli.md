@@ -1,7 +1,7 @@
 ---
 title: コマンドライン
 description: Droidpier ゲートウェイコマンドのオプションと環境変数。
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ Android SDK のコンポーネントが不足している場合、ゲートウ�
 | インストール済みバージョンのチェックサム | `~/.local/share/droidpier/installed.sha256` |
 | バックグラウンドのゲートウェイの設定 | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | バックグラウンドのゲートウェイのログ | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## アンインストール {#uninstall}
+
+バックグラウンドのゲートウェイを止めてから、使っているファイルを削除します。
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+`droidpier` をすでに削除したのに、バックグラウンドのゲートウェイがまだ動いている、またはログイン時に起動する場合は、手動で取り除きます。
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

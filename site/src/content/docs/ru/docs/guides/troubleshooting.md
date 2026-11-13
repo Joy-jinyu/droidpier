@@ -1,7 +1,7 @@
 ---
 title: Устранение неполадок
 description: Решение типичных проблем - Chrome заблокировал доступ к локальной сети, порт уже занят, эмулятор не найден, страница не подключается, несовпадение версий.
-sourceHash: 0b338512d1e9
+sourceHash: b8a54e8a6f0d
 ---
 
 ## Chrome заблокировал доступ к локальной сети {#chrome-blocked-local-network-access}
@@ -103,3 +103,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 ## Экран перестаёт обновляться
 
 Если эмулятор завершается или перезапускается, страница показывает, что соединение потеряно. Шлюз продолжает работать. Когда эмулятор возвращается, страница переподключается, и экран снова появляется.
+
+## Удаление {#uninstall}
+
+Остановите фоновый шлюз, затем удалите файлы, которые он использует:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Если `droidpier` уже удалён, а фоновый шлюз всё ещё работает или запускается при входе в систему, удалите его вручную:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

@@ -1,7 +1,7 @@
 ---
 title: Ligne de commande
 description: Options et variables d’environnement de la commande de la passerelle Droidpier.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ Quand des parties de l’Android SDK manquent, la passerelle liste chacune avec 
 | Somme de contrôle de la version installée | `~/.local/share/droidpier/installed.sha256` |
 | Réglages de la passerelle en arrière-plan | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | Journal de la passerelle en arrière-plan | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## Désinstaller {#uninstall}
+
+Arrêtez la passerelle en arrière-plan, puis supprimez les fichiers qu’elle utilise :
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Si `droidpier` est déjà supprimé mais que la passerelle en arrière-plan tourne encore ou démarre à l’ouverture de session, retirez-la à la main :
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

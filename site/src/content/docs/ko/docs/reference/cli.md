@@ -1,7 +1,7 @@
 ---
 title: 명령줄
 description: Droidpier 게이트웨이 명령의 옵션과 환경 변수.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ Android SDK 구성 요소가 빠져 있으면 게이트웨이는 항목마다 �
 | 설치된 버전의 체크섬 | `~/.local/share/droidpier/installed.sha256` |
 | 백그라운드 게이트웨이 설정 | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | 백그라운드 게이트웨이 로그 | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## 제거 {#uninstall}
+
+백그라운드 게이트웨이를 중지한 뒤 사용하던 파일을 삭제하세요.
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+`droidpier`를 이미 삭제했는데 백그라운드 게이트웨이가 아직 실행 중이거나 로그인할 때 시작되면 직접 제거하세요.
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

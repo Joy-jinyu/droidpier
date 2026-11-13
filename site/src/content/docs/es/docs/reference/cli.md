@@ -1,7 +1,7 @@
 ---
 title: Línea de comandos
 description: Opciones y variables de entorno del comando del gateway Droidpier.
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ Cuando faltan partes del Android SDK, el gateway muestra cada una con un comando
 | Suma de comprobación de la versión instalada | `~/.local/share/droidpier/installed.sha256` |
 | Configuración del gateway en segundo plano | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | Registro del gateway en segundo plano | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## Desinstalar {#uninstall}
+
+Detén el gateway en segundo plano y luego borra los archivos que usa:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+Si ya borraste `droidpier` pero el gateway en segundo plano sigue ejecutándose o se inicia al iniciar sesión, quítalo a mano:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

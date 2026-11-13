@@ -1,7 +1,7 @@
 ---
 title: 命令列
 description: Droidpier 閘道命令的選項和環境變數。
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 已安裝版本的檢查碼 | `~/.local/share/droidpier/installed.sha256` |
 | 背景閘道的設定 | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | 背景閘道的記錄檔 | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## 解除安裝 {#uninstall}
+
+先停止在背景執行的閘道，再刪除它用到的檔案：
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+如果 `droidpier` 已經刪掉了，但背景閘道還在執行或登入時還會啟動，就手動移除它：
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

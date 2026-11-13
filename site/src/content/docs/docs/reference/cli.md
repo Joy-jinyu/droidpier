@@ -103,3 +103,20 @@ When Android SDK parts are missing, the gateway lists each one with a command to
 | Checksum of the installed version | `~/.local/share/droidpier/installed.sha256` |
 | Background gateway settings | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | Background gateway log | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## Uninstall
+
+Stop the background gateway, then delete the files it uses:
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+If `droidpier` is already deleted but the background gateway still runs or starts when you log in, remove it by hand:
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

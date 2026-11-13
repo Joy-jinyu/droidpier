@@ -1,7 +1,7 @@
 ---
 title: 命令行
 description: Droidpier 网关命令的选项和环境变量。
-sourceHash: b62f19b96312
+sourceHash: 6865e9bd6511
 ---
 
 <!-- verify: phase 3 -->
@@ -104,3 +104,20 @@ curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh
 | 已安装版本的校验和 | `~/.local/share/droidpier/installed.sha256` |
 | 后台网关的设置 | `~/Library/LaunchAgents/dev.devpier.droidpier.plist` |
 | 后台网关的日志 | `~/Library/Logs/Droidpier/droidpier.log` |
+
+## 卸载 {#uninstall}
+
+先停止后台运行的网关，再删除它用到的文件：
+
+```sh
+droidpier stop
+rm ~/.local/bin/droidpier
+rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
+```
+
+如果 `droidpier` 已经删掉了，但后台网关还在运行或登录时还会启动，就手动移除它：
+
+```sh
+launchctl bootout gui/$(id -u)/dev.devpier.droidpier
+rm ~/Library/LaunchAgents/dev.devpier.droidpier.plist
+```

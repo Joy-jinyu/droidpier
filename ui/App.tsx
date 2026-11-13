@@ -1073,12 +1073,22 @@ function App() {
       (e: Error) => { if (still()) deleteError.set(`没有删除：${e.message}`); },
     ).finally(() => deleting.set(false));
   };
+  // 回复晚了（页面 15 秒超时）或别的页面删掉了它：新列表里没有这台了，就当删完
+  effect(() => {
+    const a = deleteTarget();
+    const list = avds();
+    if (!a || !list || list.some((x) => x.name === a.name)) return;
+    deleteTarget.set(null);
+    showNotice({ text: `已删除 ${avdLabel(a)}` });
+  });
 
   const DeviceRow = (props: { avd: () => Avd }) => {
     const a = props.avd;
     const boot = () => boots()[a().name];
     const current = () => a().running === "grpc" && a().serial === serial() && (state() === "connected" || state() === "rebooting");
     const blocked = () => deleteBlocked(a(), isBooting(boot()));
+    // 这台正在删：改名和删除都不能再点
+    const beingDeleted = () => deleting() && deleteTarget()?.name === a().name;
     const spec = () => {
       const parts: string[] = [];
       if (a().width && a().height) parts.push(`${a().width}×${a().height}`);
@@ -1098,9 +1108,9 @@ function App() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a().running === "no" ? C.idle : statusColor() }} />
           <Text style={{ flex: 1, color: C.text, fontSize: 13, lineHeight: 18, fontWeight: current() ? "600" : "500" }}>{avdLabel(a())}</Text>
-          <IconBtn icon="pencil" label={`重命名 ${avdLabel(a())}`} onPress={() => openRename(a())} />
-          <IconBtn icon="trash" label={`删除设备 ${avdLabel(a())}`} tip={blocked() ?? undefined} disabled={blocked() !== null}
-            onPress={() => { if (!blocked()) openDelete(a()); }} />
+          <IconBtn icon="pencil" label={`重命名 ${avdLabel(a())}`} disabled={beingDeleted()} onPress={() => { if (!beingDeleted()) openRename(a()); }} />
+          <IconBtn icon="trash" label={`删除设备 ${avdLabel(a())}`} tip={blocked() ?? undefined} disabled={blocked() !== null || beingDeleted()}
+            onPress={() => { if (!blocked() && !beingDeleted()) openDelete(a()); }} />
         </View>
         <Text style={{ color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{spec()}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>

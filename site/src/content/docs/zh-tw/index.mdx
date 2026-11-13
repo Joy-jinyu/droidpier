@@ -25,7 +25,7 @@ markdownSummary: |
 
   兩個步驟即可開始：
 
-  1. 在終端機中執行以下命令，並保持該視窗開啟：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。它會安裝或更新 droidpier，然後啟動它。按 Ctrl+C 停止。
+  1. 在終端機中執行以下命令：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。它會安裝或更新 droidpier，並在背景啟動它。之後可以關閉視窗。執行 `droidpier stop` 停止。
   2. 開啟 https://droid.devpier.dev/app/。頁面會自行連線。第一次開啟時，當 Chrome 詢問是否允許該頁面存取你的本機網路時，點擊允許。
 
   完整步驟：[安裝](/zh-tw/docs/getting-started/install/)。
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="已複製"
   failedLabel="複製失敗"
   steps={[
-    { title: "執行一道命令", body: "在終端機中執行以下命令，並保持該視窗開啟。它會把 droidpier 安裝或更新到 ~/.local/bin，然後啟動它。按 Ctrl+C 停止。", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "安裝指南", href: "/zh-tw/docs/getting-started/install/" } },
+    { title: "執行一道命令", body: "在終端機中執行以下命令。它會把 droidpier 安裝或更新到 ~/.local/bin，並在背景啟動它。之後可以關閉視窗。執行 droidpier stop 停止。", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "安裝指南", href: "/zh-tw/docs/getting-started/install/" } },
     { title: "開啟頁面", body: "在 Chrome 中開啟 https://droid.devpier.dev/app/。頁面會自行連線。第一次開啟時，當 Chrome 詢問是否允許該頁面存取你的本機網路時，點擊允許。", link: { text: "本機網路存取", href: "/zh-tw/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

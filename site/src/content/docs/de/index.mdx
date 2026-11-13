@@ -25,7 +25,7 @@ markdownSummary: |
 
   In zwei Schritten loslegen:
 
-  1. Führen Sie dies im Terminal aus und lassen Sie das Fenster geöffnet: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. Der Befehl installiert oder aktualisiert droidpier und startet es. Mit Ctrl+C beenden Sie es.
+  1. Führen Sie dies im Terminal aus: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. Der Befehl installiert oder aktualisiert droidpier und startet es im Hintergrund. Sie können das Fenster schließen. Mit `droidpier stop` stoppen Sie es.
   2. Öffnen Sie https://droid.devpier.dev/app/. Die Seite verbindet sich von selbst. Wenn Chrome beim ersten Mal fragt, ob die Seite auf Ihr lokales Netzwerk zugreifen darf, klicken Sie auf Zulassen.
 
   Alle Schritte: [Installation](/de/docs/getting-started/install/).
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="Kopiert"
   failedLabel="Kopieren fehlgeschlagen"
   steps={[
-    { title: "Einen Befehl ausführen", body: "Führen Sie dies im Terminal aus und lassen Sie das Fenster geöffnet. Der Befehl installiert oder aktualisiert droidpier in ~/.local/bin und startet es. Mit Ctrl+C beenden Sie es.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Installationsanleitung", href: "/de/docs/getting-started/install/" } },
+    { title: "Einen Befehl ausführen", body: "Führen Sie dies im Terminal aus. Der Befehl installiert oder aktualisiert droidpier in ~/.local/bin und startet es im Hintergrund. Danach können Sie das Fenster schließen. Mit droidpier stop stoppen Sie es.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Installationsanleitung", href: "/de/docs/getting-started/install/" } },
     { title: "Seite öffnen", body: "Öffnen Sie https://droid.devpier.dev/app/ in Chrome. Die Seite verbindet sich von selbst. Wenn Chrome beim ersten Mal fragt, ob die Seite auf Ihr lokales Netzwerk zugreifen darf, klicken Sie auf Zulassen.", link: { text: "Zugriff auf das lokale Netzwerk", href: "/de/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

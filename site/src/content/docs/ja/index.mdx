@@ -25,7 +25,7 @@ markdownSummary: |
 
   2 ステップで始められます：
 
-  1. ターミナルで次のコマンドを実行し、そのウィンドウは開いたままにします：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。droidpier をインストール（または更新）して起動します。停止するには Ctrl+C を押します。
+  1. ターミナルで次のコマンドを実行します：`curl -fsSL https://droid.devpier.dev/install.sh | sh`。droidpier をインストール（または更新）し、バックグラウンドで起動します。ウィンドウは閉じてかまいません。停止するには `droidpier stop` を実行します。
   2. https://droid.devpier.dev/app/ を開きます。ページは自動で接続します。初回は、ページがローカルネットワークにアクセスしてよいか Chrome に尋ねられたら、「許可」をクリックします。
 
   詳細な手順は[インストール](/ja/docs/getting-started/install/)を参照してください。
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="コピーしました"
   failedLabel="コピーに失敗しました"
   steps={[
-    { title: "コマンドを 1 つ実行", body: "ターミナルでこのコマンドを実行し、そのウィンドウは開いたままにします。~/.local/bin に droidpier をインストール（または更新）して起動します。停止するには Ctrl+C を押します。", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "インストールガイド", href: "/ja/docs/getting-started/install/" } },
+    { title: "コマンドを 1 つ実行", body: "ターミナルでこのコマンドを実行します。~/.local/bin に droidpier をインストール（または更新）し、バックグラウンドで起動します。その後ウィンドウは閉じてかまいません。停止するには droidpier stop を実行します。", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "インストールガイド", href: "/ja/docs/getting-started/install/" } },
     { title: "ページを開く", body: "Chrome で https://droid.devpier.dev/app/ を開きます。ページは自動で接続します。初回は、ページがローカルネットワークにアクセスしてよいか Chrome に尋ねられたら、「許可」をクリックします。", link: { text: "ローカルネットワークアクセス", href: "/ja/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

@@ -25,7 +25,7 @@ markdownSummary: |
 
   ابدأ في خطوتين:
 
-  1. شغّل هذا في Terminal واترك النافذة مفتوحة: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. يثبّت droidpier أو يحدّثه ثم يشغّله. اضغط Ctrl+C لإيقافه.
+  1. شغّل هذا في Terminal: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. يثبّت droidpier أو يحدّثه، ويشغّله في الخلفية. يمكنك إغلاق النافذة. شغّل `droidpier stop` لإيقافه.
   2. افتح https://droid.devpier.dev/app/. تتصل الصفحة من تلقاء نفسها. في المرة الأولى، عندما يسألك Chrome عمّا إذا كان مسموحًا للصفحة بالوصول إلى شبكتك المحلية، انقر على السماح.
 
   الخطوات الكاملة: [التثبيت](/ar/docs/getting-started/install/).
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="تم النسخ"
   failedLabel="فشل النسخ"
   steps={[
-    { title: "شغّل أمرًا واحدًا", body: "شغّل هذا في Terminal واترك النافذة مفتوحة. يثبّت droidpier في ~/.local/bin أو يحدّثه ثم يشغّله. اضغط Ctrl+C لإيقافه.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "دليل التثبيت", href: "/ar/docs/getting-started/install/" } },
+    { title: "شغّل أمرًا واحدًا", body: "شغّل هذا في Terminal. يثبّت droidpier في ~/.local/bin أو يحدّثه، ويشغّله في الخلفية. يمكنك بعدها إغلاق النافذة. شغّل droidpier stop لإيقافه.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "دليل التثبيت", href: "/ar/docs/getting-started/install/" } },
     { title: "افتح الصفحة", body: "افتح https://droid.devpier.dev/app/ في Chrome. تتصل الصفحة من تلقاء نفسها. في المرة الأولى، عندما يسألك Chrome عمّا إذا كان مسموحًا للصفحة بالوصول إلى شبكتك المحلية، انقر على السماح.", link: { text: "الوصول إلى الشبكة المحلية", href: "/ar/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

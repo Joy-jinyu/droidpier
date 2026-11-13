@@ -25,7 +25,7 @@ markdownSummary: |
 
   Comece em dois passos:
 
-  1. Execute isto no Terminal e deixe a janela aberta: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. Ele instala ou atualiza o droidpier e o inicia. Pressione Ctrl+C para pará-lo.
+  1. Execute isto no Terminal: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. Ele instala ou atualiza o droidpier e o inicia em segundo plano. Você pode fechar a janela. Execute `droidpier stop` para pará-lo.
   2. Abra https://droid.devpier.dev/app/. A página se conecta sozinha. Na primeira vez, quando o Chrome perguntar se a página pode acessar sua rede local, clique em Permitir.
 
   Passo a passo completo: [Instalação](/pt-br/docs/getting-started/install/).
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="Copiado"
   failedLabel="Falha ao copiar"
   steps={[
-    { title: "Execute um comando", body: "Execute isto no Terminal e deixe a janela aberta. Ele instala ou atualiza o droidpier em ~/.local/bin e o inicia. Pressione Ctrl+C para pará-lo.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Guia de instalação", href: "/pt-br/docs/getting-started/install/" } },
+    { title: "Execute um comando", body: "Execute isto no Terminal. Ele instala ou atualiza o droidpier em ~/.local/bin e o inicia em segundo plano. Depois você pode fechar a janela. Execute droidpier stop para pará-lo.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Guia de instalação", href: "/pt-br/docs/getting-started/install/" } },
     { title: "Abra a página", body: "Abra https://droid.devpier.dev/app/ no Chrome. A página se conecta sozinha. Na primeira vez, quando o Chrome perguntar se a página pode acessar sua rede local, clique em Permitir.", link: { text: "Acesso à rede local", href: "/pt-br/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

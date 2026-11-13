@@ -25,7 +25,7 @@ markdownSummary: |
 
   두 단계로 시작하세요:
 
-  1. 터미널에서 다음을 실행하고 그 창을 열어 둡니다: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. droidpier를 설치하거나 업데이트한 뒤 시작합니다. 중지하려면 Ctrl+C를 누릅니다.
+  1. 터미널에서 다음을 실행하세요: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. droidpier를 설치하거나 업데이트하고 백그라운드에서 시작합니다. 창은 닫아도 됩니다. 중지하려면 `droidpier stop`을 실행하세요.
   2. https://droid.devpier.dev/app/ 을 엽니다. 페이지가 알아서 연결됩니다. 처음에는 페이지가 로컬 네트워크에 접근해도 되는지 Chrome이 물으면 허용을 클릭합니다.
 
   전체 단계: [설치](/ko/docs/getting-started/install/).
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="복사됨"
   failedLabel="복사 실패"
   steps={[
-    { title: "명령 하나 실행", body: "터미널에서 이 명령을 실행하고 그 창을 열어 두세요. droidpier를 ~/.local/bin에 설치하거나 업데이트한 뒤 시작합니다. 중지하려면 Ctrl+C를 누르세요.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "설치 가이드", href: "/ko/docs/getting-started/install/" } },
+    { title: "명령 하나 실행", body: "터미널에서 이 명령을 실행하세요. droidpier를 ~/.local/bin에 설치하거나 업데이트하고 백그라운드에서 시작합니다. 그 뒤 창은 닫아도 됩니다. 중지하려면 droidpier stop을 실행하세요.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "설치 가이드", href: "/ko/docs/getting-started/install/" } },
     { title: "페이지 열기", body: "Chrome에서 https://droid.devpier.dev/app/ 을 여세요. 페이지가 알아서 연결됩니다. 처음에는 페이지가 로컬 네트워크에 접근해도 되는지 Chrome이 물으면 허용을 클릭하세요.", link: { text: "로컬 네트워크 접근", href: "/ko/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

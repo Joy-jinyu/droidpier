@@ -25,7 +25,7 @@ markdownSummary: |
 
   Démarrez en deux étapes :
 
-  1. Exécutez ceci dans Terminal et laissez la fenêtre ouverte : `curl -fsSL https://droid.devpier.dev/install.sh | sh`. La commande installe ou met à jour droidpier, puis le démarre. Appuyez sur Ctrl+C pour l’arrêter.
+  1. Exécutez ceci dans Terminal : `curl -fsSL https://droid.devpier.dev/install.sh | sh`. La commande installe ou met à jour droidpier, puis le démarre en arrière-plan. Vous pouvez fermer la fenêtre. Lancez `droidpier stop` pour l’arrêter.
   2. Ouvrez https://droid.devpier.dev/app/. La page se connecte d’elle-même. La première fois, quand Chrome demande si la page peut accéder à votre réseau local, cliquez sur Autoriser.
 
   Toutes les étapes : [Installation](/fr/docs/getting-started/install/).
@@ -35,7 +35,7 @@ head:
       type: application/ld+json
     content: >-
       {"@context":"https://schema.org","@type":["SoftwareApplication","SoftwareSourceCode"],"name":"Droidpier","description":"One command to install. No Android Studio required.","applicationCategory":"DeveloperApplication","operatingSystem":"macOS (Apple Silicon)","license":"https://opensource.org/licenses/MIT","codeRepository":"https://github.com/twosugar/droidpier"}
-sourceHash: 094dc0ddb433
+sourceHash: e8f52080c0d2
 ---
 
 import PhoneDemo from "../../../components/home/PhoneDemo.astro";
@@ -134,7 +134,7 @@ import MotionToggle from "../../../components/home/MotionToggle.astro";
   copiedLabel="Copié"
   failedLabel="Échec de la copie"
   steps={[
-    { title: "Lancez une commande", body: "Exécutez ceci dans Terminal et laissez la fenêtre ouverte. La commande installe ou met à jour droidpier dans ~/.local/bin, puis le démarre. Appuyez sur Ctrl+C pour l’arrêter.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Guide d’installation", href: "/fr/docs/getting-started/install/" } },
+    { title: "Lancez une commande", body: "Exécutez ceci dans Terminal. La commande installe ou met à jour droidpier dans ~/.local/bin, puis le démarre en arrière-plan. Vous pouvez ensuite fermer la fenêtre. Lancez droidpier stop pour l’arrêter.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Guide d’installation", href: "/fr/docs/getting-started/install/" } },
     { title: "Ouvrez la page", body: "Ouvrez https://droid.devpier.dev/app/ dans Chrome. La page se connecte d’elle-même. La première fois, quand Chrome demande si la page peut accéder à votre réseau local, cliquez sur Autoriser.", link: { text: "Accès au réseau local", href: "/fr/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

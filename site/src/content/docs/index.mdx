@@ -25,7 +25,7 @@ markdownSummary: |
 
   Get started in two steps:
 
-  1. Run this in Terminal and keep the window open: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. It installs droidpier, or updates it, and starts it. Press Ctrl+C to stop it.
+  1. Run this in Terminal: `curl -fsSL https://droid.devpier.dev/install.sh | sh`. It installs droidpier, or updates it, and starts it in the background. You can close the window. Run `droidpier stop` to stop it.
   2. Open https://droid.devpier.dev/app/. The page connects by itself. The first time, when Chrome asks whether the page may access your local network, click Allow.
 
   Full steps: [Install](/docs/getting-started/install/).
@@ -133,7 +133,7 @@ import MotionToggle from "../../components/home/MotionToggle.astro";
   copiedLabel="Copied"
   failedLabel="Copy failed"
   steps={[
-    { title: "Run one command", body: "Run this in Terminal and keep the window open. It installs droidpier to ~/.local/bin, or updates it, and starts it. Press Ctrl+C to stop it.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Install guide", href: "/docs/getting-started/install/" } },
+    { title: "Run one command", body: "Run this in Terminal. It installs droidpier to ~/.local/bin, or updates it, and starts it in the background. You can close the window afterwards. Run droidpier stop to stop it.", command: "curl -fsSL https://droid.devpier.dev/install.sh | sh", link: { text: "Install guide", href: "/docs/getting-started/install/" } },
     { title: "Open the page", body: "Open https://droid.devpier.dev/app/ in Chrome. The page connects by itself. The first time, when Chrome asks whether the page may access your local network, click Allow.", link: { text: "Local network access", href: "/docs/getting-started/first-run/#4-allow-local-network-access" } },
   ]}
   actions={[

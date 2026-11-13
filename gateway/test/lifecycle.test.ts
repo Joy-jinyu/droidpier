@@ -141,7 +141,7 @@ test("getprop 返回 1 后 progress 变为 ready，done resolve 的 grpcPort 等
   assert.equal(r.grpcPort, job.grpcPort);
   assert.equal(job.serial, 5556);
   const s = f.spawned[0];
-  assert.deepEqual(s.args, ["-avd", "A", "-no-window", "-grpc", "8554", "-no-boot-anim", "-gpu", "host"]);
+  assert.deepEqual(s.args, ["-avd", "A", "-qt-hide-window", "-grpc", "8554", "-no-boot-anim"]);
   assert.equal(s.unref, true);
   assert.ok(f.execs.includes("-s emulator-5556 shell getprop sys.boot_completed"));
 });

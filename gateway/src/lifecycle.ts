@@ -185,7 +185,11 @@ export function startAvd(name: string, deps?: Partial<LifecycleDeps>): StartJob 
       myPort = 0;
     }
     job.grpcPort = port;
-    child = d.spawn(emulatorBin(), ["-avd", name, "-no-window", "-grpc", String(port), "-no-boot-anim", "-gpu", "host"], logPath);
+    // 和 Android Studio 一样用 -qt-hide-window、不传 -gpu（见它的 EmulatorCommandBuilder.kt），渲染器才和它存的快照一致；
+    // 不一致时模拟器丢掉快照冷启动（日志 different renderer configured）。2026-11-13 实测 emulator 36.4.10：
+    // 这样启动时 AVD 默认的 auto 选 Vulkan lavapipe + GLES host；-gpu host 选 host + host；-no-window 下 auto 的 GLES 走 CPU（swangle）。
+    // 窗口只是隐藏，不出现在程序坞
+    child = d.spawn(emulatorBin(), ["-avd", name, "-qt-hide-window", "-grpc", String(port), "-no-boot-anim"], logPath);
     child.unref();
     // 实测 macOS 上 emulator 直接 exec 成 qemu，所以开机中它退出（含 emu kill 的 code 0、被信号杀的 null）就是失败
     child.onExit((code) => (exited = { code }));

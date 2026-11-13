@@ -274,7 +274,15 @@ async function runningAvds(dir: string, alive: (pid: number) => boolean): Promis
   return out;
 }
 
-const iniValue = (ini: string, key: string) => new RegExp(`^${key.replace(".", "\\.")}=(.*)$`, "m").exec(ini)?.[1]?.trim() || undefined;
+/** .ini 里 key 的值，和 sdklib 解析 .ini 一样：= 两边可以有空格，重复的 key 取最后一行。没有或为空时返回 undefined。 */
+function iniValue(ini: string, key: string): string | undefined {
+  let value: string | undefined;
+  for (const line of ini.split("\n")) {
+    const i = line.indexOf("=");
+    if (i > 0 && line.slice(0, i).trim() === key) value = line.slice(i + 1).trim() || undefined;
+  }
+  return value;
+}
 const real = (p: string) => realpath(p).catch(() => null);
 const isDir = (p: string) => stat(p).then((s) => s.isDirectory(), () => false);
 
@@ -285,7 +293,7 @@ const isDir = (p: string) => stat(p).then((s) => s.isDirectory(), () => false);
  */
 export async function avdDataDir(ini: string, userHome: string, dirExists = isDir): Promise<string | null> {
   const path = iniValue(ini, "path");
-  if (path !== undefined && !isAbsolute(path)) throw new Error(`数据目录 ${path} 不是绝对路径`);
+  if (path !== undefined && !isAbsolute(path)) throw new Error(`${path} 不是绝对路径`);
   if (path !== undefined && (await dirExists(path))) return path;
   const rel = iniValue(ini, "path.rel");
   if (rel !== undefined && (await dirExists(join(userHome, rel)))) return join(userHome, rel);
@@ -312,6 +320,13 @@ async function lockedByLiveProcess(dir: string, alive: (pid: number) => boolean)
   return null;
 }
 
+/** 删除被拒绝：message 给页面看，不带本机路径；带路径的细节放在 cause 里，只写进网关日志。 */
+class DeleteRefused extends Error {
+  constructor(message: string, detail?: string) {
+    super(message, detail === undefined ? undefined : { cause: new Error(detail) });
+  }
+}
+
 /**
  * 删一台 AVD：它的 <avdHome>/<name>.ini 和数据目录（已装的 App、文件、快照），系统镜像不动。
  * 自己删、不交给 avdmanager：avdmanager 在 path= 不是目录时会按 path.rel 去删，而且失败也返回 0，绕过这里的核对。
@@ -319,23 +334,33 @@ async function lockedByLiveProcess(dir: string, alive: (pid: number) => boolean)
  * 运行中的拒绝：发现文件按名字和 avd.dir 对一遍，再看目录里的锁文件。先删目录再删 .ini：删到一半失败时设备还在列表里，可以再删一次。
  */
 export async function deleteAvd(name: string, deps?: Partial<DeleteDeps>): Promise<void> {
+  try {
+    await deleteAvdFiles(name, deps ?? {});
+  } catch (e) {
+    if (e instanceof DeleteRefused) throw e;
+    // 文件系统的报错带着本机路径，页面上只说去看日志
+    throw new Error(`删除 ${name} 失败，详情见网关日志`, { cause: e });
+  }
+}
+
+async function deleteAvdFiles(name: string, deps: Partial<DeleteDeps>): Promise<void> {
   const nameError = avdNameError(name, []);
-  if (nameError) throw new Error(nameError);
+  if (nameError) throw new DeleteRefused(nameError);
   const home = deps?.avdHome ?? defaultAvdHome();
   const userHome = deps?.userHome ?? androidUserHome();
   const alive = deps?.alive ?? pidAlive;
-  if (!(await avdIds(deps?.exec ?? realExec)).includes(name)) throw new Error(`没有这个设备：${name}`);
+  if (!(await avdIds(deps?.exec ?? realExec)).includes(name)) throw new DeleteRefused(`没有这个设备：${name}`);
   const iniFile = join(home, `${name}.ini`);
   const ini = await readFile(iniFile, "utf8").catch(() => null);
-  if (ini === null) throw new Error(`找不到 ${iniFile}`);
-  const refuse = (dir: string, why: string) => new Error(`${name} 的数据目录 ${dir} ${why}；请在 Android Studio 里删除它`);
-  const dir = await avdDataDir(ini, userHome).catch((e: Error) => { throw new Error(`${name} 的${e.message}；请在 Android Studio 里删除它`); });
+  if (ini === null) throw new DeleteRefused(`找不到 ${name} 的 .ini 文件`, `找不到 ${iniFile}`);
+  const refuse = (dir: string, why: string) => new DeleteRefused(`${name} 的数据目录${why}；请在 Android Studio 里删除它`, `${name} 的数据目录 ${dir}`);
+  const dir = await avdDataDir(ini, userHome).catch((e: Error) => { throw new DeleteRefused(`${name} 的数据目录不是绝对路径；请在 Android Studio 里删除它`, e.message); });
 
   const realDir = dir === null ? null : await real(dir);
   if (dir !== null) {
     if (realDir === null) throw refuse(dir, "读不到");
     const realHome = (await real(home)) ?? home;
-    if (dirname(realDir) !== realHome || !realDir.endsWith(".avd")) throw refuse(dir, `不是 ${home} 里的 .avd 目录`);
+    if (dirname(realDir) !== realHome || !realDir.endsWith(".avd")) throw refuse(dir, "不是 AVD 目录里的 .avd 目录");
     for (const other of await readdir(home).catch(() => [] as string[])) {
       if (!other.endsWith(".ini") || other === `${name}.ini`) continue;
       const otherName = other.slice(0, -4);
@@ -349,9 +374,9 @@ export async function deleteAvd(name: string, deps?: Partial<DeleteDeps>): Promi
   }
 
   for (const r of await runningAvds(deps?.discoveryDir ?? defaultDiscoveryDir(), alive)) {
-    if (r.name === name || (realDir !== null && r.dir !== undefined && (await real(r.dir)) === realDir)) throw new Error(STOP_FIRST);
+    if (r.name === name || (realDir !== null && r.dir !== undefined && (await real(r.dir)) === realDir)) throw new DeleteRefused(STOP_FIRST);
   }
-  if (realDir !== null && (await lockedByLiveProcess(realDir, alive))) throw new Error(STOP_FIRST);
+  if (realDir !== null && (await lockedByLiveProcess(realDir, alive))) throw new DeleteRefused(STOP_FIRST);
 
   if (dir !== null && realDir !== null) {
     // dir 是符号链接时先删它指向的（已核对过）目录，再删链接

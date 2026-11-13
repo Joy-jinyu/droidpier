@@ -355,7 +355,7 @@ test("deleteAvd 数据目录里的 .lock 记着活着的进程时当作运行中
 test("deleteAvd .ini 的 path= 指到 avdHome 外面时拒绝，什么都不删", async (t) => {
   const { home, outside, deps } = await twoAvds(t);
   await writeFile(join(home, "A.ini"), `path=${outside}\n`);
-  await assert.rejects(deleteAvd("A", deps), /不是 .* 里的 \.avd 目录/);
+  await assert.rejects(deleteAvd("A", deps), /不是 AVD 目录里的 \.avd 目录/);
   assert.equal(await exists(join(outside, "keep.txt")), true);
   assert.equal(await exists(join(home, "A.ini")), true);
 });
@@ -384,4 +384,48 @@ test("deleteAvd 不认识的 id、不合规的名字都拒绝", async (t) => {
   await assert.rejects(deleteAvd("C", deps), /没有这个设备/);
   await assert.rejects(deleteAvd("../A", deps));
   assert.equal(await exists(join(home, "A.ini")), true);
+});
+
+test("deleteAvd 认得 .ini 里 = 两边带空格的 path（和 Android 的解析一样）", async (t) => {
+  const { home, deps } = await twoAvds(t);
+  await writeFile(join(home, "A.ini"), `path = ${join(home, "A.avd")}\n`);
+  await deleteAvd("A", deps);
+  assert.equal(await exists(join(home, "A.avd")), false);
+  assert.equal(await exists(join(home, "A.ini")), false);
+});
+
+test("deleteAvd 别的 AVD 的 .ini 写成 path = <这台的目录>（带空格）时也算重叠，什么都不删", async (t) => {
+  const { home, deps } = await twoAvds(t);
+  await writeFile(join(home, "B.ini"), `path = ${join(home, "A.avd")}\n`);
+  await assert.rejects(deleteAvd("A", deps), /和 B 的数据目录重叠/);
+  assert.equal(await exists(join(home, "A.avd", "config.ini")), true);
+  assert.equal(await exists(join(home, "A.ini")), true);
+});
+
+test("deleteAvd 拒绝时的原因不带本机路径，路径放在 cause 里给日志用", async (t) => {
+  const { home, outside, deps } = await twoAvds(t);
+  const cases: Array<[string, RegExp]> = [
+    [`path=${outside}\n`, /^A 的数据目录不是 AVD 目录里的 \.avd 目录；/],
+    [`path=${join(home, "B.avd")}\n`, /^A 的数据目录和 B 的数据目录重叠；/],
+    ["path=A.avd\n", /^A 的数据目录不是绝对路径；/],
+  ];
+  for (const [ini, want] of cases) {
+    await writeFile(join(home, "A.ini"), ini);
+    const e: Error = await deleteAvd("A", deps).then(() => assert.fail("应当拒绝"), (e) => e);
+    assert.match(e.message, want);
+    assert.equal(e.message.includes(home) || e.message.includes(outside) || e.message.includes(tmpdir()), false, e.message);
+    assert.ok(e.cause instanceof Error && e.cause.message.includes(ini.slice(5).trim()), ini);
+  }
+  await rm(join(home, "A.ini"));
+  const e: Error = await deleteAvd("A", deps).then(() => assert.fail("应当拒绝"), (e) => e);
+  assert.equal(e.message, "找不到 A 的 .ini 文件");
+  assert.ok(e.cause instanceof Error && e.cause.message.includes(join(home, "A.ini")));
+});
+
+test("deleteAvd 删文件时出错：页面只看到“详情见网关日志”，带路径的原文在 cause 里", { skip: process.getuid?.() === 0 }, async (t) => {
+  const { home, deps } = await twoAvds(t);
+  await chmod(home, 0o500);
+  const e: Error = await deleteAvd("A", deps).then(() => assert.fail("应当失败"), (e) => e).finally(() => chmod(home, 0o700));
+  assert.equal(e.message, "删除 A 失败，详情见网关日志");
+  assert.ok(e.cause instanceof Error && e.cause.message.includes(home), String(e.cause));
 });

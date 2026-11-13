@@ -66,6 +66,14 @@ test("parseClientMsg start / use 缺 name 或 name 不是字符串返回 null", 
   assert.equal(parseClientMsg('{"t":"use","name":1}'), null);
 });
 
+test("parseClientMsg start / use 的 name 不合 AVD 名规则时返回 null", () => {
+  for (const name of ["", "../A", "-list-avds", "a b", "A/B"]) {
+    assert.equal(parseClientMsg(JSON.stringify({ t: "start", name })), null, name);
+    assert.equal(parseClientMsg(JSON.stringify({ t: "use", name })), null, name);
+  }
+  assert.deepEqual(parseClientMsg('{"t":"start","name":"Pixel_5_API_34.x-1"}'), { t: "start", name: "Pixel_5_API_34.x-1" });
+});
+
 test("parseClientMsg 解析 rotate", () => {
   assert.deepEqual(parseClientMsg('{"t":"rotate"}'), { t: "rotate" });
 });

@@ -128,3 +128,8 @@ test("hello 带上 token；token 不是字符串时整条不合法", () => {
 test("parseClientMsg 认识 reboot", () => {
   assert.deepEqual(parseClientMsg(JSON.stringify({ t: "reboot" })), { t: "reboot" });
 });
+
+test("parseClientMsg 解析 renameAvd，字段不对时返回 null", () => {
+  assert.deepEqual(parseClientMsg('{"t":"renameAvd","rid":3,"name":"A","displayName":"测试机","extra":1}'), { t: "renameAvd", rid: 3, name: "A", displayName: "测试机" });
+  assert.equal(parseClientMsg('{"t":"renameAvd","rid":3,"name":"A"}'), null);
+});

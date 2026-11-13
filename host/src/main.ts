@@ -585,6 +585,15 @@ export async function createHost(player: Player) {
         return conn.request({ t: "navigate", ...needPage(name, args), address: args.address })
           .then(({ ok, href, title, bridge, error, code }) => ({ ok, href, title, bridge, error, adbStuck: code === "adb-unresponsive" }));
       }
+      // 失败不抛，页面就地显示原因；旧网关不认这条消息，等满超时后同样走这里
+      if (name === "emu.renameAvd") {
+        const displayName = (args as { displayName?: unknown } | undefined)?.displayName;
+        if (typeof displayName !== "string") throw new Error("emu.renameAvd 需要 displayName");
+        return conn.request({ t: "renameAvd", name: needName(name, args), displayName }).then(
+          (r) => ({ ok: r.ok, error: r.error }),
+          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? `${e.message}，可能需要更新 droidpier` : e.message }),
+        );
+      }
       if (name === "emu.status") {
         return {
           state, serial, upgrade, rev, rotation, ...stats, avds, boots: [...boots.values()].map((b) => b.last),

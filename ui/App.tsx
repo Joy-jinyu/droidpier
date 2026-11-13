@@ -3,7 +3,7 @@ import { Dialog, Input, Radio, RadioGroup, Select, Tooltip } from "nsh/base";
 import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
-import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, ramMbFor } from "../shared/avd-spec";
+import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, displayNameError, ramMbFor } from "../shared/avd-spec";
 import { ADB_UNRESPONSIVE, NEEDS_JAVA, type Rotation } from "../shared/protocol";
 import { deviceFrame } from "../shared/screen";
 import { h5PollMs } from "./h5-poll";
@@ -14,7 +14,7 @@ type State =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
   | "gateway-outdated" | "page-outdated"
   | "unsupported-browser" | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway";
-type Avd = { name: string; width?: number; height?: number; apiLevel?: number; running: "no" | "grpc" | "no-grpc"; serial?: number };
+type Avd = { name: string; displayName?: string; width?: number; height?: number; apiLevel?: number; running: "no" | "grpc" | "no-grpc"; serial?: number };
 type Boot = { name: string; progress: string; error?: string; seconds: number };
 /** sticky：不自动消失，文字可选中复制，带关闭按钮。 */
 type Notice = { text: string; error?: boolean; sticky?: boolean };
@@ -150,6 +150,8 @@ const URL_CHARS = 28;
 const pageKey = (p: Page) => `${p.socket}/${p.id}`;
 const call = <T,>(name: string, args: object) => host.call(name, args) as Promise<unknown> as Promise<T>;
 
+/** 设备在页面上叫什么：有显示名用显示名，没有用 id。 */
+const avdLabel = (a: Avd) => a.displayName ?? a.name;
 const isBooting = (b: Boot | undefined) => !!b && (b.progress === "spawning" || b.progress === "booting");
 
 /** 文字按钮：默认是次要按钮；primary 是一屏一个的主操作（紫），danger 是破坏性操作。 */
@@ -333,6 +335,7 @@ const ICON_PATHS = {
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
   install: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
+  pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
 };
 type IconName = keyof typeof ICON_PATHS;
 const iconSrc = (name: IconName) =>
@@ -811,7 +814,10 @@ function App() {
   host.on("emu.avds", (p: { list: Avd[] }) => avds.set(p.list));
   host.on("emu.boot", (b: Boot) => {
     boots.set({ ...boots(), [b.name]: b });
-    if (b.progress === "failed") showNotice({ text: `${b.name} 启动失败${b.error ? `：${b.error}` : ""}`, error: true, sticky: true });
+    if (b.progress === "failed") {
+      const a = (avds() ?? []).find((x) => x.name === b.name);
+      showNotice({ text: `${a ? avdLabel(a) : b.name} 启动失败${b.error ? `：${b.error}` : ""}`, error: true, sticky: true });
+    }
   });
   host.on("emu.notice", (n: Notice) => showNotice(n));
   // 自动写电脑剪贴板失败时带内容来，等用户点一下再写；之后有新内容写成功时带 null 来，收起
@@ -904,6 +910,35 @@ function App() {
     confirm.set({ kind: "install", ids: ids.filter((id) => missing.includes(id)) });
   };
 
+  // 重命名对话框：改的是显示名，id 不变
+  const renameTarget = signal<Avd | null>(null);
+  const renameDraft = signal("");
+  const renameError = signal<string | null>(null);
+  const renaming = signal(false);
+  const openRename = (a: Avd) => {
+    renameDraft.set(avdLabel(a));
+    renameError.set(null);
+    renameTarget.set(a);
+  };
+  const saveRename = () => {
+    const a = renameTarget();
+    if (!a || renaming()) return;
+    const error = displayNameError(renameDraft());
+    if (error) return renameError.set(error);
+    if (renameDraft().trim() === avdLabel(a)) return renameTarget.set(null);
+    renaming.set(true);
+    // 回来时对话框可能已经关了或换成了别的设备：只把结果给发出请求的那一个
+    const still = () => renameTarget()?.name === a.name;
+    (host.call("emu.renameAvd", { name: a.name, displayName: renameDraft() }) as Promise<{ ok: boolean; error?: string }>).then(
+      (r) => {
+        if (!still()) return;
+        if (r.ok) renameTarget.set(null);
+        else renameError.set(`没有改成：${r.error ?? "未知原因"}`);
+      },
+      (e: Error) => { if (still()) renameError.set(`没有改成：${e.message}`); },
+    ).finally(() => renaming.set(false));
+  };
+
   const DeviceRow = (props: { avd: () => Avd }) => {
     const a = props.avd;
     const boot = () => boots()[a().name];
@@ -926,7 +961,8 @@ function App() {
       <View style={{ gap: 6, padding: 12, borderRadius: 12, backgroundColor: current() ? C.panel : "transparent", borderWidth: 1, borderColor: current() ? C.lineStrong : C.line }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: a().running === "no" ? "#52525b" : statusColor() }} />
-          <Text style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: current() ? "600" : "500", numberOfLines: 1 }}>{a().name}</Text>
+          <Text style={{ flex: 1, color: C.text, fontSize: 13, lineHeight: 18, fontWeight: current() ? "600" : "500" }}>{avdLabel(a())}</Text>
+          <IconBtn icon="pencil" label={`重命名 ${avdLabel(a())}`} onPress={() => openRename(a())} />
         </View>
         <Text style={{ color: C.muted, fontSize: 12, fontFamily: "monospace" }}>{spec()}</Text>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
@@ -965,7 +1001,7 @@ function App() {
       <View style={{ flex: 1, minWidth: 0, marginVertical: 8, marginRight: 8, borderRadius: 12, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.surface, overflow: "hidden" }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, paddingVertical: 12, paddingHorizontal: 20, borderBottomWidth: 1, borderColor: C.lineSoft }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12, minWidth: 0, flexShrink: 1 }}>
-            <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "600", numberOfLines: 1 }}>{currentAvd()?.name ?? "没有连接设备"}</Text>
+            <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "600", numberOfLines: 1 }}>{currentAvd() ? avdLabel(currentAvd()!) : "没有连接设备"}</Text>
             <If when={h5Open() && foregroundPkg(pages() ?? [])}>
               {(pkg) => <Text style={{ flexShrink: 1, color: C.muted, fontSize: 12, fontFamily: "monospace", numberOfLines: 1 }}>{pkg()}</Text>}
             </If>
@@ -1003,7 +1039,7 @@ function App() {
                       borderColor: drag().blocked ? C.danger : C.accent, backgroundColor: "rgba(9,9,11,0.82)",
                     }}>
                       <Text style={{ color: drag().blocked ? C.danger : C.text, fontSize: 15, fontWeight: "600", textAlign: "center" }}>
-                        {drag().blocked ? `不能安装：${drag().blocked}` : `松开以安装到 ${currentAvd()?.name ?? "这台设备"}`}
+                        {drag().blocked ? `不能安装：${drag().blocked}` : `松开以安装到 ${currentAvd() ? avdLabel(currentAvd()!) : "这台设备"}`}
                       </Text>
                       <If when={!drag().blocked}>
                         <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18, textAlign: "center" }}>APK 会直接安装，其他文件放进 下载 文件夹</Text>
@@ -1216,6 +1252,26 @@ function App() {
             <Btn label="同意" disabled={answered() === license()?.id} onPress={() => answer("emu.acceptLicenses")} />
           </View>
         </View>
+      </Dialog>
+      <Dialog open={renameTarget() !== null} animation="fade" onOpenChange={({ open }) => { if (!open) renameTarget.set(null); }}
+        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        <If when={renameTarget()}>
+          {(a) => (
+            <View role="group" accessibilityLabel="重命名设备" style={{ gap: 10 }}>
+              <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>重命名设备</Text>
+              <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>{`只改显示的名字，Android Studio 里也会看到；设备 id ${a().name} 不变。`}</Text>
+              <Input value={renameDraft()} onChange={({ value }) => { renameDraft.set(value); renameError.set(null); }} onSubmit={saveRename}
+                autoFocus accessibilityLabel="设备名称" autoCorrect={false}
+                style={{ height: 36, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: renameError() ? C.danger : C.line, backgroundColor: C.bg, color: C.text, fontSize: 13 }} />
+              <If when={renameError()}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 12, lineHeight: 18 }}>{e()}</Text>}</If>
+              <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
+                <Btn label="取消" onPress={() => renameTarget.set(null)} />
+                <Btn label={renaming() ? "保存中…" : "保存"} kind="primary" disabled={renaming()} onPress={saveRename} />
+              </View>
+            </View>
+          )}
+        </If>
       </Dialog>
       <Dialog open={rebootAsk()} animation="fade" onOpenChange={({ open }) => { if (!open) rebootAsk.set(false); }}
         backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}

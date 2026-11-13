@@ -79,6 +79,8 @@ export type AvdOps = {
   stop(serial: number): Promise<void>;
   /** 切到这台运行中的 AVD，没在运行（或没开 gRPC）返回 null。 */
   use(name: string): Promise<EmulatorSession | null>;
+  /** 改显示名（name 是 id）；名字不合规、没有这台 AVD、写不了文件时抛错，错误信息给用户看。 */
+  rename(name: string, displayName: string): Promise<void>;
 };
 
 /** 环境检查和安装，由 main.ts 接到 setup.ts / installer.ts。只有收到页面的 install 才安装。 */
@@ -878,6 +880,18 @@ export async function startServer(opts: {
         case "webviews":
           void webviews(m.rid);
           break;
+        case "renameAvd": {
+          if (!opts.avd) {
+            send(ws, { t: "renameAvd", rid: m.rid, ok: false, error: "网关没有管理设备" });
+            break;
+          }
+          const avd = opts.avd;
+          const done = await avd.rename(m.name, m.displayName).then(() => null, (e: Error) => e.message);
+          send(ws, { t: "renameAvd", rid: m.rid, ok: done === null, ...(done === null ? {} : { error: done }) });
+          // 别的页面也要看到新名字
+          if (done === null) avd.list().then((list) => broadcast({ t: "avds", list }), (e: Error) => log(`改名后读取 AVD 列表失败：${e.message}`));
+          break;
+        }
         case "inspect":
           void inspect(m.rid, m.socket, m.id);
           break;

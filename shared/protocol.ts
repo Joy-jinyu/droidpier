@@ -78,7 +78,10 @@ export function decodeFrameHeader(buf: ArrayBuffer | Uint8Array): FrameHeader {
 
 /** 一台 AVD 及其运行状态。running：no 未运行，grpc 运行中可接管，no-grpc 运行中但没开 gRPC。 */
 export type AvdInfo = {
+  /** AVD id：emulator -list-avds 列出的名字。 */
   name: string;
+  /** 显示名（config.ini 的 avd.ini.displayname），没设时没有这一项。 */
+  displayName?: string;
   width?: number;
   height?: number;
   ramMb?: number;
@@ -213,10 +216,12 @@ export type ClientMsg =
   /** 页面转到后台：停推画面，直到 resume。 */
   | { t: "pause" }
   | { t: "resume" }
-  /** 下面三条带请求编号 rid，回复原样带回。 */
+  /** 下面几条带请求编号 rid，回复原样带回。 */
   | { t: "webviews"; rid: number }
   | { t: "inspect"; rid: number; socket: string; id: string }
   | { t: "navigate"; rid: number; socket: string; id: string; address: string }
+  /** 改 AVD 的显示名（name 是 id）；回复同 rid 的 renameAvd，成功后网关给所有页面发新的 avds。 */
+  | { t: "renameAvd"; rid: number; name: string; displayName: string }
   /** 用户在页面确认框里确认过才发；ids 是要装的缺失项。 */
   | { t: "install"; ids: EnvItemId[] }
   /** 要创建设备对话框的目录。 */
@@ -262,6 +267,7 @@ export type ServerMsg =
   | { t: "inspect"; rid: number; hint: string }
   | { t: "inspect"; rid: number; error: string; code?: AdbErrorCode }
   | { t: "navigate"; rid: number; ok: boolean; href?: string; title?: string; bridge?: boolean; error?: string; code?: AdbErrorCode }
+  | { t: "renameAvd"; rid: number; ok: boolean; error?: string }
   /** hello 通过后（ready 之前）发一次，每次安装结束后再广播。 */
   | ({ t: "env" } & EnvReport)
   /** 每次安装进度更新都广播。 */
@@ -348,6 +354,9 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     case "navigate":
       if (!isNum(o.rid) || !isStr(o.socket) || !isStr(o.id) || !isStr(o.address)) return null;
       return o as ClientMsg;
+    case "renameAvd":
+      if (!isNum(o.rid) || !isStr(o.name) || !isStr(o.displayName)) return null;
+      return { t: "renameAvd", rid: o.rid, name: o.name, displayName: o.displayName };
     default:
       return null;
   }

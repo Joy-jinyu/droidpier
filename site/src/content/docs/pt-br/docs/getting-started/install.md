@@ -1,12 +1,12 @@
 ---
 title: Instalação
 description: Instale e inicie o gateway do Droidpier em um Mac com Apple Silicon com um único comando.
-sourceHash: 9e0b6fc5fcb6
+sourceHash: 721a09a23a56
 ---
 
 Começar leva dois passos:
 
-1. Execute o comando abaixo no Terminal e deixe a janela aberta. Ele instala o Droidpier e o inicia.
+1. Execute o comando abaixo no Terminal. Ele instala o Droidpier e o inicia em segundo plano.
 2. Abra `https://droid.devpier.dev/app/`. A página se conecta sozinha. Na primeira vez, quando o Chrome perguntar se a página pode acessar sua rede local, clique em **Permitir**.
 
 O passo 2 está descrito em [Primeira execução](/pt-br/docs/getting-started/first-run/).
@@ -30,16 +30,16 @@ Na primeira vez, o script:
 1. Baixa o gateway para macOS em Apple Silicon, `droidpier-darwin-arm64.tar.xz`, de `https://droid.devpier.dev/download/`. O checksum fica ao lado dele, em `droidpier-darwin-arm64.tar.xz.sha256`.
 2. Confere o download com o checksum. Se não baterem, ele para e não instala nada.
 3. Salva o gateway como `~/.local/bin/droidpier` e o torna executável.
-4. Inicia o gateway.
+4. Inicia o gateway em segundo plano com `droidpier start`.
 
-O gateway continua rodando nessa janela do Terminal. Deixe a janela aberta enquanto usa a página. Pressione `Ctrl+C` para pará-lo.
+O gateway roda em segundo plano. Você pode fechar a janela do Terminal: o gateway continua rodando e inicia de novo quando você faz login. Execute `droidpier stop` para pará-lo e `droidpier status` para verificá-lo.
 
 Quando você executa o mesmo comando de novo:
 
-- Se a sua cópia está atualizada, ele pula o download e inicia o gateway.
-- Se existe uma versão mais nova, ele atualiza a sua cópia e depois a inicia.
+- Se a sua cópia está atualizada, ele pula o download e reinicia o gateway.
+- Se existe uma versão mais nova, ele atualiza a sua cópia e reinicia o gateway, para que a nova versão rode.
 - Se não consegue acessar o site de download, ele avisa e inicia a cópia que você já tem.
-- Se o gateway já está rodando, ele avisa e abre a página. Ele não inicia um segundo gateway.
+- Se já há um gateway rodando em uma janela do Terminal, ele avisa e não inicia nada. Pare esse primeiro com `Ctrl+C`.
 
 Para passar opções ao gateway, ou para instalar sem iniciá-lo, veja [Linha de comando](/pt-br/docs/reference/cli/#start-with-the-install-command).
 
@@ -47,10 +47,10 @@ Para passar opções ao gateway, ou para instalar sem iniciá-lo, veja [Linha de
 
 <!-- verify: phase 3 -->
 
-Depois da instalação, você também pode iniciar o gateway com o comando `droidpier`:
+Depois da instalação, você também pode usar o comando `droidpier`. `droidpier start` inicia o gateway em segundo plano, como o comando de instalação. `droidpier` sozinho o roda na janela do Terminal até você pressionar `Ctrl+C`:
 
 ```sh
-droidpier
+droidpier start
 ```
 
 Se o seu shell informar `command not found`, `~/.local/bin` não está no seu `PATH`. Nesse caso, o script de instalação mostra uma dica. Adicione-o, por exemplo em `~/.zshrc`:
@@ -65,7 +65,7 @@ Depois abra uma nova janela do Terminal e tente novamente.
 
 <!-- verify: phase 3 -->
 
-Execute o mesmo comando novamente. Se existe uma versão mais nova, ele substitui o arquivo em `~/.local/bin`. Se o gateway ainda está rodando, pare-o primeiro com `Ctrl+C`, para que o comando inicie a nova versão.
+Execute o mesmo comando de novo. Ele substitui o arquivo em `~/.local/bin` quando existe uma versão mais nova e reinicia o gateway para que a nova versão rode.
 
 <!-- verify: phase 3 -->
 Quando a página é mais nova que o seu gateway, a página avisa que o gateway está desatualizado e mostra o comando para atualizá-lo.

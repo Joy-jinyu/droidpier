@@ -1,12 +1,12 @@
 ---
 title: 설치
 description: 명령어 하나로 Apple Silicon Mac에 Droidpier 게이트웨이를 설치하고 시작합니다.
-sourceHash: 9e0b6fc5fcb6
+sourceHash: 721a09a23a56
 ---
 
 두 단계로 시작할 수 있습니다:
 
-1. 터미널에서 아래 명령을 실행하고 그 창을 열어 둡니다. Droidpier를 설치하고 시작합니다.
+1. 터미널에서 아래 명령을 실행하세요. Droidpier 를 설치하고 백그라운드에서 시작합니다.
 2. `https://droid.devpier.dev/app/`을 엽니다. 페이지가 알아서 연결됩니다. 처음에는 페이지가 로컬 네트워크에 접근해도 되는지 Chrome이 물으면 **허용**을 클릭합니다.
 
 2단계는 [첫 실행](/ko/docs/getting-started/first-run/)에서 설명합니다.
@@ -30,16 +30,16 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 1. Apple Silicon용 macOS 게이트웨이 `droidpier-darwin-arm64.tar.xz`를 `https://droid.devpier.dev/download/`에서 다운로드합니다. 체크섬은 바로 옆의 `droidpier-darwin-arm64.tar.xz.sha256`에 있습니다.
 2. 다운로드한 파일을 체크섬과 대조합니다. 일치하지 않으면 중단하고 아무것도 설치하지 않습니다.
 3. 게이트웨이를 `~/.local/bin/droidpier`로 저장하고 실행 권한을 부여합니다.
-4. 게이트웨이를 시작합니다.
+4. `droidpier start`로 게이트웨이를 백그라운드에서 시작합니다.
 
-게이트웨이는 그 터미널 창에서 계속 실행됩니다. 페이지를 사용하는 동안 창을 열어 두세요. 중지하려면 `Ctrl+C`를 누르세요.
+게이트웨이는 백그라운드에서 실행됩니다. 터미널 창을 닫아도 계속 실행되고, 로그인할 때 다시 시작됩니다. 중지하려면 `droidpier stop`, 상태를 확인하려면 `droidpier status`를 실행하세요.
 
 같은 명령을 다시 실행하면:
 
-- 설치된 버전이 최신이면 다운로드를 건너뛰고 게이트웨이를 시작합니다.
-- 새 버전이 있으면 업데이트한 다음 시작합니다.
+- 가진 버전이 최신이면 다운로드를 건너뛰고 게이트웨이를 다시 시작합니다.
+- 새 버전이 있으면 업데이트한 뒤 게이트웨이를 다시 시작해 새 버전이 실행되게 합니다.
 - 다운로드 사이트에 연결할 수 없으면 경고를 표시하고 이미 설치된 버전을 시작합니다.
-- 게이트웨이가 이미 실행 중이면 그렇다고 알리고 페이지를 엽니다. 두 번째 게이트웨이는 시작하지 않습니다.
+- 다른 터미널 창에서 게이트웨이가 이미 실행 중이면 그렇다고 알리고 아무것도 시작하지 않습니다. 먼저 그 창에서 `Ctrl+C` 로 중지하세요.
 
 게이트웨이에 옵션을 전달하거나 시작하지 않고 설치만 하려면 [명령줄](/ko/docs/reference/cli/#start-with-the-install-command)을 참고하세요.
 
@@ -47,10 +47,10 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 
 <!-- verify: phase 3 -->
 
-설치한 뒤에는 `droidpier` 명령으로도 게이트웨이를 시작할 수 있습니다:
+설치한 뒤에는 `droidpier` 명령도 쓸 수 있습니다. `droidpier start`는 설치 명령처럼 게이트웨이를 백그라운드에서 시작합니다. `droidpier` 만 실행하면 `Ctrl+C` 를 누를 때까지 터미널 창에서 실행됩니다.
 
 ```sh
-droidpier
+droidpier start
 ```
 
 셸이 `command not found`를 출력하면 `~/.local/bin`이 `PATH`에 없는 것입니다. 이 경우 설치 스크립트가 안내를 출력합니다. 예를 들어 `~/.zshrc`에 추가하세요:
@@ -65,7 +65,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 <!-- verify: phase 3 -->
 
-같은 명령을 다시 실행하세요. 새 버전이 있으면 `~/.local/bin`의 파일이 교체됩니다. 게이트웨이가 아직 실행 중이면 먼저 `Ctrl+C`로 중지하세요. 그래야 명령이 새 버전을 시작합니다.
+같은 명령을 다시 실행하세요. 새 버전이 있으면 `~/.local/bin` 의 파일을 바꾸고 게이트웨이를 다시 시작해 새 버전이 실행되게 합니다.
 
 <!-- verify: phase 3 -->
 페이지가 게이트웨이보다 새 버전이면, 페이지가 게이트웨이가 오래되었다고 알려 주고 업그레이드 명령을 보여 줍니다.

@@ -61,6 +61,30 @@ export function keyToMsg(
 }
 
 /**
+ * 设备按键的快捷键，键位照 Android Studio 模拟器：模拟器 36.4.10 里的快捷键表写的是 Ctrl，在 Mac 上就是 Cmd。
+ * 只收页面上有对应按键的几个；向左旋转（Ctrl+Left）协议里没有，不收。键名前的 ⇧ 表示要同时按 Shift。
+ */
+const SHORTCUTS: Record<string, ClientMsg> = {
+  "s": { t: "screenshot" },
+  "p": { t: "key", key: "Power", eventType: "keypress" },
+  "⇧h": { t: "key", key: "GoHome", eventType: "keypress" },
+  "o": { t: "key", key: "AppSwitch", eventType: "keypress" },
+  "Backspace": { t: "key", key: "GoBack", eventType: "keypress" },
+  "=": { t: "key", key: "AudioVolumeUp", eventType: "keypress" },
+  "-": { t: "key", key: "AudioVolumeDown", eventType: "keypress" },
+  "ArrowRight": { t: "rotate" },
+};
+
+/** 设备有键盘焦点时按下的 Cmd 组合键 → 对应按键的消息；不是这几个快捷键就返回 null，交给浏览器。 */
+export function shortcutToMsg(
+  e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }
+): ClientMsg | null {
+  if (!e.metaKey || e.ctrlKey || e.altKey) return null;
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  return SHORTCUTS[(e.shiftKey ? "⇧" : "") + key] ?? null;
+}
+
+/**
  * 将文本转换为 ClientMsg 数组。
  * 纯 ASCII → 逐字符 keypress；含非 ASCII → 单条 text 消息。
  */

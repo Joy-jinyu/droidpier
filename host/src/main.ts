@@ -1,4 +1,4 @@
-import { inputToMsgs, keyToMsg, pasteToMsgs, textToMsgs, toDevice, wheelToSwipe } from "../../shared/input-map.ts";
+import { inputToMsgs, keyToMsg, pasteToMsgs, shortcutToMsg, textToMsgs, toDevice, wheelToSwipe } from "../../shared/input-map.ts";
 import { fitSize, frameLatencyMs } from "../../shared/screen.ts";
 import { createClipSync } from "./clip-sync.ts";
 import { createConnection, type BootMsg, type ConnState, type VersionErrorCode } from "./connection.ts";
@@ -387,6 +387,15 @@ export async function createHost(player: Player) {
   const onKey = (type: "keydown" | "keyup") => (e: KeyboardEvent) => {
     // 229：输入法正在处理这个键
     if (e.keyCode === 229) return;
+    if (type === "keydown") {
+      const s = shortcutToMsg(e);
+      if (s) {
+        // 按住不放会自动重复：电源会反复亮灭屏、截图会连拍，只认第一下；重复的也拦下，不让浏览器缩放、存网页
+        e.preventDefault();
+        if (!e.repeat) conn.send(s);
+        return;
+      }
+    }
     const m = keyToMsg(e, type);
     if (!m) return;
     e.preventDefault();

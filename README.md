@@ -25,7 +25,7 @@ Requirements: an Apple Silicon Mac, Chrome or Edge.
 curl -fsSL https://droid.devpier.dev/install.sh | sh
 ```
 
-The command installs the gateway the first time, updates it when there is a new version, and then starts it. Keep the terminal open. Afterwards you can also run `droidpier` directly.
+The command installs the gateway the first time, updates it when there is a new version, and then starts it in the background with `droidpier start`. You can close the terminal: the gateway keeps running and starts again when you log in. `droidpier stop` stops it, `droidpier status` shows whether it runs.
 
 Then open https://droid.devpier.dev/app/ (the gateway opens it for you). The first time, Chrome asks whether the site may access your local network: click **Allow**. An open page connects by itself as soon as the gateway is running.
 
@@ -48,9 +48,15 @@ Chrome / Edge                    your Mac
 ## Command line
 
 ```sh
-droidpier [--port <port>] [--local] [--no-open]
+droidpier start [--port <port>] [--local] [--no-open]   # run in the background (a per-user LaunchAgent)
+droidpier stop                                          # stop it; it no longer starts at login
+droidpier status                                        # running? pid, port, version, log file
+droidpier logs                                          # log file path and its last lines
+droidpier [--port <port>] [--local] [--no-open]         # run in this terminal until Ctrl+C
 droidpier --version | --help
 ```
+
+`droidpier start` writes `~/Library/LaunchAgents/dev.devpier.droidpier.plist` with the options you gave (a later `droidpier start` without options keeps them), starts the gateway, waits until it answers and opens the page once. launchd restarts the gateway if it crashes, not after `droidpier stop`. The log is `~/Library/Logs/Droidpier/droidpier.log`. If `ANDROID_HOME` or `ANDROID_AVD_HOME` is set when you run `droidpier start`, it is passed to the service, since launchd does not read your shell profile.
 
 | Option | Effect |
 | --- | --- |

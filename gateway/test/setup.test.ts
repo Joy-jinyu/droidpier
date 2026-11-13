@@ -121,6 +121,18 @@ test("缺的镜像不是 arm64-v8a（这台 Mac 跑不了）：不能自动装",
   assert.equal(r.missing[0].auto, false);
 });
 
+test("设备缺的镜像不能自动装：另外列出建设备，让用户换个系统版本建一台", async () => {
+  const r = await checkEnv(fakeFs({ ...TOOLS, ...image("34"), ...avd("X", "system-images/android-29/google_apis_playstore/x86_64/") }));
+  assert.deepEqual(r.missing.map((m) => [m.id, m.auto]), [["system-image", false], ["avd", true]]);
+  assert.equal(r.missing[1].detail, "还没有能启动的模拟器设备，可以用已装的 Android 14 建一台");
+});
+
+test("设备缺的正是默认镜像 android-34：大小按量过的 android-34 算", async () => {
+  const r = await checkEnv(fakeFs({ ...TOOLS, ...avd("P", "system-images/android-34/google_apis/arm64-v8a/") }));
+  assert.equal(r.missing[0].pkg, SYSTEM_IMAGE);
+  assert.deepEqual([r.missing[0].sizeMb, r.missing[0].diskMb], [1536, 3072]);
+});
+
 test("设备的 config.ini 读不到或没写镜像目录：当成没有设备", async () => {
   const r = await checkEnv(fakeFs({ ...TOOLS, ...image("34"), [`${AVD_HOME}/Broken.ini`]: "path=/nowhere/Broken.avd\n" }));
   assert.deepEqual(r.missing.map((m) => m.id), ["avd"]);

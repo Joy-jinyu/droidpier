@@ -103,30 +103,31 @@ export async function checkEnv(deps: EnvDeps): Promise<EnvReport> {
   const avds = await avdImages(deps);
   if (!avds.some((a) => a.ok)) {
     const broken = avds.filter((a) => !a.ok);
+    const installed = await scanInstalledImages(sdk, deps);
+    let autoImage = false;
     if (broken.length > 0) {
-      // 有设备，但镜像都不在了：说清楚哪台缺哪个，装第一台的
+      // 有设备，但都开不了机：说清楚哪台缺哪个，装第一台的
       const pkg = pkgOf(broken[0].sysdir);
-      const auto = !!pkg && pkg.endsWith(`;${IMAGE_ABI}`) && manifestUrlFor(pkg) !== null;
+      autoImage = !!pkg && pkg.endsWith(`;${IMAGE_ABI}`) && manifestUrlFor(pkg) !== null;
       missing.push({
-        id: "system-image", auto, ...(pkg ? { pkg } : {}), ...SIZE.otherImage,
+        id: "system-image", auto: autoImage, ...(pkg ? { pkg } : {}), ...(pkg === SYSTEM_IMAGE ? SIZE.defaultImage : SIZE.otherImage),
         detail: broken.map((a) => {
           const img = pkgOf(a.sysdir) ? androidVersion(apiOf(pkgOf(a.sysdir)!)) : a.sysdir;
           return a.abi === IMAGE_ABI ? `设备 ${a.label} 的系统镜像 ${img} 不在了` : `设备 ${a.label} 的系统镜像 ${img} 是 ${a.abi} 的，这台 Mac 跑不了`;
         }).join("；"),
       });
-    } else {
-      const installed = await scanInstalledImages(sdk, deps);
-      if (installed.length === 0) {
-        missing.push({
-          id: "system-image", auto: true, pkg: SYSTEM_IMAGE, ...SIZE.defaultImage,
-          detail: "没有系统镜像，会装 Android 14",
-        });
-      }
+    } else if (installed.length === 0) {
+      missing.push({
+        id: "system-image", auto: true, pkg: SYSTEM_IMAGE, ...SIZE.defaultImage,
+        detail: "没有系统镜像，会装 Android 14",
+      });
+    }
+    // 没有设备，或者设备缺的镜像装不了：建一台（建设备对话框里可以选别的系统版本）
+    if (broken.length === 0 || !autoImage) {
+      const what = broken.length ? "还没有能启动的模拟器设备" : "还没有模拟器设备";
       missing.push({
         id: "avd", auto: true, diskMb: AVD_DISK_MB,
-        detail: installed.length
-          ? `还没有模拟器设备，可以用已装的 ${androidVersion(installed[0].api)} 建一台`
-          : "还没有模拟器设备",
+        detail: installed.length ? `${what}，可以用已装的 ${androidVersion(installed[0].api)} 建一台` : what,
       });
     }
   }

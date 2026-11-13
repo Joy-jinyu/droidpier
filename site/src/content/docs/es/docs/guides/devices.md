@@ -1,7 +1,7 @@
 ---
 title: Dispositivos
 description: Lista tus dispositivos virtuales Android, inícialos y detenlos desde la página, y toma el control de un emulador que ya está en ejecución.
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 Aquí, un dispositivo es un Android Virtual Device (AVD) en tu Mac. La página muestra un dispositivo a la vez.
@@ -58,9 +58,9 @@ Detener el gateway no detiene los emuladores. Cuando vuelves a iniciar el gatewa
 <!-- verify: phase 3 -->
 Crea los dispositivos en la página. Usa el botón para un dispositivo nuevo, elige un modelo de dispositivo y una versión de Android, y ponle un nombre al dispositivo; la página sugiere uno. Antes de hacer nada, la página muestra el modelo, la versión de Android y la memoria que tendrá el dispositivo. Si la imagen del sistema de esa versión aún no está instalada, el gateway la descarga después de que confirmes y aceptes la licencia de Google.
 
-Crear un dispositivo requiere las herramientas de línea de comandos (`avdmanager`). Si faltan, el diálogo ofrece instalarlas primero. Consulta [Primera ejecución](/es/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+Crear un dispositivo no requiere Android Studio ni las herramientas de línea de comandos: el gateway escribe él mismo los archivos del dispositivo, en el formato que usa Android Studio. Consulta [Primera ejecución](/es/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-También puedes crear dispositivos con `avdmanager` o Android Studio; la lista los detecta.
+También puedes crear dispositivos en el Device Manager de Android Studio; la lista los detecta.
 
 ## Eliminar un dispositivo
 

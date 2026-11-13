@@ -1,7 +1,7 @@
 ---
 title: Fehlerbehebung
 description: Häufige Probleme beheben - Chrome hat den Zugriff auf das lokale Netzwerk blockiert, Port bereits belegt, kein Emulator gefunden, die Seite verbindet sich nicht, Versionskonflikt.
-sourceHash: b8a54e8a6f0d
+sourceHash: d8eaddc9fa12
 ---
 
 ## Chrome hat den Zugriff auf das lokale Netzwerk blockiert {#chrome-blocked-local-network-access}
@@ -53,20 +53,17 @@ Sie können auch ein Gerät aus der Liste in der Seite starten. Siehe [Geräte](
 Das Gateway läuft weiter, wenn kein Emulator gefunden wird, und gibt den Grund aus: im Terminal oder, wenn es im Hintergrund läuft, in seinem Log (`droidpier logs`).
 
 <!-- verify: phase 3 -->
-Wenn das Gateway meldet, dass das Android SDK, `emulator`, `platform-tools` oder das Systemabbild fehlt, folgen Sie der Lösung, die es ausgibt. Siehe [Erster Start](/de/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+Wenn das Gateway meldet, dass `emulator`, `platform-tools`, ein Systemabbild oder ein Gerät fehlt, schließen Sie die Einrichtung auf der Seite ab. Siehe [Erster Start](/de/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-## „sdkmanager“ fehlt
+## Das Systemabbild eines Geräts fehlt
 
 <!-- verify: phase 3 -->
-Ein von Android Studio installiertes SDK enthält möglicherweise kein `cmdline-tools`, das `sdkmanager` und `avdmanager` bereitstellt. Die Seite bietet an, es zu installieren: über die Installationsschaltfläche daneben in der Liste der fehlenden Elemente oder im Dialog zum Erstellen eines Geräts. Nachdem Sie bestätigt haben, lädt das Gateway die Befehlszeilentools 22.0 von Google in Ihr SDK herunter. Die Seite zeigt jede Google-Lizenz vollständig an und installiert nur, wenn Sie zustimmen.
+Haben Sie ein Systemabbild entfernt, etwa in Android Studio, können die Geräte, die es nutzen, nicht starten. Die Seite nennt jedes dieser Geräte und die fehlende Android-Version und bietet an, das Abbild erneut zu installieren. Ein startfähiges Gerät genügt: Sobald irgendein Gerät sein Systemabbild hat, fragt die Seite nicht mehr.
 
-`sdkmanager` braucht Java. Wenn Sie keins haben, installieren Sie Android Studio, das Java mitbringt, oder JDK 17 oder neuer, und öffnen Sie die Seite dann erneut.
+## Eine Installation schlägt fehl
 
-Um die Tools stattdessen manuell zu installieren, laden Sie Googles Befehlszeilentools von developer.android.com herunter und entpacken Sie sie so, dass dieser Pfad existiert:
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+Die Seite zeigt den Grund unter dem Element. Stimmt ein Download nicht mit der von Google veröffentlichten Prüfsumme überein, wird nichts entpackt; installieren Sie das Element erneut. Kommen eine Minute lang keine Daten an, bricht der Download ab; prüfen Sie Ihre Netzwerkverbindung und versuchen Sie es noch einmal. Droidpier braucht weder Java noch die Befehlszeilentools, ein fehlendes `sdkmanager` ist also kein Problem.
 
 ## Die Seite verbindet sich nicht
 

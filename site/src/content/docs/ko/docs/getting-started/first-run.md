@@ -1,7 +1,7 @@
 ---
 title: 첫 실행
 description: 명령 하나로 게이트웨이를 시작하고, Android SDK를 확인하게 하고, Chrome에서 로컬 네트워크 접근을 허용한 다음, 브라우저에서 에뮬레이터를 확인합니다.
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 터미널에서 명령 하나를 실행하고 `https://droid.devpier.dev/app/` 를 연 뒤, Chrome 이 물으면 로컬 네트워크 접근을 허용하세요.
@@ -21,27 +21,24 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 ## 2. Android SDK 확인하게 하기 {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-시작할 때 게이트웨이는 Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, 시스템 이미지 `system-images;android-34;google_apis;arm64-v8a`, 그리고 가상 기기(AVD)가 하나 이상 있는지 확인합니다. 빠진 것이 있으면 터미널에 항목마다 직접 설치하는 명령과 함께 출력하고, 페이지에서 설정을 마치라고 안내합니다. 터미널에서 질문하지 않습니다.
+시작할 때 게이트웨이는 기기를 시작할 수 있는지 확인합니다. Android 에뮬레이터(`emulator`), `platform-tools`의 `adb`, 그리고 시스템 이미지가 설치된 가상 기기(AVD)가 하나 이상 필요합니다. Android 버전은 상관없습니다. 빠진 것이 있으면 터미널에 항목별로 보여 주고, 페이지에서 설정을 마치라고 안내합니다. 터미널에서는 아무것도 묻지 않습니다.
 
 게이트웨이가 백그라운드에서 실행 중이면 이 목록은 로그에 기록됩니다. `droidpier logs`로 확인하세요.
 
 <!-- verify: phase 3 -->
-페이지에도 같은 목록이 항목별 다운로드 크기와 함께 표시됩니다:
+페이지에도 같은 목록이 항목별 다운로드 크기와 함께 표시됩니다. 기기를 시작할 수 있으면 아무것도 표시하지 않습니다.
 
 | 빠진 항목 | 페이지에서 할 일 |
 |---|---|
-| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, 시스템 이미지 | 항목 옆의 버튼으로 하나씩 설치하거나, 한 번에 모두 설치합니다. |
-| AVD 없음 | 기기를 만듭니다. 기기 모델과 Android 버전을 고릅니다. |
-| Java(필요한 항목이 있을 때) | Java가 포함된 Android Studio나 JDK 17 이상을 설치한 다음 페이지를 다시 엽니다. 게이트웨이는 Java를 설치하지 않습니다. |
+| `emulator`, `platform-tools`, 시스템 이미지 | 항목 옆의 버튼으로 하나씩 설치하거나, 한 번에 모두 설치합니다. 시스템 이미지가 하나도 없으면 Android 14(`system-images;android-34;google_apis;arm64-v8a`)를 제안합니다. 기기의 시스템 이미지가 삭제됐으면 어느 기기인지 알려 주고 그 이미지를 제안합니다. |
+| 기기 없음 | 기기를 만듭니다. 기기 모델과 Android 버전을 고릅니다. 시스템 이미지가 이미 설치돼 있으면 Android 14를 내려받는 대신 그것을 제안합니다. |
+
+Java나 명령줄 도구(`sdkmanager`, `avdmanager`)는 필요 없습니다. 게이트웨이는 각 구성 요소를 Android Studio와 같은 Google의 SDK 저장소에서 내려받고, SDK 폴더가 아직 없으면 만듭니다.
 
 <!-- verify: phase 3 -->
-페이지에서 확인하기 전에는 아무것도 다운로드하거나 만들지 않습니다. 시작하기 전에 페이지가 무엇을 다운로드하는지, 어디에 설치하는지, 디스크 공간이 얼마나 필요한지 보여 줍니다. 설치 중에는 Google 라이선스를 전문으로 보여 주고, 동의한 항목만 설치합니다. 명령줄 도구 23 이상 버전은 묻지 않고 라이선스에 동의할 수 있으며, 이 경우 확인 전에 페이지가 알려 줍니다.
+페이지에서 확인하기 전에는 아무것도 다운로드하거나 만들지 않습니다. 시작하기 전에 페이지가 무엇을 다운로드하는지, 어디에 설치하는지, 디스크 공간이 얼마나 필요한지 보여 줍니다. 다운로드할 때마다 그 전에 Google 라이선스를 전문으로 보여 주고, 동의한 항목만 설치합니다. 게이트웨이는 Android Studio처럼 동의 사실을 SDK의 `licenses` 폴더에 기록하고, 압축을 풀기 전에 각 다운로드를 Google이 공개한 체크섬과 대조합니다.
 
-예를 들어 시스템 이미지를 직접 설치하려면:
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+직접 설치하려면 페이지에서 그 항목 아래의 수동 설치 부분을 펼치세요. Android Studio의 어디에서 설치하는지와 어디에 설치되는지가 적혀 있습니다.
 
 ## 3. 페이지 열기 {#3-open-the-page}
 

@@ -1,7 +1,7 @@
 ---
 title: 문제 해결
 description: 자주 발생하는 문제 해결 - Chrome의 로컬 네트워크 접근 차단, 이미 사용 중인 포트, 에뮬레이터를 찾을 수 없음, 페이지가 연결되지 않음, 버전 불일치.
-sourceHash: b8a54e8a6f0d
+sourceHash: d8eaddc9fa12
 ---
 
 ## Chrome이 로컬 네트워크 접근을 차단함 {#chrome-blocked-local-network-access}
@@ -53,20 +53,17 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 에뮬레이터를 찾지 못해도 게이트웨이는 계속 실행되며 이유를 출력합니다. 터미널에, 백그라운드에서 실행 중이면 로그에 남깁니다 (`droidpier logs`).
 
 <!-- verify: phase 3 -->
-게이트웨이가 Android SDK, `emulator`, `platform-tools` 또는 시스템 이미지가 없다고 보고하면, 출력된 해결 방법을 따르세요. [첫 실행](/ko/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)을 참고하세요.
+게이트웨이가 `emulator`, `platform-tools`, 시스템 이미지 또는 기기가 없다고 보고하면 페이지에서 설정을 마치세요. [첫 실행](/ko/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)을 참고하세요.
 
-## "sdkmanager"가 없음
+## 기기의 시스템 이미지가 없음
 
 <!-- verify: phase 3 -->
-Android Studio로 설치한 SDK에는 `sdkmanager`와 `avdmanager`를 제공하는 `cmdline-tools`가 없을 수 있습니다. 페이지에서 설치할 수 있습니다. 빠진 항목 목록에서 그 옆의 설치 버튼을 쓰거나, 기기 만들기 대화 상자에서 설치하세요. 확인하면 게이트웨이가 Google에서 명령줄 도구 22.0을 다운로드해 SDK에 넣습니다. 페이지는 Google 라이선스를 전문으로 보여 주고, 동의해야만 설치합니다.
+Android Studio 등에서 시스템 이미지를 삭제하면 그 이미지를 쓰는 기기는 시작할 수 없습니다. 페이지는 그런 기기와 빠진 Android 버전을 알려 주고, 그 이미지를 다시 설치하도록 제안합니다. 시작할 수 있는 기기가 하나만 있으면 충분합니다. 어느 기기든 시스템 이미지가 있으면 페이지는 더 묻지 않습니다.
 
-`sdkmanager`에는 Java가 필요합니다. Java가 없으면 Java가 포함된 Android Studio나 JDK 17 이상을 설치한 다음 페이지를 다시 여세요.
+## 설치가 실패함
 
-직접 설치하려면 developer.android.com에서 Google 명령줄 도구를 다운로드하고, 다음 경로가 생기도록 압축을 푸세요:
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+페이지가 항목 아래에 이유를 보여 줍니다. 다운로드가 Google이 공개한 체크섬과 맞지 않으면 아무것도 압축을 풀지 않으니, 다시 설치하세요. 1분 동안 데이터가 오지 않으면 다운로드가 멈추니, 네트워크 연결을 확인하고 다시 시도하세요. Droidpier는 Java나 명령줄 도구가 필요 없으므로 `sdkmanager`가 없어도 문제없습니다.
 
 ## 페이지가 연결되지 않음
 

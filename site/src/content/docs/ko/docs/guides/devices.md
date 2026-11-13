@@ -1,7 +1,7 @@
 ---
 title: 기기
 description: Android 가상 기기 목록을 보고, 페이지에서 기기를 시작하고 중지하며, 이미 실행 중인 에뮬레이터를 넘겨받습니다.
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 여기서 기기는 Mac에 있는 Android 가상 기기(AVD)를 말합니다. 페이지는 한 번에 한 기기를 보여 줍니다.
@@ -58,9 +58,9 @@ gRPC 없이 실행 중인 에뮬레이터는 "실행 중이지만 넘겨받을 �
 <!-- verify: phase 3 -->
 기기는 페이지에서 만듭니다. 새 기기 버튼을 누르고 기기 모델과 Android 버전을 고른 다음, 기기 이름을 정하세요(페이지가 하나 제안합니다). 실행하기 전에 페이지가 모델, Android 버전, 기기에 할당할 메모리를 보여 줍니다. 그 버전의 시스템 이미지가 아직 없으면, 확인하고 Google 라이선스에 동의한 뒤 게이트웨이가 다운로드합니다.
 
-기기를 만들려면 명령줄 도구(`avdmanager`)가 필요합니다. 없으면 대화 상자가 먼저 설치를 제안합니다. [첫 실행](/ko/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)을 참고하세요.
+기기를 만드는 데 Android Studio도 명령줄 도구도 필요 없습니다. 게이트웨이가 Android Studio와 같은 형식으로 기기 파일을 직접 씁니다. [첫 실행](/ko/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)을 참고하세요.
 
-`avdmanager`나 Android Studio로 기기를 만들 수도 있습니다. 목록이 자동으로 인식합니다.
+Android Studio의 Device Manager에서 기기를 만들 수도 있습니다. 목록이 자동으로 인식합니다.
 
 ## 기기 삭제
 

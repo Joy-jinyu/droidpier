@@ -1,7 +1,7 @@
 ---
 title: 故障排除
 description: 解决常见问题——Chrome 阻止本地网络访问、端口被占用、未找到模拟器、页面无法连接、版本不匹配。
-sourceHash: b8a54e8a6f0d
+sourceHash: d8eaddc9fa12
 ---
 
 ## Chrome 阻止了本地网络访问 {#chrome-blocked-local-network-access}
@@ -53,20 +53,17 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 找不到模拟器时，网关会继续运行，并打印原因：打印在终端里，后台运行时写在日志里（`droidpier logs`）。
 
 <!-- verify: phase 3 -->
-如果网关报告 Android SDK、`emulator`、`platform-tools` 或系统镜像缺失，请按照它打印的修复方法操作。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
+如果网关报告缺少 `emulator`、`platform-tools`、系统镜像或设备，请到页面上完成安装。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
 
-## "sdkmanager" 缺失
+## 设备的系统镜像缺失
 
 <!-- verify: phase 3 -->
-Android Studio 安装的 SDK 可能不包含 `cmdline-tools`（提供 `sdkmanager` 和 `avdmanager`）。页面会提供安装：在缺失项清单里它旁边的安装按钮，或在创建设备的对话框里。你确认后，网关会从 Google 下载 22.0 版命令行工具，装到你的 SDK 中。页面会完整显示每份 Google 许可证，你同意后才会安装。
+如果你删除了某个系统镜像（例如在 Android Studio 中），用它的设备就无法启动。页面会列出每台这样的设备和它缺少的 Android 版本，并提供重新安装那个镜像。有一台能启动的设备就够了：只要任何一台设备的系统镜像还在，页面就不再提示。
 
-`sdkmanager` 需要 Java。如果你没有 Java，请安装自带 Java 的 Android Studio，或安装 JDK 17 及以上版本，然后重新打开页面。
+## 安装失败
 
-如果想手动安装，请从 developer.android.com 下载 Google 命令行工具并解压，确保以下路径存在：
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+页面会在该项下面显示原因。如果下载的文件与 Google 公布的校验值不符，不会解压任何内容；请重新安装该项。如果一分钟内没有收到任何数据，下载会停止；请检查网络连接后重试。Droidpier 不需要 Java 或命令行工具，所以缺少 `sdkmanager` 不是问题。
 
 ## 页面无法连接
 

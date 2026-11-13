@@ -1,7 +1,7 @@
 ---
 title: Dépannage
 description: Résoudre les problèmes courants - Chrome a bloqué l’accès au réseau local, port déjà utilisé, aucun émulateur trouvé, la page ne se connecte pas, versions incompatibles.
-sourceHash: b8a54e8a6f0d
+sourceHash: d8eaddc9fa12
 ---
 
 ## Chrome a bloqué l’accès au réseau local {#chrome-blocked-local-network-access}
@@ -53,20 +53,17 @@ Vous pouvez aussi démarrer un appareil depuis la liste dans la page. Voir [Appa
 La passerelle continue de tourner quand aucun émulateur n’est trouvé et en indique la raison : dans Terminal, ou dans son journal quand elle tourne en arrière-plan (`droidpier logs`).
 
 <!-- verify: phase 3 -->
-Si la passerelle signale que l’Android SDK, `emulator`, `platform-tools` ou l’image système sont manquants, suivez la solution qu’elle affiche. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+Si la passerelle signale que `emulator`, `platform-tools`, une image système ou un appareil manque, terminez la configuration sur la page. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-## « sdkmanager » est manquant
+## L’image système d’un appareil est manquante
 
 <!-- verify: phase 3 -->
-Un SDK installé par Android Studio peut ne pas inclure `cmdline-tools`, qui fournit `sdkmanager` et `avdmanager`. La page propose de l’installer : avec le bouton d’installation à côté dans la liste des éléments manquants, ou dans la boîte de dialogue de création d’un appareil. Après votre confirmation, la passerelle télécharge les outils en ligne de commande 22.0 depuis Google dans votre SDK. La page affiche chaque licence Google en entier et n’installe que si vous l’acceptez.
+Si vous avez supprimé une image système, par exemple dans Android Studio, les appareils qui l’utilisent ne peuvent plus démarrer. La page nomme chacun de ces appareils et la version d’Android qui lui manque, et propose de réinstaller cette image. Un seul appareil capable de démarrer suffit : la page ne demande plus rien dès qu’un appareil a son image système.
 
-`sdkmanager` a besoin de Java. Si vous n’en avez pas, installez Android Studio, qui inclut Java, ou JDK 17 ou plus récent, puis rouvrez la page.
+## Une installation échoue
 
-Pour installer les outils à la main, téléchargez les outils en ligne de commande de Google depuis developer.android.com et décompressez-les de sorte que ce chemin existe :
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+La page affiche la raison sous l’élément. Si un téléchargement ne correspond pas à la somme de contrôle publiée par Google, rien n’est décompressé ; installez l’élément à nouveau. Si aucune donnée n’arrive pendant une minute, le téléchargement s’arrête ; vérifiez votre connexion réseau et réessayez. Droidpier n’a besoin ni de Java ni des outils en ligne de commande : l’absence de `sdkmanager` n’est donc pas un problème.
 
 ## La page ne se connecte pas
 

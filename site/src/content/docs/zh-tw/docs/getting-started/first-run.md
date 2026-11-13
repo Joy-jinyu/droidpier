@@ -1,7 +1,7 @@
 ---
 title: 首次執行
 description: 用一道命令啟動閘道，讓它檢查 Android SDK，在 Chrome 中允許本機網路存取，然後在瀏覽器中查看你的模擬器。
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 在終端機中執行一條命令，開啟 `https://droid.devpier.dev/app/`，並在 Chrome 詢問時允許存取本機網路。
@@ -21,27 +21,24 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 ## 2. 讓閘道檢查 Android SDK {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-啟動時，閘道會檢查 Android SDK、`cmdline-tools`、`emulator`、`platform-tools`、系統映像 `system-images;android-34;google_apis;arm64-v8a`，以及至少一個虛擬裝置（AVD）。如果缺少某項，它會在終端機中逐項列出，並附上手動安裝的命令，然後提示你到頁面上完成安裝。它不會在終端機中提問。
+啟動時，閘道會檢查能否啟動一台裝置：需要 Android 模擬器（`emulator`）、`platform-tools` 裡的 `adb`，以及至少一個已裝好系統映像的虛擬裝置（AVD）。任何 Android 版本都可以。如果缺少某項，它會在終端機中逐項列出，並提示你到頁面上完成安裝。它不會在終端機中提問。
 
 閘道在背景執行時，這份清單寫在它的記錄檔裡。執行 `droidpier logs` 查看。
 
 <!-- verify: phase 3 -->
-頁面會顯示同樣的清單，並標出每項的下載大小：
+頁面會顯示同樣的清單，並標出每項的下載大小。能啟動裝置時，頁面不顯示這份清單。
 
 | 缺少的項目 | 你在頁面上要做的 |
 |---|---|
-| Android SDK、`cmdline-tools`、`emulator`、`platform-tools`、系統映像 | 用某項旁邊的按鈕單獨安裝，或一次全部安裝。 |
-| 沒有 AVD | 建立裝置：選擇裝置型號和 Android 版本。 |
-| Java（某項需要時） | 安裝內含 Java 的 Android Studio，或安裝 JDK 17 以上版本，然後重新開啟頁面。閘道不會安裝 Java。 |
+| `emulator`、`platform-tools`、系統映像 | 用某項旁邊的按鈕單獨安裝，或一次全部安裝。如果一個系統映像都沒裝，頁面會提供 Android 14（`system-images;android-34;google_apis;arm64-v8a`）。如果某台裝置的系統映像被刪除了，頁面會指出是哪台裝置，並提供那個映像。 |
+| 沒有裝置 | 建立裝置：選擇裝置型號和 Android 版本。如果已經裝了系統映像，頁面會建議使用它，而不是下載 Android 14。 |
+
+你不需要 Java 或命令列工具（`sdkmanager`、`avdmanager`）。閘道從 Google 的 SDK 存放區下載每個元件，這也是 Android Studio 使用的來源；SDK 資料夾還不存在時，閘道會自行建立。
 
 <!-- verify: phase 3 -->
-在你於頁面上確認之前，不會下載或建立任何內容。開始前，頁面會顯示要下載什麼、裝到哪裡、需要多少磁碟空間。安裝過程中，頁面會完整顯示每份 Google 授權條款，你同意後才會安裝該項。23 以上版本的命令列工具可能不詢問就接受授權條款；頁面會在你確認前告訴你。
+在你於頁面上確認之前，不會下載或建立任何內容。開始前，頁面會顯示要下載什麼、裝到哪裡、需要多少磁碟空間。每次下載前，頁面會完整顯示 Google 的授權條款，你同意後才會安裝該項。閘道會像 Android Studio 一樣把你的同意記在 SDK 的 `licenses` 資料夾裡，並在解壓縮之前用 Google 公布的檢查碼檢查每個下載。
 
-例如，手動安裝系統映像：
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+如果想自行安裝某項，在頁面上展開它下方的手動安裝區塊。那裡寫著在 Android Studio 裡去哪找這一項，以及它裝到哪裡。
 
 ## 3. 開啟頁面 {#3-open-the-page}
 

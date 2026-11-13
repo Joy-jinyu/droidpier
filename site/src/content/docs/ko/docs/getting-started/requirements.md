@@ -1,7 +1,7 @@
 ---
 title: 요구 사항
 description: Droidpier를 설치하기 전에 필요한 것 - Apple Silicon Mac, Chrome 또는 Edge, arm64 시스템 이미지가 있는 Android 에뮬레이터.
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier는 공식 Android 에뮬레이터를 내 Mac에서 실행하고 브라우저 탭에 보여 줍니다. 원격 서버에서는 아무것도 실행되지 않습니다. 작은 로컬 프로그램(게이트웨이)을 설치하고, 같은 Mac에 Android 에뮬레이터와 시스템 이미지가 있어야 합니다.
@@ -23,20 +23,11 @@ Droidpier는 공식 Android 에뮬레이터를 내 Mac에서 실행하고 브라
 | 구성 요소 | 용도 | 대략적인 다운로드 크기 |
 |---|---|---|
 | `emulator` | Android 가상 기기 실행 | 약 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | Android 14(API 34) 시스템 이미지 | 약 1.5 GB |
-
-<!-- verify: phase 2 -->
-| 구성 요소 | 용도 | 대략적인 다운로드 크기 |
-|---|---|---|
-| `platform-tools` | `adb`. 부팅 상태 확인과 기기 중지에 사용 | 약 15 MB |
+| `platform-tools` | `adb`. 부팅 상태 확인과 기기 중지에 사용 | 약 16 MB |
+| 시스템 이미지(예: `system-images;android-34;google_apis;arm64-v8a`) | 기기에서 실행되는 Android 시스템. Android 버전은 상관없으며, 하나도 없으면 페이지가 Android 14(API 34)를 제안합니다 | 약 1.5 GB |
 
 <!-- verify: phase 3 -->
-| 구성 요소 | 용도 | 대략적인 다운로드 크기 |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager`와 `avdmanager`. 다른 구성 요소 설치와 기기 생성에 사용 | - |
-
-<!-- verify: phase 3 -->
-Android Studio를 열 필요는 없습니다. Android Studio로 설치한 SDK가 이미 있다면 게이트웨이가 그것을 사용합니다. 게이트웨이는 다음 순서로 SDK를 찾습니다:
+Java, 명령줄 도구(`sdkmanager`, `avdmanager`), Android Studio는 필요 없습니다. 게이트웨이가 이 구성 요소를 Google의 SDK 저장소에서 내려받고 기기도 직접 만듭니다. Android Studio로 설치한 SDK가 이미 있으면 게이트웨이가 그것을 사용합니다. SDK는 다음 순서로 찾습니다:
 
 1. `ANDROID_HOME` 환경 변수에 지정된 디렉터리.
 2. `~/Library/Android/sdk`.

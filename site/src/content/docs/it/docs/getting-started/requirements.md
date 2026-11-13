@@ -1,7 +1,7 @@
 ---
 title: Requisiti
 description: Cosa ti serve prima di installare Droidpier - un Mac con Apple Silicon, Chrome o Edge, e l’emulatore Android con un’immagine di sistema arm64.
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier esegue l’emulatore Android ufficiale sul tuo Mac e lo mostra in una scheda del browser. Nulla gira su un server remoto. Installi un piccolo programma locale (il gateway), e ti servono l’emulatore Android e un’immagine di sistema sullo stesso Mac.
@@ -23,20 +23,11 @@ Il gateway usa queste parti dell’Android SDK:
 | Componente | Serve per | Dimensione approssimativa del download |
 |---|---|---|
 | `emulator` | Esegue il dispositivo virtuale Android | circa 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | L’immagine di sistema di Android 14 (API 34) | circa 1.5 GB |
-
-<!-- verify: phase 2 -->
-| Componente | Serve per | Dimensione approssimativa del download |
-|---|---|---|
-| `platform-tools` | `adb`, per controllare lo stato di avvio e arrestare i dispositivi | circa 15 MB |
+| `platform-tools` | `adb`, per controllare lo stato di avvio e arrestare i dispositivi | circa 16 MB |
+| Un’immagine di sistema, ad esempio `system-images;android-34;google_apis;arm64-v8a` | Il sistema Android eseguito dal dispositivo. Va bene qualsiasi versione di Android; se non ne è installata nessuna, la pagina propone Android 14 (API 34) | circa 1.5 GB |
 
 <!-- verify: phase 3 -->
-| Componente | Serve per | Dimensione approssimativa del download |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` e `avdmanager`, per installare le altre parti e creare un dispositivo | - |
-
-<!-- verify: phase 3 -->
-Non devi aprire Android Studio. Se hai già l’SDK installato da Android Studio, il gateway lo usa. Cerca l’SDK in quest’ordine:
+Non ti servono Java, gli strumenti da riga di comando (`sdkmanager`, `avdmanager`) né Android Studio: il gateway scarica questi componenti dal repository SDK di Google e crea da sé i dispositivi. Se hai già l’SDK di Android Studio, il gateway lo usa. Cerca l’SDK in quest’ordine:
 
 1. La directory indicata nella variabile d’ambiente `ANDROID_HOME`.
 2. `~/Library/Android/sdk`.

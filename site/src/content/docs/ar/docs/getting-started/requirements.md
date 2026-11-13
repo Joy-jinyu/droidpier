@@ -1,7 +1,7 @@
 ---
 title: المتطلبات
 description: ما تحتاج إليه قبل تثبيت Droidpier - جهاز Mac بمعالج Apple Silicon، وChrome أو Edge، ومحاكي Android مع صورة نظام arm64.
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 يشغّل Droidpier محاكي Android الرسمي على جهاز Mac الخاص بك ويعرضه في علامة تبويب في المتصفح. لا شيء يعمل على خادم بعيد. تثبّت برنامجًا محليًا صغيرًا (البوابة)، وتحتاج إلى محاكي Android وصورة نظام على جهاز Mac نفسه.
@@ -23,20 +23,11 @@ sourceHash: a1a9610ae52d
 | المكوّن | الاستخدام | حجم التنزيل التقريبي |
 |---|---|---|
 | `emulator` | يشغّل جهاز Android الافتراضي | نحو 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | صورة نظام Android 14 (API 34) | نحو 1.5 GB |
-
-<!-- verify: phase 2 -->
-| المكوّن | الاستخدام | حجم التنزيل التقريبي |
-|---|---|---|
-| `platform-tools` | `adb`، للتحقق من حالة الإقلاع وإيقاف الأجهزة | نحو 15 MB |
+| `platform-tools` | `adb`، للتحقق من حالة الإقلاع وإيقاف الأجهزة | نحو 16 MB |
+| صورة نظام، مثل `system-images;android-34;google_apis;arm64-v8a` | نظام Android الذي يشغّله الجهاز. يصلح أي إصدار من Android؛ وإذا لم تكن هناك صورة مثبّتة، تعرض الصفحة Android 14 (API 34) | نحو 1.5 GB |
 
 <!-- verify: phase 3 -->
-| المكوّن | الاستخدام | حجم التنزيل التقريبي |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` و`avdmanager`، لتثبيت الأجزاء الأخرى وإنشاء جهاز | - |
-
-<!-- verify: phase 3 -->
-لا تحتاج إلى فتح Android Studio. إذا كان SDK مثبتًا لديك من Android Studio، فإن البوابة تستخدمه. تبحث عن SDK بهذا الترتيب:
+لا تحتاج إلى Java ولا إلى أدوات سطر الأوامر (`sdkmanager` و`avdmanager`) ولا إلى Android Studio: تنزّل البوابة هذه الأجزاء من مستودع SDK الخاص بـ Google وتنشئ الأجهزة بنفسها. إذا كان لديك SDK من Android Studio بالفعل، فستستخدمه البوابة. تبحث عن SDK بهذا الترتيب:
 
 1. الدليل المحدد في متغير البيئة `ANDROID_HOME`.
 2. `~/Library/Android/sdk`.

@@ -1,7 +1,7 @@
 ---
 title: デバイス
 description: Android 仮想デバイスを一覧表示し、ページから起動・停止したり、すでに起動中のエミュレーターを引き継いだりする。
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 ここでいうデバイスとは、Mac 上の Android 仮想デバイス（AVD）のことです。ページは一度に 1 つのデバイスを表示します。
@@ -58,9 +58,9 @@ gRPC なしで起動しているエミュレーターは「起動済みだが引
 <!-- verify: phase 3 -->
 デバイスはページで作成します。新規デバイスのボタンを使い、デバイスのモデルと Android のバージョンを選んで、名前を付けます（ページが候補を出します）。実行前に、ページはモデル、Android のバージョン、割り当てるメモリを表示します。そのバージョンのシステムイメージがまだない場合は、確認して Google のライセンスに同意したあと、ゲートウェイがダウンロードします。
 
-デバイスの作成にはコマンドラインツール（`avdmanager`）が必要です。ない場合は、ダイアログが先にインストールを案内します。[初回起動](/ja/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)を参照してください。
+デバイスの作成に Android Studio もコマンドラインツールも必要ありません。ゲートウェイが Android Studio と同じ形式でデバイスのファイルを書き込みます。[初回起動](/ja/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)を参照してください。
 
-`avdmanager` や Android Studio でデバイスを作成することもできます。一覧に自動で表示されます。
+Android Studio の Device Manager でデバイスを作成することもできます。一覧に自動で表示されます。
 
 ## デバイスを削除する
 

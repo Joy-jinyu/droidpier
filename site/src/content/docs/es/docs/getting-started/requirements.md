@@ -1,7 +1,7 @@
 ---
 title: Requisitos
 description: Lo que necesitas antes de instalar Droidpier - una Mac con Apple Silicon, Chrome o Edge, y el emulador de Android con una imagen de sistema arm64.
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier ejecuta el emulador oficial de Android en tu propia Mac y lo muestra en una pestaña del navegador. Nada se ejecuta en un servidor remoto. Instalas un pequeño programa local (el gateway), y necesitas el emulador de Android y una imagen de sistema en la misma Mac.
@@ -23,20 +23,11 @@ El gateway usa estas partes del Android SDK:
 | Componente | Para qué se usa | Tamaño aproximado de descarga |
 |---|---|---|
 | `emulator` | Ejecuta el dispositivo virtual Android | unos 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | La imagen de sistema de Android 14 (API 34) | unos 1.5 GB |
-
-<!-- verify: phase 2 -->
-| Componente | Para qué se usa | Tamaño aproximado de descarga |
-|---|---|---|
-| `platform-tools` | `adb`, para comprobar el estado de arranque y detener dispositivos | unos 15 MB |
+| `platform-tools` | `adb`, para comprobar el estado de arranque y detener dispositivos | unos 16 MB |
+| Una imagen del sistema, como `system-images;android-34;google_apis;arm64-v8a` | El sistema Android que ejecuta el dispositivo. Sirve cualquier versión de Android; si no hay ninguna instalada, la página ofrece Android 14 (API 34) | unos 1.5 GB |
 
 <!-- verify: phase 3 -->
-| Componente | Para qué se usa | Tamaño aproximado de descarga |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` y `avdmanager`, para instalar las demás partes y crear un dispositivo | - |
-
-<!-- verify: phase 3 -->
-No necesitas abrir Android Studio. Si ya tienes el SDK de Android Studio, el gateway lo usa. Busca el SDK en este orden:
+No necesitas Java, las herramientas de línea de comandos (`sdkmanager`, `avdmanager`) ni Android Studio: el gateway descarga estas partes del repositorio del SDK de Google y crea los dispositivos por sí mismo. Si ya tienes el SDK de Android Studio, el gateway lo usa. Busca el SDK en este orden:
 
 1. El directorio indicado en la variable de entorno `ANDROID_HOME`.
 2. `~/Library/Android/sdk`.

@@ -1,7 +1,7 @@
 ---
 title: Requisitos
 description: O que você precisa antes de instalar o Droidpier - um Mac com Apple Silicon, Chrome ou Edge, e o emulador Android com uma imagem de sistema arm64.
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 O Droidpier executa o emulador oficial do Android no seu próprio Mac e o exibe em uma aba do navegador. Nada roda em um servidor remoto. Você instala um pequeno programa local (o gateway) e precisa do emulador Android e de uma imagem de sistema no mesmo Mac.
@@ -23,20 +23,11 @@ O gateway usa estas partes do Android SDK:
 | Componente | Usado para | Tamanho aproximado do download |
 |---|---|---|
 | `emulator` | Executa o dispositivo virtual Android | cerca de 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | A imagem de sistema do Android 14 (API 34) | cerca de 1.5 GB |
-
-<!-- verify: phase 2 -->
-| Componente | Usado para | Tamanho aproximado do download |
-|---|---|---|
-| `platform-tools` | `adb`, para verificar o estado de inicialização e parar dispositivos | cerca de 15 MB |
+| `platform-tools` | `adb`, para verificar o estado de inicialização e parar dispositivos | cerca de 16 MB |
+| Uma imagem de sistema, como `system-images;android-34;google_apis;arm64-v8a` | O sistema Android que o dispositivo executa. Qualquer versão do Android serve; se nenhuma estiver instalada, a página oferece o Android 14 (API 34) | cerca de 1.5 GB |
 
 <!-- verify: phase 3 -->
-| Componente | Usado para | Tamanho aproximado do download |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` e `avdmanager`, para instalar as outras partes e criar um dispositivo | - |
-
-<!-- verify: phase 3 -->
-Você não precisa abrir o Android Studio. Se você já tem o SDK do Android Studio, o gateway o utiliza. Ele procura o SDK nesta ordem:
+Você não precisa de Java, das ferramentas de linha de comando (`sdkmanager`, `avdmanager`) nem do Android Studio: o gateway baixa essas partes do repositório do SDK do Google e cria os dispositivos ele mesmo. Se você já tem o SDK do Android Studio, o gateway o usa. Ele procura o SDK nesta ordem:
 
 1. O diretório definido na variável de ambiente `ANDROID_HOME`.
 2. `~/Library/Android/sdk`.

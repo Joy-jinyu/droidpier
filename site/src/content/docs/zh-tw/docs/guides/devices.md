@@ -1,7 +1,7 @@
 ---
 title: 裝置
 description: 列出 Android 虛擬裝置，從頁面啟動和停止它們，並接管已在執行的模擬器。
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 這裡的裝置是指 Mac 上的 Android 虛擬裝置（AVD）。頁面每次顯示一個裝置。
@@ -58,9 +58,9 @@ emulator -avd <name> -no-window -grpc <port> -no-boot-anim -gpu host
 <!-- verify: phase 3 -->
 在頁面上建立裝置。用新增裝置的按鈕，選擇裝置型號和 Android 版本，再替裝置取個名稱（頁面會建議一個）。開始之前，頁面會顯示裝置的型號、Android 版本和記憶體。如果該版本的系統映像還沒安裝，閘道會在你確認並同意 Google 授權條款後下載它。
 
-建立裝置需要命令列工具（`avdmanager`）。如果缺少，對話框會先提供安裝。請參閱[首次執行](/zh-tw/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
+建立裝置既不需要 Android Studio，也不需要命令列工具：閘道會依 Android Studio 使用的格式自行寫入裝置檔案。請參閱[首次執行](/zh-tw/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
 
-你也可以使用 `avdmanager` 或 Android Studio 建立裝置；清單會自動識別它們。
+你也可以在 Android Studio 的 Device Manager 中建立裝置；清單會自動識別它們。
 
 ## 刪除裝置
 

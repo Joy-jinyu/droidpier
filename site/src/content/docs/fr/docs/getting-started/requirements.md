@@ -1,7 +1,7 @@
 ---
 title: Configuration requise
 description: Ce qu’il vous faut avant d’installer Droidpier - un Mac avec Apple Silicon, Chrome ou Edge, et l’émulateur Android avec une image système arm64.
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier exécute l’émulateur Android officiel sur votre propre Mac et l’affiche dans un onglet du navigateur. Rien ne tourne sur un serveur distant. Vous installez un petit programme local (la passerelle), et il vous faut l’émulateur Android et une image système sur le même Mac.
@@ -23,20 +23,11 @@ La passerelle utilise ces parties de l’Android SDK :
 | Composant | Sert à | Taille de téléchargement approximative |
 |---|---|---|
 | `emulator` | Exécute l’appareil virtuel Android | environ 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | L’image système Android 14 (API 34) | environ 1.5 GB |
-
-<!-- verify: phase 2 -->
-| Composant | Sert à | Taille de téléchargement approximative |
-|---|---|---|
-| `platform-tools` | `adb`, pour vérifier l’état du démarrage et arrêter les appareils | environ 15 MB |
+| `platform-tools` | `adb`, pour vérifier l’état du démarrage et arrêter les appareils | environ 16 MB |
+| Une image système, par exemple `system-images;android-34;google_apis;arm64-v8a` | Le système Android que l’appareil exécute. Toute version d’Android convient ; si aucune n’est installée, la page propose Android 14 (API 34) | environ 1.5 GB |
 
 <!-- verify: phase 3 -->
-| Composant | Sert à | Taille de téléchargement approximative |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` et `avdmanager`, pour installer les autres parties et créer un appareil | - |
-
-<!-- verify: phase 3 -->
-Vous n’avez pas besoin d’ouvrir Android Studio. Si vous avez déjà le SDK installé par Android Studio, la passerelle l’utilise. Elle cherche le SDK dans cet ordre :
+Vous n’avez besoin ni de Java, ni des outils en ligne de commande (`sdkmanager`, `avdmanager`), ni d’Android Studio : la passerelle télécharge ces éléments depuis le dépôt SDK de Google et crée elle-même les appareils. Si vous avez déjà le SDK installé par Android Studio, la passerelle l’utilise. Elle cherche le SDK dans cet ordre :
 
 1. Le répertoire indiqué dans la variable d’environnement `ANDROID_HOME`.
 2. `~/Library/Android/sdk`.

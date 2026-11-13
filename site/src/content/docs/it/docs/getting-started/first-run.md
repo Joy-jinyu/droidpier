@@ -1,7 +1,7 @@
 ---
 title: Primo avvio
 description: Avvia il gateway con un solo comando, lascia che controlli l’Android SDK, consenti l’accesso alla rete locale in Chrome e vedi il tuo emulatore nel browser.
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 Esegui un comando nel Terminale, apri `https://droid.devpier.dev/app/` e consenti l’accesso alla rete locale quando Chrome lo chiede.
@@ -21,27 +21,24 @@ Il gateway è in ascolto su `127.0.0.1`, sulla porta `7300` per impostazione pre
 ## 2. Lascia che controlli il tuo Android SDK {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-All’avvio, il gateway controlla che ci siano l’Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, l’immagine di sistema `system-images;android-34;google_apis;arm64-v8a` e almeno un dispositivo virtuale (AVD). Se manca qualcosa, elenca ogni elemento nel Terminale con un comando per installarlo a mano e ti chiede di completare la configurazione nella pagina. Non fa domande nel Terminale.
+All’avvio, il gateway verifica che un dispositivo possa partire: servono l’emulatore Android (`emulator`), `adb` di `platform-tools` e almeno un dispositivo virtuale (AVD) con la sua immagine di sistema installata. Va bene qualsiasi versione di Android. Se manca qualcosa, elenca ogni elemento nel Terminale e ti invita a completare la configurazione nella pagina. Nel Terminale non chiede nulla.
 
 Quando il gateway è in background, questo elenco finisce nel suo log. Esegui `droidpier logs` per vederlo.
 
 <!-- verify: phase 3 -->
-La pagina mostra lo stesso elenco, con la dimensione del download di ogni elemento:
+La pagina mostra lo stesso elenco, con la dimensione del download di ogni elemento. Quando un dispositivo può partire, non mostra nulla.
 
 | Mancante | Cosa fai nella pagina |
 |---|---|
-| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, immagine di sistema | Installa un elemento con il pulsante accanto, oppure installali tutti insieme. |
-| Nessun AVD | Crea un dispositivo: scegli un modello di dispositivo e una versione di Android. |
-| Java, quando un elemento ne ha bisogno | Installa Android Studio, che include Java, oppure JDK 17 o successivo, poi riapri la pagina. Il gateway non installa Java. |
+| `emulator`, `platform-tools`, immagine di sistema | Installa un elemento con il pulsante accanto, oppure installali tutti insieme. Se non è installata nessuna immagine di sistema, la pagina propone Android 14 (`system-images;android-34;google_apis;arm64-v8a`). Se l’immagine di sistema di un dispositivo è stata rimossa, la pagina indica il dispositivo e propone quell’immagine. |
+| Nessun dispositivo | Crea un dispositivo: scegli un modello di dispositivo e una versione di Android. Se un’immagine di sistema è già installata, la pagina la suggerisce invece di scaricare Android 14. |
+
+Non ti servono Java né gli strumenti da riga di comando (`sdkmanager`, `avdmanager`). Il gateway scarica ogni componente dal repository SDK di Google, la stessa fonte usata da Android Studio, e crea la cartella dell’SDK se non esiste ancora.
 
 <!-- verify: phase 3 -->
-Non viene scaricato né creato nulla finché non confermi nella pagina. Prima di iniziare, la pagina mostra cosa scaricherà, dove lo installerà e quanto spazio su disco serve. Durante l’installazione, la pagina mostra per intero ogni licenza di Google, e un elemento viene installato solo se accetti. Gli strumenti da riga di comando dalla versione 23 in poi possono accettare le licenze senza chiedere; la pagina te lo segnala prima che tu confermi.
+Non viene scaricato né creato nulla finché non confermi nella pagina. Prima di iniziare, la pagina mostra cosa scaricherà, dove lo installerà e quanto spazio su disco serve. Prima di ogni download, la pagina mostra per intero la licenza di Google, e l’elemento viene installato solo se accetti. Come Android Studio, il gateway registra il tuo consenso nella cartella `licenses` dell’SDK e controlla ogni download con il checksum pubblicato da Google prima di estrarre qualsiasi cosa.
 
-Ad esempio, per installare manualmente l’immagine di sistema:
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+Se preferisci installare un elemento da solo, espandi la sezione di installazione manuale sotto di esso nella pagina. Indica dove trovarlo in Android Studio e dove viene installato.
 
 ## 3. Apri la pagina {#3-open-the-page}
 

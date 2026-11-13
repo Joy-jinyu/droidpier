@@ -1,7 +1,7 @@
 ---
 title: Appareils
 description: Listez vos appareils virtuels Android, démarrez-les et arrêtez-les depuis la page, et prenez la main sur un émulateur déjà en cours d’exécution.
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 Ici, un appareil est un Android Virtual Device (AVD) sur votre Mac. La page affiche un appareil à la fois.
@@ -58,9 +58,9 @@ Arrêter la passerelle n’arrête pas les émulateurs. Quand vous redémarrez l
 <!-- verify: phase 3 -->
 Créez les appareils sur la page. Utilisez le bouton pour un nouvel appareil, choisissez un modèle d’appareil et une version d’Android, puis donnez un nom à l’appareil ; la page en propose un. Avant toute action, la page affiche le modèle, la version d’Android et la mémoire de l’appareil. Si l’image système de cette version n’est pas encore installée, la passerelle la télécharge après que vous avez confirmé et accepté la licence de Google.
 
-Créer un appareil nécessite les outils en ligne de commande (`avdmanager`). S’ils manquent, la boîte de dialogue propose de les installer d’abord. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+Créer un appareil ne demande ni Android Studio ni les outils en ligne de commande : la passerelle écrit elle-même les fichiers de l’appareil, au format qu’utilise Android Studio. Voir [Premier lancement](/fr/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-Vous pouvez aussi créer des appareils avec `avdmanager` ou Android Studio ; la liste les détecte.
+Vous pouvez aussi créer des appareils dans le Device Manager d’Android Studio ; la liste les détecte.
 
 ## Supprimer un appareil
 

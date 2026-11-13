@@ -1,7 +1,7 @@
 ---
 title: Geräte
 description: Listen Sie Ihre virtuellen Android-Geräte auf, starten und stoppen Sie sie über die Seite und übernehmen Sie einen Emulator, der bereits läuft.
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 Ein Gerät ist hier ein Android Virtual Device (AVD) auf Ihrem Mac. Die Seite zeigt jeweils ein Gerät.
@@ -58,9 +58,9 @@ Das Stoppen des Gateways stoppt keine Emulatoren. Wenn Sie das Gateway erneut st
 <!-- verify: phase 3 -->
 Geräte erstellen Sie auf der Seite. Verwenden Sie die Schaltfläche für ein neues Gerät, wählen Sie ein Gerätemodell und eine Android-Version und geben Sie dem Gerät einen Namen; die Seite schlägt einen vor. Bevor etwas passiert, zeigt die Seite das Modell, die Android-Version und den Arbeitsspeicher des Geräts. Ist das Systemabbild für diese Version noch nicht installiert, lädt das Gateway es herunter, nachdem Sie bestätigt und der Lizenz von Google zugestimmt haben.
 
-Zum Erstellen eines Geräts braucht es die Befehlszeilentools (`avdmanager`). Fehlen sie, bietet der Dialog an, sie zuerst zu installieren. Siehe [Erster Start](/de/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+Zum Erstellen eines Geräts brauchen Sie weder Android Studio noch die Befehlszeilentools: Das Gateway schreibt die Gerätedateien selbst, im Format von Android Studio. Siehe [Erster Start](/de/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-Sie können Geräte auch mit `avdmanager` oder Android Studio erstellen; die Liste erkennt sie.
+Sie können Geräte auch im Device Manager von Android Studio erstellen; die Liste erkennt sie.
 
 ## Ein Gerät löschen
 

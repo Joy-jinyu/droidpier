@@ -22,20 +22,11 @@ The gateway uses these parts of the Android SDK:
 | Component | Used for | Approximate download size |
 |---|---|---|
 | `emulator` | Runs the Android virtual device | about 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | The Android 14 (API 34) system image | about 1.5 GB |
-
-<!-- verify: phase 2 -->
-| Component | Used for | Approximate download size |
-|---|---|---|
-| `platform-tools` | `adb`, to check boot state and stop devices | about 15 MB |
+| `platform-tools` | `adb`, to check boot state and stop devices | about 16 MB |
+| A system image, such as `system-images;android-34;google_apis;arm64-v8a` | The Android system the device runs. Any Android version works; if none is installed, the page offers Android 14 (API 34) | about 1.5 GB |
 
 <!-- verify: phase 3 -->
-| Component | Used for | Approximate download size |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` and `avdmanager`, to install the other parts and create a device | - |
-
-<!-- verify: phase 3 -->
-You do not need to open Android Studio. If you already have the SDK from Android Studio, the gateway uses it. It looks for the SDK in this order:
+You do not need Java, the command line tools (`sdkmanager`, `avdmanager`) or Android Studio: the gateway downloads these parts from Google's SDK repository and creates devices itself. If you already have the SDK from Android Studio, the gateway uses it. It looks for the SDK in this order:
 
 1. The directory in the `ANDROID_HOME` environment variable.
 2. `~/Library/Android/sdk`.

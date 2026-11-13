@@ -1,7 +1,7 @@
 ---
 title: ज़रूरतें
 description: Droidpier इंस्टॉल करने से पहले आपको क्या चाहिए - Apple Silicon वाला Mac, Chrome या Edge, और arm64 सिस्टम इमेज के साथ Android एमुलेटर।
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier आधिकारिक Android एमुलेटर को आपके अपने Mac पर चलाता है और उसे ब्राउज़र के एक टैब में दिखाता है। किसी रिमोट सर्वर पर कुछ नहीं चलता। आप एक छोटा लोकल प्रोग्राम (गेटवे) इंस्टॉल करते हैं, और उसी Mac पर आपको Android एमुलेटर और एक सिस्टम इमेज चाहिए।
@@ -23,20 +23,11 @@ Droidpier आधिकारिक Android एमुलेटर को आप�
 | कंपोनेंट | किसलिए | अनुमानित डाउनलोड साइज़ |
 |---|---|---|
 | `emulator` | Android वर्चुअल डिवाइस चलाता है | लगभग 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | Android 14 (API 34) सिस्टम इमेज | लगभग 1.5 GB |
-
-<!-- verify: phase 2 -->
-| कंपोनेंट | किसलिए | अनुमानित डाउनलोड साइज़ |
-|---|---|---|
-| `platform-tools` | `adb`, बूट की स्थिति जाँचने और डिवाइस बंद करने के लिए | लगभग 15 MB |
+| `platform-tools` | `adb`, बूट की स्थिति जाँचने और डिवाइस बंद करने के लिए | लगभग 16 MB |
+| एक सिस्टम इमेज, जैसे `system-images;android-34;google_apis;arm64-v8a` | डिवाइस पर चलने वाला Android सिस्टम। कोई भी Android वर्ज़न चलेगा; अगर कोई इंस्टॉल नहीं है, तो पेज Android 14 (API 34) देता है | लगभग 1.5 GB |
 
 <!-- verify: phase 3 -->
-| कंपोनेंट | किसलिए | अनुमानित डाउनलोड साइज़ |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` और `avdmanager`, बाकी हिस्से इंस्टॉल करने और डिवाइस बनाने के लिए | - |
-
-<!-- verify: phase 3 -->
-आपको Android Studio खोलने की ज़रूरत नहीं है। अगर आपके पास Android Studio से पहले से SDK है, तो गेटवे उसी का इस्तेमाल करता है। यह SDK को इस क्रम में ढूँढता है:
+आपको Java, कमांड लाइन टूल्स (`sdkmanager`, `avdmanager`) या Android Studio की ज़रूरत नहीं है: गेटवे ये हिस्से Google की SDK रिपॉज़िटरी से डाउनलोड करता है और डिवाइस खुद बनाता है। अगर आपके पास Android Studio से SDK पहले से है, तो गेटवे उसी का इस्तेमाल करता है। वह SDK को इस क्रम में ढूँढता है:
 
 1. `ANDROID_HOME` environment variable में दी गई डायरेक्टरी।
 2. `~/Library/Android/sdk`।

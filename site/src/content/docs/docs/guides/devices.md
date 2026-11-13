@@ -57,9 +57,9 @@ Stopping the gateway does not stop emulators. When you start the gateway again, 
 <!-- verify: phase 3 -->
 Create devices on the page. Use the button for a new device, then pick a device model and an Android version, and give the device a name; the page suggests one. Before anything happens, the page shows the model, the Android version and the memory the device gets. If the system image for that version is not installed yet, the gateway downloads it after you confirm and agree to Google's license.
 
-Creating a device needs the command line tools (`avdmanager`). If they are missing, the dialog offers to install them first. See [First run](/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+Creating a device needs neither Android Studio nor the command line tools: the gateway writes the device files itself, in the format Android Studio uses. See [First run](/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-You can also create devices with `avdmanager` or Android Studio; the list picks them up.
+You can also create devices in Android Studio's Device Manager; the list picks them up.
 
 ## Delete a device
 

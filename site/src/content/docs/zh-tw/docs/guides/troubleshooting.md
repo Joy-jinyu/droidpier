@@ -1,7 +1,7 @@
 ---
 title: 疑難排解
 description: 解決常見問題——Chrome 封鎖本機網路存取、連接埠被佔用、未找到模擬器、頁面無法連線、版本不符。
-sourceHash: b8a54e8a6f0d
+sourceHash: d8eaddc9fa12
 ---
 
 ## Chrome 封鎖了本機網路存取 {#chrome-blocked-local-network-access}
@@ -53,20 +53,17 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 找不到模擬器時，閘道會繼續執行，並列印原因：列印在終端機裡，背景執行時寫在記錄檔裡（`droidpier logs`）。
 
 <!-- verify: phase 3 -->
-如果閘道回報 Android SDK、`emulator`、`platform-tools` 或系統映像缺失，請按照它列印的修復方法操作。請參閱[首次執行](/zh-tw/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
+如果閘道回報缺少 `emulator`、`platform-tools`、系統映像或裝置，請到頁面上完成安裝。請參閱[首次執行](/zh-tw/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
 
-## "sdkmanager" 缺失
+## 裝置的系統映像缺失
 
 <!-- verify: phase 3 -->
-Android Studio 安裝的 SDK 可能不包含 `cmdline-tools`（提供 `sdkmanager` 和 `avdmanager`）。頁面會提供安裝：在缺少項目清單裡它旁邊的安裝按鈕，或在建立裝置的對話框裡。你確認後，閘道會從 Google 下載 22.0 版命令列工具，裝到你的 SDK 中。頁面會完整顯示每份 Google 授權條款，你同意後才會安裝。
+如果你刪除了某個系統映像（例如在 Android Studio 中），使用它的裝置就無法啟動。頁面會列出每台這樣的裝置和它缺少的 Android 版本，並提供重新安裝那個映像。有一台能啟動的裝置就夠了：只要任何一台裝置的系統映像還在，頁面就不再提示。
 
-`sdkmanager` 需要 Java。如果你沒有 Java，請安裝內含 Java 的 Android Studio，或安裝 JDK 17 以上版本，然後重新開啟頁面。
+## 安裝失敗
 
-如果想手動安裝，請從 developer.android.com 下載 Google 命令列工具並解壓縮，確保以下路徑存在：
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+頁面會在該項下方顯示原因。如果下載的檔案與 Google 公布的檢查碼不符，不會解壓縮任何內容；請重新安裝該項。如果一分鐘內沒有收到任何資料，下載會停止；請檢查網路連線後重試。Droidpier 不需要 Java 或命令列工具，所以缺少 `sdkmanager` 不是問題。
 
 ## 頁面無法連線
 

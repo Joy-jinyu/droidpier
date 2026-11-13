@@ -1,7 +1,7 @@
 ---
 title: Premier lancement
 description: Démarrez la passerelle en une commande, laissez-la vérifier l’Android SDK, autorisez l’accès au réseau local dans Chrome et voyez votre émulateur.
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 Exécutez une commande dans Terminal, ouvrez `https://droid.devpier.dev/app/` et autorisez l’accès au réseau local quand Chrome le demande.
@@ -21,27 +21,24 @@ La passerelle écoute sur `127.0.0.1`, port `7300` par défaut. Pour utiliser un
 ## 2. La laisser vérifier votre Android SDK {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-Au démarrage, la passerelle vérifie la présence de l’Android SDK, de `cmdline-tools`, `emulator`, `platform-tools`, de l’image système `system-images;android-34;google_apis;arm64-v8a` et d’au moins un appareil virtuel (AVD). S’il manque quelque chose, elle liste chaque élément dans Terminal avec une commande pour l’installer à la main, et vous invite à terminer la configuration sur la page. Elle ne pose aucune question dans Terminal.
+Au démarrage, la passerelle vérifie qu’un appareil peut démarrer : il lui faut l’émulateur Android (`emulator`), `adb` de `platform-tools`, et au moins un appareil virtuel (AVD) dont l’image système est installée. Toute version d’Android convient. S’il manque quelque chose, elle liste chaque élément dans le Terminal et vous invite à terminer la configuration sur la page. Elle ne pose aucune question dans le Terminal.
 
 Quand la passerelle tourne en arrière-plan, cette liste va dans son journal. Lancez `droidpier logs` pour la voir.
 
 <!-- verify: phase 3 -->
-La page affiche la même liste, avec la taille de téléchargement de chaque élément :
+La page affiche la même liste, avec la taille de téléchargement de chaque élément. Quand un appareil peut démarrer, elle n’affiche rien.
 
 | Manquant | Ce que vous faites sur la page |
 |---|---|
-| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, image système | Installez un élément avec le bouton à côté, ou installez-les tous d’un coup. |
-| Aucun AVD | Créez un appareil : choisissez un modèle d’appareil et une version d’Android. |
-| Java, quand un élément en a besoin | Installez Android Studio, qui inclut Java, ou JDK 17 ou plus récent, puis rouvrez la page. La passerelle n’installe pas Java. |
+| `emulator`, `platform-tools`, image système | Installez un élément avec le bouton à côté, ou installez-les tous d’un coup. Si aucune image système n’est installée, la page propose Android 14 (`system-images;android-34;google_apis;arm64-v8a`). Si l’image système d’un appareil a été supprimée, la page nomme l’appareil et propose cette image. |
+| Aucun appareil | Créez un appareil : choisissez un modèle d’appareil et une version d’Android. Si une image système est déjà installée, la page la propose au lieu de télécharger Android 14. |
+
+Vous n’avez besoin ni de Java ni des outils en ligne de commande (`sdkmanager`, `avdmanager`). La passerelle télécharge chaque élément depuis le dépôt SDK de Google, la même source qu’Android Studio, et crée le dossier du SDK s’il n’existe pas encore.
 
 <!-- verify: phase 3 -->
-Rien n’est téléchargé ni créé tant que vous n’avez pas confirmé sur la page. Avant de commencer, la page indique ce qu’elle va télécharger, où cela sera installé et l’espace disque nécessaire. Pendant l’installation, la page affiche chaque licence Google en entier, et un élément n’est installé que si vous l’acceptez. Les outils en ligne de commande en version 23 ou plus récente peuvent accepter les licences sans demander ; la page vous le signale avant que vous confirmiez.
+Rien n’est téléchargé ni créé tant que vous n’avez pas confirmé sur la page. Avant de commencer, la page indique ce qu’elle va télécharger, où cela sera installé et l’espace disque nécessaire. Avant chaque téléchargement, la page affiche la licence Google en entier, et l’élément n’est installé que si vous l’acceptez. Comme Android Studio, la passerelle enregistre votre accord dans le dossier `licenses` du SDK, et vérifie chaque téléchargement avec la somme de contrôle publiée par Google avant de décompresser quoi que ce soit.
 
-Par exemple, pour installer l’image système à la main :
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+Pour installer un élément vous-même, dépliez la section d’installation manuelle sous cet élément sur la page. Elle indique où le trouver dans Android Studio et où il s’installe.
 
 ## 3. Ouvrir la page {#3-open-the-page}
 

@@ -52,20 +52,17 @@ You can also start a device from the list in the page. See [Devices](/docs/guide
 The gateway keeps running when no emulator is found, and prints the reason: in Terminal, or in its log when it runs in the background (`droidpier logs`).
 
 <!-- verify: phase 3 -->
-If the gateway reports that the Android SDK, `emulator`, `platform-tools` or the system image is missing, follow the fix it prints. See [First run](/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
+If the gateway reports that `emulator`, `platform-tools`, a system image or a device is missing, finish the setup on the page. See [First run](/docs/getting-started/first-run/#2-let-it-check-your-android-sdk).
 
-## "sdkmanager" is missing
+## A device's system image is missing
 
 <!-- verify: phase 3 -->
-An SDK installed by Android Studio may not include `cmdline-tools`, which provides `sdkmanager` and `avdmanager`. The page offers to install it: use the install button next to it in the list of missing items, or in the dialog for creating a device. After you confirm, the gateway downloads command line tools 22.0 from Google into your SDK. The page shows each Google license in full, and installs only if you agree.
+If you removed a system image, for example in Android Studio, the devices that use it cannot start. The page names each of those devices and the Android version it is missing, and offers to install that image again. One device that can start is enough: the page stops asking once any device has its system image.
 
-`sdkmanager` needs Java. If you have none, install Android Studio, which includes Java, or JDK 17 or later, then reopen the page.
+## An install fails
 
-To install the tools by hand instead, download Google's command line tools from developer.android.com and unpack them so that this path exists:
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+The page shows the reason under the item. If a download does not match the checksum Google publishes, nothing is unpacked; install the item again. If no data arrives for a minute, the download stops; check your network connection and try again. Droidpier does not need Java or the command line tools, so a missing `sdkmanager` is not a problem.
 
 ## The page does not connect
 

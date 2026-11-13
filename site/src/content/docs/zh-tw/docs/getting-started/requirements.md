@@ -1,7 +1,7 @@
 ---
 title: 前置需求
 description: 安裝 Droidpier 所需的條件——Apple Silicon Mac、Chrome 或 Edge，以及含有 arm64 系統映像的 Android 模擬器。
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier 在你自己的 Mac 上執行官方 Android 模擬器，並在瀏覽器分頁中顯示。沒有任何內容執行在遠端伺服器上。你需要安裝一個小型本地程式（閘道），以及在同一台 Mac 上安裝 Android 模擬器和系統映像。
@@ -23,20 +23,11 @@ Droidpier 在你自己的 Mac 上執行官方 Android 模擬器，並在瀏覽�
 | 元件 | 用途 | 大致下載大小 |
 |---|---|---|
 | `emulator` | 執行 Android 虛擬裝置 | 約 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | Android 14（API 34）系統映像 | 約 1.5 GB |
-
-<!-- verify: phase 2 -->
-| 元件 | 用途 | 大致下載大小 |
-|---|---|---|
-| `platform-tools` | `adb`，用於檢查啟動狀態和停止裝置 | 約 15 MB |
+| `platform-tools` | `adb`，用於檢查啟動狀態和停止裝置 | 約 16 MB |
+| 系統映像，例如 `system-images;android-34;google_apis;arm64-v8a` | 裝置執行的 Android 系統。任何 Android 版本都可以；一個都沒裝時，頁面會提供 Android 14（API 34） | 約 1.5 GB |
 
 <!-- verify: phase 3 -->
-| 元件 | 用途 | 大致下載大小 |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` 和 `avdmanager`，用於安裝其他元件和建立裝置 | - |
-
-<!-- verify: phase 3 -->
-你不需要開啟 Android Studio。如果你已透過 Android Studio 安裝了 SDK，閘道會直接使用它。查找順序如下：
+你不需要 Java、命令列工具（`sdkmanager`、`avdmanager`）或 Android Studio：閘道會從 Google 的 SDK 存放區下載這些元件，並自行建立裝置。如果你已透過 Android Studio 安裝了 SDK，閘道會直接使用它。尋找順序如下：
 
 1. `ANDROID_HOME` 環境變數指定的目錄。
 2. `~/Library/Android/sdk`。

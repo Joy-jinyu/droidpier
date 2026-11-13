@@ -1,7 +1,7 @@
 ---
 title: トラブルシューティング
 description: よくある問題の解決——Chrome がローカルネットワークアクセスをブロック・ポートが使用中・エミュレーターが見つからない・ページが接続しない・バージョン不一致。
-sourceHash: b8a54e8a6f0d
+sourceHash: d8eaddc9fa12
 ---
 
 ## Chrome がローカルネットワークアクセスをブロックした {#chrome-blocked-local-network-access}
@@ -53,20 +53,17 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7301
 エミュレーターが見つからなくてもゲートウェイは動き続け、理由を表示します。ターミナルに、バックグラウンドで動いているときはログに書きます（`droidpier logs`）。
 
 <!-- verify: phase 3 -->
-ゲートウェイが Android SDK・`emulator`・`platform-tools`・システムイメージの不足を報告した場合は、表示された修正方法に従ってください。[初回起動](/ja/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)を参照してください。
+ゲートウェイが `emulator`・`platform-tools`・システムイメージ・デバイスの不足を報告した場合は、ページで設定を完了してください。[初回起動](/ja/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)を参照してください。
 
-## "sdkmanager" が見つからない
+## デバイスのシステムイメージがない
 
 <!-- verify: phase 3 -->
-Android Studio でインストールした SDK には、`sdkmanager` と `avdmanager` を含む `cmdline-tools` が入っていないことがあります。ページからインストールできます。不足項目の一覧でその横にあるインストールボタンか、デバイス作成のダイアログを使います。確認すると、ゲートウェイが Google からコマンドラインツール 22.0 をダウンロードして SDK に配置します。ページは Google のライセンスを全文表示し、同意した場合にだけインストールします。
+システムイメージを削除すると（Android Studio などで）、それを使うデバイスは起動できなくなります。ページはそのようなデバイスと不足している Android のバージョンを示し、そのイメージを再インストールするよう提案します。起動できるデバイスが 1 台あれば十分で、どれか 1 台のシステムイメージがそろえばページは何も求めなくなります。
 
-`sdkmanager` には Java が必要です。Java がない場合は、Java を含む Android Studio、または JDK 17 以降をインストールしてから、ページを開き直してください。
+## インストールが失敗する
 
-手動でインストールする場合は、developer.android.com から Google のコマンドラインツールをダウンロードし、次のパスが存在するように展開してください。
-
-```text
-<your SDK>/cmdline-tools/latest/bin/sdkmanager
-```
+<!-- verify: phase 3 -->
+ページはその項目の下に理由を表示します。ダウンロードが Google の公開するチェックサムと一致しない場合は何も展開されないので、もう一度インストールしてください。1 分間データが届かない場合はダウンロードが止まるので、ネットワーク接続を確認してやり直してください。Droidpier は Java もコマンドラインツールも使わないため、`sdkmanager` がなくても問題ありません。
 
 ## ページが接続しない
 

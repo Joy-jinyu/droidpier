@@ -1,7 +1,7 @@
 ---
 title: Primeira execução
 description: Inicie o gateway com um único comando, deixe-o verificar o Android SDK, permita o acesso à rede local no Chrome e veja seu emulador no navegador.
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 Execute um comando no Terminal, abra `https://droid.devpier.dev/app/` e permita o acesso à rede local quando o Chrome pedir.
@@ -21,27 +21,24 @@ O gateway escuta em `127.0.0.1`, na porta `7300` por padrão. Para usar outra po
 ## 2. Deixe-o verificar seu Android SDK {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-Ao iniciar, o gateway verifica o Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, a imagem de sistema `system-images;android-34;google_apis;arm64-v8a` e pelo menos um dispositivo virtual (AVD). Se faltar algo, ele lista cada item no Terminal com um comando para instalá-lo manualmente e pede que você termine a configuração na página. Ele não faz perguntas no Terminal.
+Ao iniciar, o gateway verifica se um dispositivo consegue iniciar: ele precisa do emulador do Android (`emulator`), do `adb` do `platform-tools` e de pelo menos um dispositivo virtual (AVD) com a imagem de sistema instalada. Qualquer versão do Android serve. Se algo estiver faltando, ele lista cada item no Terminal e pede que você conclua a configuração na página. Ele não pergunta nada no Terminal.
 
 Quando o gateway roda em segundo plano, essa lista vai para o log dele. Execute `droidpier logs` para vê-la.
 
 <!-- verify: phase 3 -->
-A página mostra a mesma lista, com o tamanho do download de cada item:
+A página mostra a mesma lista, com o tamanho do download de cada item. Quando um dispositivo consegue iniciar, ela não mostra nada.
 
 | Faltando | O que você faz na página |
 |---|---|
-| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, imagem de sistema | Instale um item com o botão ao lado dele, ou instale todos de uma vez. |
-| Nenhum AVD | Crie um dispositivo: escolha um modelo de dispositivo e uma versão do Android. |
-| Java, quando um item precisa dele | Instale o Android Studio, que inclui Java, ou o JDK 17 ou mais recente, e depois reabra a página. O gateway não instala Java. |
+| `emulator`, `platform-tools`, imagem de sistema | Instale um item com o botão ao lado dele, ou instale todos de uma vez. Se nenhuma imagem de sistema estiver instalada, a página oferece o Android 14 (`system-images;android-34;google_apis;arm64-v8a`). Se a imagem de sistema de um dispositivo foi removida, a página diz qual é o dispositivo e oferece essa imagem. |
+| Nenhum dispositivo | Crie um dispositivo: escolha um modelo de dispositivo e uma versão do Android. Se já houver uma imagem de sistema instalada, a página a sugere em vez de baixar o Android 14. |
+
+Você não precisa de Java nem das ferramentas de linha de comando (`sdkmanager`, `avdmanager`). O gateway baixa cada parte do repositório do SDK do Google, a mesma fonte que o Android Studio usa, e cria a pasta do SDK se ela ainda não existir.
 
 <!-- verify: phase 3 -->
-Nada é baixado ou criado até você confirmar na página. Antes de começar, a página mostra o que vai baixar, onde vai instalar e quanto espaço em disco é necessário. Durante a instalação, a página mostra cada licença do Google por completo, e um item só é instalado se você concordar. As ferramentas de linha de comando na versão 23 ou mais recente podem aceitar as licenças sem perguntar; a página avisa antes de você confirmar.
+Nada é baixado ou criado até você confirmar na página. Antes de começar, a página mostra o que vai baixar, onde vai instalar e quanto espaço em disco é necessário. Antes de cada download, a página mostra a licença do Google por completo, e o item só é instalado se você concordar. Como o Android Studio, o gateway registra sua concordância na pasta `licenses` do SDK e confere cada download com a soma de verificação publicada pelo Google antes de descompactar qualquer coisa.
 
-Por exemplo, para instalar a imagem de sistema manualmente:
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+Para instalar um item você mesmo, expanda a seção de instalação manual abaixo dele na página. Ela diz onde encontrar o item no Android Studio e onde ele é instalado.
 
 ## 3. Abra a página {#3-open-the-page}
 

@@ -1,7 +1,7 @@
 ---
 title: 動作要件
 description: Droidpier のインストールに必要なもの——Apple Silicon Mac、Chrome または Edge、arm64 システムイメージ入りの Android エミュレーター。
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier はあなた自身の Mac 上で公式 Android エミュレーターを動かし、ブラウザのタブに表示します。リモートサーバーでは何も動きません。小さなローカルプログラム（ゲートウェイ）をインストールし、同じ Mac に Android エミュレーターとシステムイメージが必要です。
@@ -23,20 +23,11 @@ Droidpier はあなた自身の Mac 上で公式 Android エミュレーター�
 | コンポーネント | 用途 | おおよそのダウンロードサイズ |
 |---|---|---|
 | `emulator` | Android 仮想デバイスを実行する | 約 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | Android 14（API 34）システムイメージ | 約 1.5 GB |
-
-<!-- verify: phase 2 -->
-| コンポーネント | 用途 | おおよそのダウンロードサイズ |
-|---|---|---|
-| `platform-tools` | `adb`（起動状態の確認とデバイスの停止に使用） | 約 15 MB |
+| `platform-tools` | `adb`（起動状態の確認とデバイスの停止に使用） | 約 16 MB |
+| システムイメージ（例: `system-images;android-34;google_apis;arm64-v8a`） | デバイスで動く Android システム。Android のバージョンは問いません。1 つも入っていない場合、ページは Android 14（API 34）を提案します | 約 1.5 GB |
 
 <!-- verify: phase 3 -->
-| コンポーネント | 用途 | おおよそのダウンロードサイズ |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` と `avdmanager`（他のコンポーネントのインストールとデバイス作成に使用） | - |
-
-<!-- verify: phase 3 -->
-Android Studio を開く必要はありません。すでに Android Studio から SDK をインストール済みの場合、ゲートウェイはそれを使用します。SDK の検索順序は次のとおりです。
+Java、コマンドラインツール（`sdkmanager`、`avdmanager`）、Android Studio は不要です。ゲートウェイがこれらを Google の SDK リポジトリからダウンロードし、デバイスも自分で作成します。Android Studio で入れた SDK がすでにあれば、ゲートウェイはそれを使います。SDK は次の順で探します。
 
 1. `ANDROID_HOME` 環境変数で指定したディレクトリ。
 2. `~/Library/Android/sdk`。

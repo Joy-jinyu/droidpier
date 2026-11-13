@@ -1,7 +1,7 @@
 ---
 title: 设备
 description: 列出 Android 虚拟设备，从页面启动和停止它们，并接管已在运行的模拟器。
-sourceHash: 6eaf456bc1f3
+sourceHash: 160631b5e5d9
 ---
 
 这里的设备是指 Mac 上的 Android 虚拟设备（AVD）。页面每次显示一个设备。
@@ -58,9 +58,9 @@ emulator -avd <name> -no-window -grpc <port> -no-boot-anim -gpu host
 <!-- verify: phase 3 -->
 在页面上创建设备。用新建设备的按钮，选择设备型号和 Android 版本，再给设备起个名字（页面会建议一个）。开始之前，页面会显示设备的型号、Android 版本和内存。如果该版本的系统镜像还没安装，网关会在你确认并同意 Google 许可证后下载它。
 
-创建设备需要命令行工具（`avdmanager`）。如果缺少，对话框会先提供安装。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
+创建设备既不需要 Android Studio，也不需要命令行工具：网关会按 Android Studio 使用的格式自己写设备文件。请参阅[首次运行](/zh-cn/docs/getting-started/first-run/#2-let-it-check-your-android-sdk)。
 
-你也可以使用 `avdmanager` 或 Android Studio 创建设备；列表会自动识别它们。
+你也可以在 Android Studio 的 Device Manager 中创建设备；列表会自动识别它们。
 
 ## 删除设备
 

@@ -1,7 +1,7 @@
 ---
 title: 首次运行
 description: 用一条命令启动网关，让它检查 Android SDK，在 Chrome 中允许本地网络访问，然后在浏览器中查看你的模拟器。
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 在终端中运行一条命令，打开 `https://droid.devpier.dev/app/`，并在 Chrome 询问时允许访问本地网络。
@@ -21,27 +21,24 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 ## 2. 让网关检查 Android SDK {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-启动时，网关会检查 Android SDK、`cmdline-tools`、`emulator`、`platform-tools`、系统镜像 `system-images;android-34;google_apis;arm64-v8a`，以及至少一个虚拟设备（AVD）。如果缺少某项，它会在终端中逐项列出，并附上手动安装的命令，然后提示你到页面上完成安装。它不会在终端中提问。
+启动时，网关会检查能否启动一台设备：需要 Android 模拟器（`emulator`）、`platform-tools` 里的 `adb`，以及至少一个已装好系统镜像的虚拟设备（AVD）。任何 Android 版本都可以。如果缺少某项，它会在终端中逐项列出，并提示你到页面上完成安装。它不会在终端中提问。
 
 网关在后台运行时，这份清单写在它的日志里。运行 `droidpier logs` 查看。
 
 <!-- verify: phase 3 -->
-页面会显示同样的清单，并标出每项的下载大小：
+页面会显示同样的清单，并标出每项的下载大小。能启动设备时，页面不显示这份清单。
 
 | 缺失项 | 你在页面上要做的 |
 |---|---|
-| Android SDK、`cmdline-tools`、`emulator`、`platform-tools`、系统镜像 | 用某项旁边的按钮单独安装，或一次全部安装。 |
-| 无 AVD | 创建设备：选择设备型号和 Android 版本。 |
-| Java（某项需要时） | 安装自带 Java 的 Android Studio，或安装 JDK 17 及以上版本，然后重新打开页面。网关不会安装 Java。 |
+| `emulator`、`platform-tools`、系统镜像 | 用某项旁边的按钮单独安装，或一次全部安装。如果一个系统镜像都没装，页面会提供 Android 14（`system-images;android-34;google_apis;arm64-v8a`）。如果某台设备的系统镜像被删除了，页面会指出是哪台设备，并提供那个镜像。 |
+| 没有设备 | 创建设备：选择设备型号和 Android 版本。如果已经装了系统镜像，页面会建议用它，而不是下载 Android 14。 |
+
+你不需要 Java 或命令行工具（`sdkmanager`、`avdmanager`）。网关从 Google 的 SDK 仓库下载每个组件，这也是 Android Studio 使用的来源；SDK 目录还不存在时，网关会自己创建。
 
 <!-- verify: phase 3 -->
-在你于页面上确认之前，不会下载或创建任何内容。开始前，页面会显示要下载什么、装到哪里、需要多少磁盘空间。安装过程中，页面会完整显示每份 Google 许可证，你同意后才会安装该项。23 及以上版本的命令行工具可能不询问就接受许可证；页面会在你确认前告诉你。
+在你于页面上确认之前，不会下载或创建任何内容。开始前，页面会显示要下载什么、装到哪里、需要多少磁盘空间。每次下载前，页面会完整显示 Google 的许可证，你同意后才会安装该项。网关会像 Android Studio 一样把你的同意记在 SDK 的 `licenses` 目录里，并在解压之前用 Google 公布的校验值检查每个下载。
 
-例如，手动安装系统镜像：
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+如果想自己安装某项，在页面上展开它下面的手动安装部分。那里写着在 Android Studio 里去哪找这一项，以及它装到哪里。
 
 ## 3. 打开页面 {#3-open-the-page}
 

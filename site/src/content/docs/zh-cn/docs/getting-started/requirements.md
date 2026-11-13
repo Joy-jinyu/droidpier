@@ -1,7 +1,7 @@
 ---
 title: 前置要求
 description: 安装 Droidpier 所需的条件——Apple Silicon Mac、Chrome 或 Edge，以及带有 arm64 系统镜像的 Android 模拟器。
-sourceHash: a1a9610ae52d
+sourceHash: 39e85ecc70b3
 ---
 
 Droidpier 在你自己的 Mac 上运行官方 Android 模拟器，并在浏览器标签页中显示。没有任何内容运行在远程服务器上。你需要安装一个小型本地程序（网关），以及在同一台 Mac 上安装 Android 模拟器和系统镜像。
@@ -23,20 +23,11 @@ Droidpier 在你自己的 Mac 上运行官方 Android 模拟器，并在浏览�
 | 组件 | 用途 | 大致下载大小 |
 |---|---|---|
 | `emulator` | 运行 Android 虚拟设备 | 约 400 MB |
-| `system-images;android-34;google_apis;arm64-v8a` | Android 14（API 34）系统镜像 | 约 1.5 GB |
-
-<!-- verify: phase 2 -->
-| 组件 | 用途 | 大致下载大小 |
-|---|---|---|
-| `platform-tools` | `adb`，用于检查启动状态和停止设备 | 约 15 MB |
+| `platform-tools` | `adb`，用于检查启动状态和停止设备 | 约 16 MB |
+| 系统镜像，例如 `system-images;android-34;google_apis;arm64-v8a` | 设备运行的 Android 系统。任何 Android 版本都可以；一个都没装时，页面会提供 Android 14（API 34） | 约 1.5 GB |
 
 <!-- verify: phase 3 -->
-| 组件 | 用途 | 大致下载大小 |
-|---|---|---|
-| `cmdline-tools` | `sdkmanager` 和 `avdmanager`，用于安装其他组件和创建设备 | - |
-
-<!-- verify: phase 3 -->
-你不需要打开 Android Studio。如果你已通过 Android Studio 安装了 SDK，网关会直接使用它。查找顺序如下：
+你不需要 Java、命令行工具（`sdkmanager`、`avdmanager`）或 Android Studio：网关会从 Google 的 SDK 仓库下载这些组件，并自己创建设备。如果你已通过 Android Studio 安装了 SDK，网关会直接使用它。查找顺序如下：
 
 1. `ANDROID_HOME` 环境变量指定的目录。
 2. `~/Library/Android/sdk`。

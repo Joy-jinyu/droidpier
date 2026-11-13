@@ -1,7 +1,7 @@
 ---
 title: Erster Start
 description: Starten Sie das Gateway mit einem Befehl, lassen Sie es das Android SDK prüfen, erlauben Sie den Zugriff auf das lokale Netzwerk in Chrome und sehen Sie Ihren Emulator.
-sourceHash: 7b613962f696
+sourceHash: c1c836eb6e73
 ---
 
 Führen Sie einen Befehl im Terminal aus, öffnen Sie `https://droid.devpier.dev/app/` und erlauben Sie den Zugriff auf das lokale Netzwerk, wenn Chrome fragt.
@@ -21,27 +21,24 @@ Das Gateway lauscht auf `127.0.0.1`, standardmäßig auf Port `7300`. Wie Sie ei
 ## 2. Android SDK prüfen lassen {#2-let-it-check-your-android-sdk}
 
 <!-- verify: phase 3 -->
-Beim Start prüft das Gateway, ob das Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, das Systemabbild `system-images;android-34;google_apis;arm64-v8a` und mindestens ein virtuelles Gerät (AVD) vorhanden sind. Fehlt etwas, listet es jedes Element im Terminal mit einem Befehl zur manuellen Installation auf und bittet Sie, die Einrichtung auf der Seite abzuschließen. Im Terminal stellt es keine Fragen.
+Beim Start prüft das Gateway, ob ein Gerät starten kann: Dazu braucht es den Android-Emulator (`emulator`), `adb` aus `platform-tools` und mindestens ein virtuelles Gerät (AVD), dessen Systemabbild installiert ist. Jede Android-Version geht. Fehlt etwas, listet es jedes Element im Terminal auf und fordert Sie auf, die Einrichtung auf der Seite abzuschließen. Im Terminal fragt es nichts.
 
 Läuft das Gateway im Hintergrund, steht diese Liste in seinem Log. Mit `droidpier logs` sehen Sie sie.
 
 <!-- verify: phase 3 -->
-Die Seite zeigt dieselbe Liste, mit der Downloadgröße jedes Elements:
+Die Seite zeigt dieselbe Liste, mit der Downloadgröße jedes Elements. Kann ein Gerät starten, zeigt sie nichts.
 
 | Fehlt | Was Sie auf der Seite tun |
 |---|---|
-| Android SDK, `cmdline-tools`, `emulator`, `platform-tools`, Systemabbild | Installieren Sie ein Element mit der Schaltfläche daneben oder alle auf einmal. |
-| Kein AVD | Erstellen Sie ein Gerät: Wählen Sie ein Gerätemodell und eine Android-Version. |
-| Java, wenn ein Element es braucht | Installieren Sie Android Studio, das Java mitbringt, oder JDK 17 oder neuer, und öffnen Sie die Seite dann erneut. Das Gateway installiert Java nicht. |
+| `emulator`, `platform-tools`, Systemabbild | Installieren Sie ein Element mit der Schaltfläche daneben oder alle auf einmal. Ist kein Systemabbild installiert, bietet die Seite Android 14 an (`system-images;android-34;google_apis;arm64-v8a`). Wurde das Systemabbild eines Geräts entfernt, nennt die Seite das Gerät und bietet dieses Abbild an. |
+| Kein Gerät | Erstellen Sie ein Gerät: Wählen Sie ein Gerätemodell und eine Android-Version. Ist bereits ein Systemabbild installiert, schlägt die Seite es vor, statt Android 14 herunterzuladen. |
+
+Sie brauchen weder Java noch die Befehlszeilentools (`sdkmanager`, `avdmanager`). Das Gateway lädt jeden Teil aus Googles SDK-Repository, derselben Quelle, die Android Studio nutzt, und legt den SDK-Ordner an, falls er noch nicht existiert.
 
 <!-- verify: phase 3 -->
-Es wird nichts heruntergeladen oder erstellt, bevor Sie auf der Seite bestätigen. Vorher zeigt die Seite, was heruntergeladen wird, wohin es kommt und wie viel Speicherplatz es braucht. Während der Installation zeigt die Seite jede Google-Lizenz vollständig an, und ein Element wird nur installiert, wenn Sie zustimmen. Befehlszeilentools ab Version 23 akzeptieren die Lizenzen möglicherweise ohne Nachfrage; darauf weist die Seite hin, bevor Sie bestätigen.
+Es wird nichts heruntergeladen oder erstellt, bevor Sie auf der Seite bestätigen. Vorher zeigt die Seite, was heruntergeladen wird, wohin es kommt und wie viel Speicherplatz es braucht. Vor jedem Download zeigt die Seite die Lizenz von Google vollständig an, und das Element wird nur installiert, wenn Sie zustimmen. Das Gateway hält Ihre Zustimmung wie Android Studio im Ordner `licenses` des SDK fest und prüft jeden Download vor dem Entpacken gegen die Prüfsumme, die Google veröffentlicht.
 
-Zum Beispiel, um das Systemabbild manuell zu installieren:
-
-```sh
-sdkmanager "system-images;android-34;google_apis;arm64-v8a"
-```
+Wenn Sie ein Element lieber selbst installieren, klappen Sie auf der Seite den Abschnitt zur manuellen Installation darunter auf. Dort steht, wo Sie das Element in Android Studio finden und wohin es kommt.
 
 ## 3. Seite öffnen {#3-open-the-page}
 

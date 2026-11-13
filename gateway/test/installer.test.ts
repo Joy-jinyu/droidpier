@@ -6,7 +6,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
-import { createInstaller, fetchWithIdle, type InstallerDeps, type Licence, type Progress } from "../src/installer.ts";
+import { createInstaller, fetchWithIdle, replaceDir, type InstallerDeps, type Licence, type Progress } from "../src/installer.ts";
 import { licenceHashes } from "../src/sdk-repo.ts";
 import { H, REPO, SYS_IMG } from "./fixtures/repo-manifests.ts";
 
@@ -205,6 +205,29 @@ test("emulator：下 macOS aarch64 的包；已有的残缺 emulator 目录换�
   assert.ok(f.fetches.includes(`${BASE}emulator-darwin_aarch64-16740729.zip`));
   assert.equal(existsSync(join(f.sdk, "emulator/emulator")), true);
   assert.equal(existsSync(join(f.sdk, "emulator/lib/old")), false);
+});
+
+test("replaceDir：新目录换不过去时，旧的包目录放回原处", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "emu-replace-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const [src, target, parking] = ["new", "emulator", "old"].map((n) => join(root, n));
+  await mkdir(src);
+  await writeFile(join(src, "emulator"), "new");
+  await mkdir(target);
+  await writeFile(join(target, "emulator"), "old");
+  const { rename } = await import("node:fs/promises");
+  let calls = 0;
+  const failSecond = async (a: string, b: string) => {
+    if (++calls === 2) throw new Error("EXDEV");
+    await rename(a, b);
+  };
+  await assert.rejects(replaceDir(src, target, parking, failSecond), /EXDEV/);
+  assert.equal(await readFile(join(target, "emulator"), "utf8"), "old");
+  assert.equal(existsSync(parking), false);
+  // 正常时换成新的，旧的留在 parking 由调用方删
+  await replaceDir(src, target, parking);
+  assert.equal(await readFile(join(target, "emulator"), "utf8"), "new");
+  assert.equal(await readFile(join(parking, "emulator"), "utf8"), "old");
 });
 
 test("系统镜像：读它那份清单，装到 system-images/android-34/google_apis/arm64-v8a，许可证是 arm-dbt", async (t) => {

@@ -46,6 +46,21 @@ class StepError extends Error {}
 const PACKAGES: Record<string, string> = { emulator: "emulator", "platform-tools": "platform-tools" };
 const exists = (p: string) => access(p).then(() => true, () => false);
 
+/**
+ * 把 src 换到 target：已有的 target 先挪到 parking（调用方装好后删），新目录换不过去时把它挪回 target，
+ * 不会因为换失败丢了原来能用的包。
+ */
+export async function replaceDir(src: string, target: string, parking: string, mv = rename): Promise<void> {
+  const had = await exists(target);
+  if (had) await mv(target, parking);
+  try {
+    await mv(src, target);
+  } catch (e) {
+    if (had) await mv(parking, target);
+    throw e;
+  }
+}
+
 export function createInstaller(deps: InstallerDeps): Installer {
   // 正在等页面回答的许可证；id 跨轮次递增，页面的回答必须带着它
   let waiting: { id: number; answer: (yes: boolean) => void } | null = null;
@@ -103,7 +118,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
 
   /**
    * 装一个 SDK 包：读清单 → 许可证 → 下载（只走 https）→ 校验 sha1 → 解压到临时目录 → 写 package.xml → 换到 <sdk>/<包目录>。
-   * 临时目录在 SDK 里（和目标同一块盘，rename 是原子的），结束后删掉；已有的目标目录（残缺的）先挪走，装好后删掉。
+   * 临时目录在 SDK 里（和目标同一块盘，rename 是原子的），结束后删掉；已有的目标目录（残缺的）先挪进临时目录，换成功后随临时目录删掉。
    */
   const installPackage = async (id: string, pkgPath: string, emit: (p: Progress) => void, onLicense?: (l: Licence) => void) => {
     const manifestUrl = manifestUrlFor(pkgPath);
@@ -133,8 +148,7 @@ export function createInstaller(deps: InstallerDeps): Installer {
       emit({ id, phase: "install", logTail: `装到 ${target}` });
       await writeFile(join(src, "package.xml"), pkg.packageXml);
       await mkdir(dirname(target), { recursive: true });
-      if (await exists(target)) await rename(target, join(tmp, "old"));
-      await rename(src, target);
+      await replaceDir(src, target, join(tmp, "old"));
       emit({ id, phase: "done", logTail: `已装 ${pkgPath} ${pkg.revision} 到 ${target}` });
     } finally {
       await rm(tmp, { recursive: true, force: true });

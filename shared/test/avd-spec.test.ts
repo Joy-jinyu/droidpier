@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { avdNameError, createItems, defaultAvdName, pickDefaultImage, ramMbFor } from "../avd-spec.ts";
+import { avdNameError, createItems, DISPLAY_NAME_MAX, displayNameError, defaultAvdName, pickDefaultImage, ramMbFor } from "../avd-spec.ts";
 import { spaceCheck } from "../disk-space.ts";
 import { parseClientMsg, type SystemImage } from "../protocol.ts";
 
@@ -61,4 +61,12 @@ test("协议：catalog 和 createAvd", () => {
   );
   assert.equal(parseClientMsg(JSON.stringify({ t: "createAvd", name: "a", device: "pixel_5" })), null);
   assert.equal(parseClientMsg(JSON.stringify({ t: "createAvd", name: 1, device: "pixel_5", image: "x" })), null);
+});
+
+test("displayNameError：空名字、控制字符、太长都给原因，正常的中文名能用", () => {
+  assert.equal(displayNameError("测试机 (Pixel 7)"), null);
+  assert.match(displayNameError("   ")!, /请输入名称/);
+  assert.match(displayNameError("a\nb")!, /控制字符/);
+  assert.match(displayNameError("x".repeat(DISPLAY_NAME_MAX + 1))!, /最多/);
+  assert.equal(displayNameError("测".repeat(DISPLAY_NAME_MAX)), null);
 });

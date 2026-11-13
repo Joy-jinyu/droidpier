@@ -22,6 +22,18 @@ export function avdNameError(name: string, existing: string[]): string | null {
   return same ? `已有同名设备 ${same}` : null;
 }
 
+/** 显示名的长度上限（字符）：侧栏一行放得下，再长也看不全。 */
+export const DISPLAY_NAME_MAX = 50;
+
+/** 显示名不能用时的原因；能用返回 null。它是 config.ini 里的一行，所以不能有换行等控制字符。 */
+export function displayNameError(name: string): string | null {
+  const t = name.trim();
+  if (t === "") return "请输入名称";
+  if (/[\u0000-\u001f\u007f]/.test(name)) return "名称里不能有换行等控制字符";
+  if ([...t].length > DISPLAY_NAME_MAX) return `名称最多 ${DISPLAY_NAME_MAX} 个字`;
+  return null;
+}
+
 /** 新设备的内存（MB）：低于 API 28 的镜像用 2048，其余 4096。 */
 export function ramMbFor(apiLevel: number): number {
   return apiLevel < 28 ? 2048 : 4096;

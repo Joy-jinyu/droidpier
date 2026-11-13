@@ -454,8 +454,9 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
   let job: any = null;
   let resolve!: (r: any) => void;
   let reject!: (e: Error) => void;
+  let displayName: string | undefined;
   const ops: AvdOps = {
-    list: async () => [{ name: "A", running: "no" }],
+    list: async () => [{ name: "A", running: "no", ...(displayName ? { displayName } : {}) }],
     start: (name) => {
       calls.push(`start ${name}`);
       if (job && job.name === name && job.progress === "booting") return job;
@@ -467,6 +468,10 @@ function fakeAvd(sessions: Record<string, FakeSession>) {
     use: async (name) => {
       calls.push(`use ${name}`);
       return sessions[name] ?? null;
+    },
+    rename: async (name, d) => {
+      if (name !== "A") throw new Error(`没有这个设备：${name}`);
+      displayName = d;
     },
   };
   return {
@@ -493,6 +498,34 @@ test("avds 返回 AVD 列表", async (t) => {
   c.ws.send(JSON.stringify({ t: "avds" }));
   await until(() => c.msgs.some((m) => m.t === "avds"));
   assert.deepEqual(c.msgs.find((m) => m.t === "avds"), { t: "avds", list: [{ name: "A", running: "no" }] });
+});
+
+test("renameAvd：回复成功，所有连接都收到带新显示名的 avds", async (t) => {
+  const f = fakeAvd({});
+  const { connect } = await setup(t, new FakeSession(), undefined, f.ops);
+  const a = await connect();
+  const b = await connect();
+  hello(a);
+  hello(b);
+  await until(() => a.msgs.length > 0 && b.msgs.length > 0);
+  a.ws.send(JSON.stringify({ t: "renameAvd", rid: 7, name: "A", displayName: "测试机" }));
+  await until(() => a.msgs.some((m) => m.t === "renameAvd") && b.msgs.some((m) => m.t === "avds"));
+  assert.deepEqual(a.msgs.find((m) => m.t === "renameAvd"), { t: "renameAvd", rid: 7, ok: true });
+  assert.deepEqual(b.msgs.find((m) => m.t === "avds"), { t: "avds", list: [{ name: "A", running: "no", displayName: "测试机" }] });
+  assert.equal(b.msgs.some((m) => m.t === "renameAvd"), false);
+});
+
+test("renameAvd：失败时回复原因，不广播 avds", async (t) => {
+  const f = fakeAvd({});
+  const { connect } = await setup(t, new FakeSession(), undefined, f.ops);
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.length > 0);
+  c.ws.send(JSON.stringify({ t: "renameAvd", rid: 8, name: "B", displayName: "x" }));
+  await until(() => c.msgs.some((m) => m.t === "renameAvd"));
+  assert.deepEqual(c.msgs.find((m) => m.t === "renameAvd"), { t: "renameAvd", rid: 8, ok: false, error: "没有这个设备：B" });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(c.msgs.some((m) => m.t === "avds"), false);
 });
 
 test("start：所有连接收到 booting 和 boot 进度；就绪后切到新会话，每个连接重新收到 ready 并订阅新画面", async (t) => {

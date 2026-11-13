@@ -9,6 +9,7 @@ import { deviceFrame } from "../shared/screen";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
 import { foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
+import { setupCardShown } from "./setup-card";
 
 type State =
   | "connecting" | "connected" | "no-emulator" | "emulator-closed" | "booting" | "rebooting" | "disconnected"
@@ -432,11 +433,14 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
       style={{ width: 560, maxWidth: "100%", gap: 10, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.warn }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <Text role="header" style={{ color: C.text, fontSize: 14, fontWeight: "bold" }}>环境检查</Text>
-        <If when={props.env.missing.length > 0} else={<If when={!busy()}><Btn label="收起" onPress={props.onDismiss} /></If>}>
-          <If when={installable().length > 0}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <If when={props.env.missing.length > 0 && installable().length > 0}>
             <Btn label={`全部安装（${sizeText(total())}）`} disabled={busy() || noJava()} onPress={() => props.onInstall({ ids: installable(), kind: "install" })} />
           </If>
-        </If>
+          <If when={!busy()}>
+            <Btn label="收起" onPress={props.onDismiss} />
+          </If>
+        </View>
       </View>
       <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>
         {props.env.missing.length > 0
@@ -885,8 +889,8 @@ function App() {
   const showSetup = () => {
     const e = env();
     if (!e) return null;
-    if (!e.ok || setupBusy() || installs().some((p) => p.phase === "failed")) return e;
-    return installs().length > 0 && !setupDismissed() ? e : null;
+    const failed = installs().some((p) => p.phase === "failed");
+    return setupCardShown({ ok: e.ok, busy: setupBusy(), failed, hasInstalls: installs().length > 0, dismissed: setupDismissed() }) ? e : null;
   };
   const startInstall = () => {
     const c = confirm();

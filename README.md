@@ -76,7 +76,7 @@ rm ~/.local/bin/droidpier
 rm -r ~/.local/share/droidpier ~/Library/Logs/Droidpier
 ```
 
-If `droidpier` is already deleted but the background gateway still runs or starts at login, remove it by hand:
+Quitting or killing the background gateway is not enough: it starts again. If `droidpier` is already deleted but the background gateway still runs or starts at login, remove it by hand:
 
 ```sh
 launchctl bootout gui/$(id -u)/dev.devpier.droidpier

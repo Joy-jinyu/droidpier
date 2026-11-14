@@ -11,6 +11,13 @@ test("清理完成后以 0 退出", async () => {
   assert.deepEqual(codes, [0]);
 });
 
+test("给了退出码就用它退出：后台服务被关掉时要让 launchd 拉起来", async () => {
+  const codes: number[] = [];
+  const onSignal = exitHandler({ cleanup: async () => {}, exit: (c) => void codes.push(c), code: 143, timeoutMs: 1000, log: () => {} });
+  await onSignal();
+  assert.deepEqual(codes, [143]);
+});
+
 test("清理卡住：到时限直接退出", async () => {
   const codes: number[] = [];
   const onSignal = exitHandler({ cleanup: () => new Promise(() => {}), exit: (c) => void codes.push(c), timeoutMs: 50, log: () => {} });

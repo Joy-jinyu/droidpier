@@ -1,4 +1,4 @@
-// 后台运行：用当前用户的 LaunchAgent（launchd）跑网关，关闭终端不影响，登录后自动启动，崩溃后自动拉起
+// 后台运行：用当前用户的 LaunchAgent（launchd）跑网关，关闭终端不影响，登录后自动启动，崩溃或被关掉后自动拉起（droidpier stop 才停）
 import { execFile } from "node:child_process";
 import { copyFile, mkdir, readFile, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -47,7 +47,10 @@ export type ServiceDeps = {
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const unesc = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
-/** LaunchAgent 的 plist。KeepAlive.SuccessfulExit=false：崩溃（非 0 退出、被杀）后重启，正常退出不重启。 */
+/**
+ * LaunchAgent 的 plist。KeepAlive.SuccessfulExit=false：崩溃（非 0 退出、被杀）后重启，正常退出不重启。
+ * 后台服务收到退出信号时按非 0 退出（gateway/src/main.ts），所以被关掉也会重启；端口被占时按正常退出，launchd 不会每 10 秒重试。
+ */
 export function plistXml(o: { label: string; program: string[]; args: string[]; logPath: string; env: Record<string, string> }): string {
   const str = (s: string) => `<string>${esc(s)}</string>`;
   const env = { PATH: SERVICE_PATH, ...o.env };

@@ -182,6 +182,8 @@ if (!env.ok) {
 }
 if (!noOpen) openBrowser(pageUrl, (e) => console.log(`打开浏览器失败：${e.message}`));
 
+/** 后台服务收到退出信号后的退出码：128 + SIGTERM(15)，shell 里被信号杀掉的惯例。 */
+const SIGNAL_EXIT_CODE = 143;
 const onSignal = exitHandler({
   cleanup: async () => {
     // 正在进行的下载和解压不能留在网关后面
@@ -193,6 +195,9 @@ const onSignal = exitHandler({
     await new Promise((r) => setTimeout(r, 200));
   },
   exit: (code) => process.exit(code),
+  // 后台服务被 kill、在活动监视器里退出时按非 0 退出，launchd 照崩溃处理、把它拉起来（KeepAlive.SuccessfulExit=false）；
+  // droidpier stop 用 launchctl bootout：launchd 先卸下服务再发 SIGTERM，这时退出码不起作用
+  code: service ? SIGNAL_EXIT_CODE : 0,
   timeoutMs: 3000,
   log: (s) => console.log(s),
 });

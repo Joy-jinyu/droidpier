@@ -5,6 +5,8 @@
 export function exitHandler(opts: {
   cleanup: () => Promise<void>;
   exit: (code: number) => void;
+  /** 清理完（或超时）后的退出码，默认 0。 */
+  code?: number;
   timeoutMs: number;
   log: (s: string) => void;
 }): () => Promise<void> {
@@ -24,6 +26,6 @@ export function exitHandler(opts: {
     );
     if ((await Promise.race([done, timeout])) === "timeout") opts.log(`退出清理超过 ${opts.timeoutMs}ms，直接退出`);
     clearTimeout(timer);
-    opts.exit(0);
+    opts.exit(opts.code ?? 0);
   };
 }

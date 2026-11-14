@@ -19,6 +19,8 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 
 这条命令第一次运行时安装，有新版时更新，然后用 `droidpier start` 在后台启动（当前用户的 LaunchAgent `dev.devpier.droidpier`）：关闭终端不影响，开机后自动启动，已在运行时重启它换上新版本。停止：`droidpier stop`（开机也不再启动）；查看状态：`droidpier status`；日志：`droidpier logs`（`~/Library/Logs/Droidpier/droidpier.log`）。参数原样传给 `droidpier start` 并存进后台服务：`curl -fsSL https://droid.devpier.dev/install.sh | sh -s -- --port 7306`；只装不启动：`curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_NO_START=1 sh`；像以前一样在这个终端里前台运行：`curl -fsSL https://droid.devpier.dev/install.sh | DROIDPIER_FOREGROUND=1 sh`。
 
+后台运行的网关每小时取一次 `/download/droidpier-darwin-arm64.tar.xz.sha256`，和 install.sh 记下的比；有新版就下载、校验、试运行（`--version`），换掉 `~/.local/bin/droidpier`，等没有页面连着、没有在开机或安装时退出，launchd 用新文件拉起来（`gateway/src/self-update.ts`）。不想自动更新：`droidpier start --no-auto-update`。前台运行和从源码运行不自动更新。
+
 `DROIDPIER_SERVICE_LABEL` 只给测试用：换一个 label（plist 和日志文件名跟着换），在本机试后台服务时不碰正式的 `dev.devpier.droidpier`。
 
 在 Chrome 或 Edge 里打开 https://droid.devpier.dev/app/，Chrome 弹出访问本地网络的权限框时点"允许"。

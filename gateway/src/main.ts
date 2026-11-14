@@ -6,7 +6,7 @@ import { startServer } from "./server.ts";
 import { deleteAvd, listAvds, renameAvd } from "./avd.ts";
 import { startAvd, stopAvd } from "./lifecycle.ts";
 import { cachedSession } from "./session-cache.ts";
-import { avdHome, serviceLogPath, discoveryDir, emulatorBin, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
+import { avdHome, installedPaths, serviceLogPath, discoveryDir, emulatorBin, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
@@ -18,6 +18,7 @@ import { connectCdp } from "./cdp.ts";
 import { adb, killAdbChildren } from "./adb.ts";
 import { waitForReboot } from "./reboot.ts";
 import { exitHandler } from "./exit.ts";
+import { createUpdater, realUpdateDeps } from "./self-update.ts";
 import { allowedOrigins, PUBLIC_ORIGIN } from "./auth.ts";
 import { buildPageUrl } from "./page-url.ts";
 import { parseCli, USAGE, versionLine } from "./cli.ts";
@@ -29,6 +30,10 @@ import { tmpdir } from "node:os";
 // scripts/build-binary.ts 打包时把 DROIDPIER_VERSION 替换成构建时间；直接用源码跑时没有
 declare const DROIDPIER_VERSION: string | undefined;
 const VERSION = typeof DROIDPIER_VERSION === "string" ? DROIDPIER_VERSION : "";
+/** 多久查一次有没有新版本：一次只取一个很小的 .sha256 文件。 */
+const UPDATE_CHECK_MS = 60 * 60_000;
+/** 换好新版本后退出用的码：非 0，launchd 当作崩溃、用新文件拉起来（KeepAlive.SuccessfulExit=false，gateway/src/service.ts）。 */
+const UPDATED_EXIT_CODE = 75;
 
 // `nsh package ui --target web` 在仓库根目录运行时，产物落在根目录的 .nsh/out，不在 ui/.nsh/out（实测）
 // 打成单个可执行文件后，scripts/build-binary.ts 用 --asset 把这个目录嵌在 import.meta.dir/Droidpier 下，node:fs 照常能读
@@ -64,7 +69,7 @@ if (cli.kind === "service") {
   const run = { start: () => serviceStart(d, { args: cli.args, noOpen: cli.noOpen }), stop: () => serviceStop(d), status: () => serviceStatus(d), logs: () => serviceLogs(d) };
   process.exit(await run[cli.command]());
 }
-const { port, noOpen, allowOrigins: extraOrigins, service } = cli.options;
+const { port, noOpen, allowOrigins: extraOrigins, service, autoUpdate } = cli.options;
 if (service) {
   const l = serviceLabel(process.env);
   if ("label" in l) await rotateLog(serviceLogPath(l.label), realRotateIo).catch((e: Error) => console.log(`日志轮转失败：${e.message}`));
@@ -182,17 +187,20 @@ if (!env.ok) {
 }
 if (!noOpen) openBrowser(pageUrl, (e) => console.log(`打开浏览器失败：${e.message}`));
 
+const cleanup = async () => {
+  // 正在进行的下载和解压不能留在网关后面
+  installer.stop();
+  // srv.close() 会收掉当前设备的 webviews.close() 和 reverses.removeAll()
+  await srv.close();
+  last?.close();
+  // 等取消订阅时异步删除 mmap 临时文件
+  await new Promise((r) => setTimeout(r, 200));
+};
+// 平时清理完以 0 退出；自动更新换好文件后改成 UPDATED_EXIT_CODE 再走同一个处理，清理途中来信号也只清理一次
+let cleanExitCode = 0;
 const onSignal = exitHandler({
-  cleanup: async () => {
-    // 正在进行的下载和解压不能留在网关后面
-    installer.stop();
-    // srv.close() 会收掉当前设备的 webviews.close() 和 reverses.removeAll()
-    await srv.close();
-    last?.close();
-    // 等取消订阅时异步删除 mmap 临时文件
-    await new Promise((r) => setTimeout(r, 200));
-  },
-  exit: (code) => process.exit(code),
+  cleanup,
+  exit: (code) => process.exit(code === 0 ? cleanExitCode : code),
   timeoutMs: 3000,
   log: (s) => console.log(s),
 });
@@ -201,3 +209,29 @@ process.on("exit", killAdbChildren);
 process.on("SIGINT", onSignal);
 process.on("SIGTERM", onSignal);
 process.on("SIGHUP", onSignal);
+
+// 自动更新只在 install.sh 装的那个打包版作为后台服务运行时做：前台运行退出了没人拉起来，从源码运行没有下载包可比
+const installed = installedPaths();
+if (service && autoUpdate && VERSION && process.execPath !== installed.bin) {
+  console.log(`不自动更新：运行的是 ${process.execPath}，不是安装命令装的 ${installed.bin}`);
+} else if (service && autoUpdate && VERSION) {
+  const updater = createUpdater(realUpdateDeps({ origin: PUBLIC_ORIGIN, ...installed, log: (s) => console.log(s) }));
+  let checkedAt = 0;
+  let checking = false;
+  let updated = false;
+  const timer = setInterval(async () => {
+    // 下载慢的时候一次检查可能跨过下一轮：上一轮没完就不开新的
+    if (!checking && !updated && Date.now() - checkedAt >= UPDATE_CHECK_MS) {
+      checking = true;
+      checkedAt = Date.now();
+      updated = (await updater.check()) === "updated";
+      checking = false;
+    }
+    if (updated && srv.idle()) {
+      clearInterval(timer);
+      console.log("新版本已装好，现在没人在用，重启换上");
+      cleanExitCode = UPDATED_EXIT_CODE;
+      await onSignal();
+    }
+  }, 60_000).unref();
+}

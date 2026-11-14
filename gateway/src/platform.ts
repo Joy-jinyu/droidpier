@@ -35,6 +35,14 @@ export function emulatorLogPath(avd: string): string {
   return join(homedir(), "Library/Logs/Droidpier", `${avd}.log`);
 }
 
+/** 网关下载包的名字：<公网页面>/download/<名字>.tar.xz 和 .sha256（scripts/build-binary.ts 打包，scripts/install.sh 安装）。 */
+export const DOWNLOAD_NAME = "droidpier-darwin-arm64";
+
+/** install.sh 装好的可执行文件，和它记下的已装压缩包 sha256（路径同 scripts/install.sh 的 target、stamp）。 */
+export function installedPaths(home = homedir()): { bin: string; stamp: string } {
+  return { bin: join(home, ".local/bin/droidpier"), stamp: join(home, ".local/share/droidpier/installed.sha256") };
+}
+
 /** 后台运行的 LaunchAgent label（macOS launchd）。 */
 export const SERVICE_LABEL = "dev.devpier.droidpier";
 

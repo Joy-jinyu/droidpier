@@ -31,6 +31,8 @@ gateway/src/     The gateway (runs on Node 22.6+ directly from TypeScript; bundl
   setup.ts, installer.ts, catalog.ts   First-run environment check, SDK installs, device models and system images
   platform.ts      Everything platform specific: SDK paths, binary names, the discovery directory
   page-url.ts      The default port (7300) and the page address the gateway opens
+  service.ts, self-update.ts   The background service (LaunchAgent) and its hourly self-update from the public page's
+                   /download/
   reboot.ts, boot-log.ts, exit.ts, already-running.ts, upload-temp.ts, latest-frame.ts   Smaller pieces named by file
   bench-server.ts, fps-probe.ts, smoke.ts   Phase 0 experiments, not part of the product
 gateway/test/    node:test tests; *.it.test.ts need a running emulator (EMU_IT=1)

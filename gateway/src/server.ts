@@ -150,7 +150,7 @@ export async function startServer(opts: {
   peer?: { lookup?: SocketsLookup; platform?: string; maxPending?: number; allowAnyWsClient?: boolean };
   /** 由 launchd 拉起的后台服务；/healthz 报给前台再运行的 droidpier，让它说明怎么停（gateway/src/already-running.ts）。 */
   service?: boolean;
-}): Promise<{ port: number; close(): Promise<void> }> {
+}): Promise<{ port: number; idle(): boolean; close(): Promise<void> }> {
   const log = opts.log ?? ((s: string) => console.log(s));
   const root = resolve(opts.staticDir);
   const conns = new Set<Conn>();
@@ -1082,6 +1082,8 @@ export async function startServer(opts: {
   gatewayPort = typeof addr === "object" && addr ? addr.port : opts.port;
   return {
     port: gatewayPort,
+    // 没有页面连着、没有 DevTools，也没有在开机、重启、删除设备或安装：这时重启网关谁都不打断（自动更新等的就是这个，gateway/src/self-update.ts）
+    idle: () => wss.clients.size === 0 && devtoolsWss.clients.size === 0 && jobs.size === 0 && rebooting === null && deleting.size === 0 && !installing,
     close: async () => {
       clearInterval(debugTimer);
       clearInterval(ticker);

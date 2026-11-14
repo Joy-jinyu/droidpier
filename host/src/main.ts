@@ -5,14 +5,14 @@ import { createConnection, type BootMsg, type ConnState, type VersionErrorCode }
 import { createHeldKeys } from "./held-keys.ts";
 import { createPointerTracker } from "./pointer.ts";
 import { isDevtoolsSrc } from "./devtools-src.ts";
-import { gatewayAnswers, gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, type LocalPermission } from "./launch.ts";
+import { gatewayAnswers, gatewayPort, isLoopbackHost, isSupportedBrowser, parsePort, siteOrigin, type LocalPermission } from "./launch.ts";
 import { createRenderer } from "./renderer.ts";
 import { createUploads } from "./uploads.ts";
 import { parseZoom, ZOOM_STEPS } from "../../shared/zoom.ts";
 import { readPref, writePref } from "./prefs.ts";
 import { parseTheme, THEMES } from "../../shared/theme.ts";
 import { registerTools } from "./webmcp.ts";
-import { INSTALL_CMD, INSTALL_IDS, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
+import { INSTALL_IDS, installCmd, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type InstallProgress, type Licence, type Rotation } from "../../shared/protocol.ts";
 
 // 以前记端口和启动口令的键，都不用了，清掉
 const OLD_KEYS = ["droidpier.port", "droidpier.launch"];
@@ -35,6 +35,9 @@ async function localPermission(): Promise<LocalPermission> {
   return null;
 }
 const GATEWAY_PORT = resolvePort();
+// 官网的来源和从它安装网关的命令：连不上网关时给的命令、页面菜单里的官网和文档链接都用它
+const SITE = siteOrigin(location);
+const INSTALL = installCmd(SITE);
 // 设备画面的缩放存在这台浏览器里；存储不可用（隐私模式等）时每次都适应窗口
 const ZOOM_KEY = "droidpier.zoom";
 // 页面外观存在这台浏览器里；存储不可用（隐私模式等）时每次都跟随系统
@@ -159,6 +162,7 @@ export async function createHost(player: Player) {
   const statusEvent = () => player.hostEvent("emu.status", { state, serial, upgrade, rev: ++rev });
   const conn = !supported ? idleConnection() : createConnection({
     url: `ws://127.0.0.1:${GATEWAY_PORT}`,
+    installCmd: INSTALL,
     hidden: () => document.hidden,
     pageIsPublic: !isLoopbackHost(location.hostname),
     localPermission,
@@ -177,7 +181,7 @@ export async function createHost(player: Player) {
       const prev = state;
       state = s;
       // 没连上本机网关时页面给出安装命令
-      upgrade = s === "no-gateway" ? INSTALL_CMD : null;
+      upgrade = s === "no-gateway" ? INSTALL : null;
       paint();
       // 重启中还是同一台设备
       if (s !== "connected" && s !== "rebooting") serial = 0;
@@ -687,6 +691,7 @@ export async function createHost(player: Player) {
         if (typeof id !== "number") throw new Error(`${name} 需要 id`);
         return ctl({ t: name === "emu.acceptLicenses" ? "acceptLicenses" : "rejectLicenses", id });
       }
+      if (name === "emu.site") return SITE;
       if (name === "emu.zoom") return parseZoom(readPref(ZOOM_KEY));
       if (name === "emu.setZoom") {
         const zoom = (args as { zoom?: unknown } | undefined)?.zoom;

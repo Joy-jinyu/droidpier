@@ -1,4 +1,5 @@
 # 官网、/app/ 页面和网关下载包一起构建，main 上合并后部署到 Cloudflare Pages（droid.devpier.dev）。
+# fork 部署自己的一套：在仓库的 Actions 变量里设 PUBLIC_ORIGIN 和 PAGES_PROJECT（docs/deploy.md）。
 # PR 上只构建不部署，拿不到部署用的密钥。部署步骤和手动部署的对照见 docs/deploy.md。
 name: pages
 
@@ -24,6 +25,9 @@ env:
   # 本地一直用的 nsh 是 v0.4.0 之前 32 个提交，选最接近的发行版；升级单独提 PR，PR 上的构建先验一遍
   NSH_VERSION: v0.4.0
   DEPLOY: ${{ github.event_name != 'pull_request' }}
+  # 部署到哪：网关下载包只信任这个来源的页面，官网和 install.sh 里的地址也换成它
+  PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN || 'https://droid.devpier.dev' }}
+  PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'android-emu-web' }}
 
 jobs:
   build:
@@ -59,7 +63,7 @@ jobs:
       - name: 构建 /app/ 页面
         run: bun run build:ui
 
-      # 下载包的 sha256 一变，用户每次运行安装命令都会重新下载约 18 MiB：只在网关源码变了时重建，否则沿用线上那份
+      # 下载包的 sha256 一变，用户每次运行安装命令都会重新下载约 18 MiB：只在网关源码或 PUBLIC_ORIGIN 变了时重建，否则沿用线上那份
       # （它内嵌的 --local 页面会旧一些，协议没变所以照常可用）。“网关源码”的指纹随下载包一起发布在
       # download/droidpier-darwin-arm64.source，和线上的比而不是和上一次推送比：中间有运行被跳过也不会用错包
       - name: 判断要不要重建网关下载包
@@ -67,8 +71,8 @@ jobs:
         env:
           FORCE: ${{ inputs.rebuild_binary }}
         run: |
-          source=$(git ls-tree -r HEAD -- gateway shared scripts/build-binary.ts scripts/scrub-paths.ts package.json pnpm-lock.yaml | shasum -a 256 | cut -c1-64)
-          live=$(curl -fsSL --retry 3 --proto '=https' "https://droid.devpier.dev/download/droidpier-darwin-arm64.source" 2>/dev/null || true)
+          source=$({ git ls-tree -r HEAD -- gateway shared scripts/build-binary.ts scripts/scrub-paths.ts package.json pnpm-lock.yaml; echo "$PUBLIC_ORIGIN"; } | shasum -a 256 | cut -c1-64)
+          live=$(curl -fsSL --retry 3 --proto '=https' "$PUBLIC_ORIGIN/download/droidpier-darwin-arm64.source" 2>/dev/null || true)
           rebuild=true
           if [ "$DEPLOY" = true ] && [ "$FORCE" != true ] && [ "$source" = "$live" ]; then rebuild=false; fi
           echo "source=$source" >> "$GITHUB_OUTPUT"
@@ -84,8 +88,8 @@ jobs:
         run: |
           mkdir -p dist && cd dist
           f=droidpier-darwin-arm64.tar.xz
-          curl -fsSL --retry 3 --proto '=https' -o "$f" "https://droid.devpier.dev/download/$f"
-          curl -fsSL --retry 3 --proto '=https' -o "$f.sha256" "https://droid.devpier.dev/download/$f.sha256"
+          curl -fsSL --retry 3 --proto '=https' -o "$f" "$PUBLIC_ORIGIN/download/$f"
+          curl -fsSL --retry 3 --proto '=https' -o "$f.sha256" "$PUBLIC_ORIGIN/download/$f.sha256"
           shasum -a 256 -c "$f.sha256"
 
       - name: 构建官网
@@ -123,4 +127,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler@4.161.0 pages deploy dist/pages --project-name android-emu-web --branch main --commit-hash "$GITHUB_SHA"
+        run: bunx wrangler@4.161.0 pages deploy dist/pages --project-name "$PAGES_PROJECT" --branch main --commit-hash "$GITHUB_SHA"

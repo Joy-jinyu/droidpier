@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as auth from "../src/auth.ts";
-import { allowedOrigins, checkHost, checkUpgrade, createTickets, isOrigin, PUBLIC_ORIGIN } from "../src/auth.ts";
+import { allowedOrigins, checkHost, checkUpgrade, createTickets, isOrigin, isPublicOrigin, PUBLIC_ORIGIN } from "../src/auth.ts";
 
 test("网关不再生成、比较启动口令", () => {
   assert.equal("newToken" in auth, false);
@@ -94,4 +94,9 @@ test("checkHost：只认 127.0.0.1:<端口> 和 localhost:<端口>，公网入�
   for (const h of ["droid.devpier.dev", "droid.devpier.dev:7300", "evil.example:7300", "127.0.0.1", "localhost", "127.0.0.1:7301", "[::1]:7300", "", undefined]) {
     assert.equal(checkHost(h, 7300), false, String(h));
   }
+});
+
+test("isPublicOrigin：公网页面只能是 https；本机试用的 127.0.0.1、*.localhost 例外", () => {
+  for (const o of ["https://droid.devpier.dev", "https://emu.example.dev", "https://x.pages.dev:8443", "http://127.0.0.1:7351", "http://droid.localhost:7351", "http://localhost:7351"]) assert.equal(isPublicOrigin(o), true, o);
+  for (const o of ["http://emu.example.dev", "http://192.168.1.2:7351", "http://localhost.example.dev", "https://emu.example.dev/", "https://emu.example.dev/app", "ftp://emu.example.dev", ""]) assert.equal(isPublicOrigin(o), false, o);
 });

@@ -28,7 +28,6 @@ import {
   CLOSE_VERSION,
   compatibility,
   encodeFrameHeader,
-  INSTALL_CMD,
   parseClientMsg,
   PROTOCOL_VERSION,
   type AvdCatalog,
@@ -41,6 +40,7 @@ import {
   type UploadState,
   type WebViewPage,
 } from "../../shared/protocol.ts";
+import { INSTALL_CMD } from "./page-url.ts";
 
 /** 生成截图文件名：screenshot-<设备名>-<yyyyMMdd-HHmmss>.png，使用本地时间。 */
 export function screenshotName(device: string, now: Date = new Date()): string {

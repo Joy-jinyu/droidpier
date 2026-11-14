@@ -1,4 +1,8 @@
+import { installCmd } from "../../shared/protocol.ts";
 import { PUBLIC_ORIGIN } from "./auth.ts";
+
+/** 升级（或重新安装）这个网关的命令：从它信任的公网页面所在的站点装。 */
+export const INSTALL_CMD = installCmd(PUBLIC_ORIGIN);
 
 /** 网关默认端口，页面找不到别的端口时也连它（host/src/launch.ts）。 */
 export const DEFAULT_PORT = 7300;

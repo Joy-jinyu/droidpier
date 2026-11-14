@@ -4,7 +4,7 @@ import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
 import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, displayNameError, ramMbFor } from "../shared/avd-spec";
-import { ADB_UNRESPONSIVE, type Rotation } from "../shared/protocol";
+import { ADB_UNRESPONSIVE, OFFICIAL_ORIGIN, type Rotation } from "../shared/protocol";
 import { parseTheme, type Theme } from "../shared/theme";
 import { deviceFrame } from "../shared/screen";
 import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
@@ -51,9 +51,8 @@ type Upload = {
 };
 type Confirm = { kind: "install"; ids: EnvId[] } | { kind: "avd"; avd: NewAvd };
 
-// 侧栏顶上回官网的链接；本机网关托管的页面也指向公网官网
-const SITE_URL = "https://droid.devpier.dev/";
-const DOCS_URL = "https://droid.devpier.dev/docs/getting-started/install/";
+// 菜单里回官网的链接；官网的来源由 host 给（emu.site：公网页面自己的来源，本机网关托管的页面用官方的）
+const DOCS_PATH = "/docs/getting-started/install/";
 
 // shadcn/ui 设计系统（Zinc 灰阶 + 品牌紫），紫色只给选中状态和主操作
 const DARK = {
@@ -133,7 +132,8 @@ const PROBLEM: Partial<Record<State, string>> = {
   "unsupported-browser": "请用 Chrome 或 Edge 打开",
   "lna-denied": "Chrome 阻止了访问本机：请到 设置 → 隐私和安全 → 网站设置 中允许本站访问本地网络，然后刷新",
   "lna-prompt": "Chrome 正在询问是否允许本站访问本机：请在地址栏旁的权限框里点「允许」",
-  "bad-origin": "这个页面地址不在网关允许的来源里，请打开 https://droid.devpier.dev/app/",
+  // 网关在升级时就拒绝了，页面问不到它信任哪个来源
+  "bad-origin": "这个页面地址不在网关允许的来源里：请打开你安装 droidpier 的那个网站上的 /app/",
   // 页面看不出装没装 droidpier；同一条命令没装时先装、装了直接启动
   "no-gateway": "还没连上本机的 Droidpier",
   // 网关只收 Chrome / Edge 直接发起的连接（gateway/src/peer.ts）
@@ -532,7 +532,7 @@ function Mark(props: { size: number }) {
 }
 
 /** 侧栏底部的按钮：点开向上的菜单，里面是官网、文档和外观。 */
-function AppMenu(props: { theme: Theme; onTheme: (t: Theme) => void }) {
+function AppMenu(props: { site: string; theme: Theme; onTheme: (t: Theme) => void }) {
   return (
     <Menu placement="top" offset={6} popupStyle={{ ...menuPopup(), minWidth: 248, padding: 6 }} popupStartingStyle={popOut(4)} popupEndingStyle={popOut(4)} trigger={
       <Button accessibilityLabel="Droidpier 菜单" hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }}
@@ -546,12 +546,12 @@ function AppMenu(props: { theme: Theme; onTheme: (t: Theme) => void }) {
         <Mark size={36} />
         <View style={{ gap: 2 }}>
           <Text style={{ color: C.text, fontSize: 14, fontWeight: "600" }}>Droidpier</Text>
-          <Text style={{ color: C.muted, fontSize: 12 }}>droid.devpier.dev</Text>
+          <Text style={{ color: C.muted, fontSize: 12 }}>{props.site.replace(/^https?:\/\//, "")}</Text>
         </View>
       </View>
       <MenuSeparator style={{ height: 1, marginBottom: 4, marginHorizontal: 4, backgroundColor: C.line }} />
-      <Item icon="globe" label="官网" trail="↗" onSelect={() => void openUrl(SITE_URL)} />
-      <Item icon="book" label="使用文档" trail="↗" onSelect={() => void openUrl(DOCS_URL)} />
+      <Item icon="globe" label="官网" trail="↗" onSelect={() => void openUrl(`${props.site}/`)} />
+      <Item icon="book" label="使用文档" trail="↗" onSelect={() => void openUrl(props.site + DOCS_PATH)} />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4, paddingLeft: 10, paddingRight: 4 }}>
         <Icon name="sun" size={16} tint={C.muted} />
         <Text style={{ flex: 1, color: C.text, fontSize: 13 }}>外观</Text>
@@ -819,6 +819,10 @@ function App() {
     if (picked) return;
     theme.set(parseTheme(t));
     setColorScheme(theme());
+  });
+  const site = signal(OFFICIAL_ORIGIN);
+  host.call("emu.site", {}).then((o: unknown) => {
+    if (typeof o === "string") site.set(o);
   });
   const state = signal<State>("connecting");
   const serial = signal(0);
@@ -1273,7 +1277,7 @@ function App() {
             </If>
           </Scroll>
           <View style={{ height: 1, marginHorizontal: 4, backgroundColor: C.lineSoft }} />
-          <AppMenu theme={theme()} onTheme={pickTheme} />
+          <AppMenu site={site()} theme={theme()} onTheme={pickTheme} />
         </View>
       </If>
       <View style={{ flex: 1, minWidth: 0 }}>

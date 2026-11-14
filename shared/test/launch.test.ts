@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyFailure, DEFAULT_GATEWAY_PORT, gatewayAnswers, gatewayPort, isSupportedBrowser, parsePort, refineLocalFailure } from "../../host/src/launch.ts";
+import { classifyFailure, DEFAULT_GATEWAY_PORT, gatewayAnswers, gatewayPort, isSupportedBrowser, parsePort, refineLocalFailure, siteOrigin } from "../../host/src/launch.ts";
+import { installCmd, OFFICIAL_ORIGIN } from "../../shared/protocol.ts";
 
 test("parsePort 读出 #port，旧链接里的口令不管", () => {
   assert.equal(parsePort("#port=7306"), 7306);
@@ -74,4 +75,13 @@ test("gatewayAnswers：/healthz 有回应（no-cors）为 true；连不上、超
   const keep = setTimeout(() => {}, 1000);
   assert.equal(await gatewayAnswers(hang, 7306, 20), false);
   clearTimeout(keep);
+});
+
+test("siteOrigin：公网页面用自己的来源，部署在别处的也一样；网关托管的本机页面用官方的", () => {
+  assert.equal(siteOrigin({ hostname: "droid.devpier.dev", origin: "https://droid.devpier.dev" }), "https://droid.devpier.dev");
+  assert.equal(siteOrigin({ hostname: "emu.example.dev", origin: "https://emu.example.dev" }), "https://emu.example.dev");
+  for (const hostname of ["127.0.0.1", "localhost"]) {
+    assert.equal(siteOrigin({ hostname, origin: `http://${hostname}:7306` }), OFFICIAL_ORIGIN);
+  }
+  assert.equal(installCmd("https://emu.example.dev"), "curl -fsSL https://emu.example.dev/install.sh | sh");
 });

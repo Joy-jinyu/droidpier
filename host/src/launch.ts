@@ -1,3 +1,5 @@
+import { OFFICIAL_ORIGIN } from "../../shared/protocol.ts";
+
 /** 网关默认端口，同 gateway/src/page-url.ts 的 DEFAULT_PORT。 */
 export const DEFAULT_GATEWAY_PORT = 7300;
 
@@ -22,6 +24,11 @@ export function isSupportedBrowser(brands: { brand: string }[] | undefined): boo
 /** 页面是不是本机地址打开的（网关自己托管的保底页面）。 */
 export function isLoopbackHost(hostname: string): boolean {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+}
+
+/** 官网（安装脚本、文档）的来源：公网页面和官网部署在一起，就是页面自己的来源；网关托管的本机页面看不出来，用官方的。 */
+export function siteOrigin(loc: { hostname: string; origin: string }): string {
+  return isLoopbackHost(loc.hostname) ? OFFICIAL_ORIGIN : loc.origin;
 }
 
 /** 网关端口：#port → 网关自己托管的本机页面用页面端口 → 7300。不记上次的端口：记了会在换回默认端口后一直连旧端口。 */

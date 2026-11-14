@@ -1,6 +1,6 @@
 // 端口已被占用时：看看占着的是不是另一个 droidpier，给出该怎么做
 import { createServer } from "node:net";
-import { INSTALL_CMD } from "../../shared/protocol.ts";
+import { INSTALL_CMD } from "./page-url.ts";
 
 /** 占着端口的程序。version 为 null 表示认得出是 droidpier 但它没报版本（加 /healthz 之前的版本）；service 表示它是后台服务；pid 是旧版没有的。 */
 export type PortHolder = { kind: "droidpier"; version: string | null; service?: boolean; pid?: number } | { kind: "other" };

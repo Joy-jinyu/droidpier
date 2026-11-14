@@ -5,7 +5,6 @@ import {
   CLOSE_NO_EMULATOR,
   decodeFrameHeader,
   FRAME_HEADER_BYTES,
-  INSTALL_CMD,
   PROTOCOL_VERSION,
   type AvdCatalog,
   type AvdInfo,
@@ -62,6 +61,8 @@ function openSocket(url: string): WebSocket {
 /** 到网关的 WebSocket 连接：连上先发 hello，断开后每秒重连。 */
 export function createConnection(opts: {
   url: string;
+  /** 遇到还要启动口令的旧网关时让用户运行的升级命令。 */
+  installCmd: string;
   /** 页面不是本机地址打开的：连续连不上时按本地网络权限被拒处理。 */
   pageIsPublic: boolean;
   /** 查本地网络权限，用来细分 lna-denied；不给就不细分。 */
@@ -252,7 +253,7 @@ export function createConnection(opts: {
       const f = classifyFailure({ opened, closeCode, pageIsPublic: opts.pageIsPublic, attempts });
       if (f === "old-gateway") {
         stopped = true;
-        opts.onVersionError?.("gateway-outdated", INSTALL_CMD);
+        opts.onVersionError?.("gateway-outdated", opts.installCmd);
         return;
       }
       if (f === "bad-origin" || f === "outdated") {

@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
+import { OFFICIAL_ORIGIN } from "../../shared/protocol.ts";
 
-/** 公网页面的 Origin。 */
-export const PUBLIC_ORIGIN = "https://droid.devpier.dev";
+// scripts/build-binary.ts 打包时把 DROIDPIER_PUBLIC_ORIGIN 替换成构建用的 PUBLIC_ORIGIN；直接用源码跑时没有
+declare const DROIDPIER_PUBLIC_ORIGIN: string | undefined;
+
+/** 公网页面的 Origin：打包时定下，没定就是官方的。网关只信任这一个公网页面。 */
+export const PUBLIC_ORIGIN = typeof DROIDPIER_PUBLIC_ORIGIN === "string" ? DROIDPIER_PUBLIC_ORIGIN : OFFICIAL_ORIGIN;
 
 /** 允许连 WebSocket 的页面来源：公网入口（有的话）、127.0.0.1 和 localhost 上的网关端口，再加上启动参数临时给的来源。 */
 export function allowedOrigins(publicOrigin: string | null, port: number, extra: string[] = []): string[] {
@@ -16,6 +20,16 @@ export function isOrigin(s: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * 能不能当公网页面的来源（构建时的 PUBLIC_ORIGIN）：只认 https，明文页面谁都能在路上换掉；
+ * 只在本机试的 http://127.0.0.1 和 http://*.localhost（浏览器直接解析到本机）例外。
+ */
+export function isPublicOrigin(s: string): boolean {
+  if (!isOrigin(s)) return false;
+  const u = new URL(s);
+  return u.protocol === "https:" || u.hostname === "127.0.0.1" || u.hostname === "localhost" || u.hostname.endsWith(".localhost");
 }
 
 /** 升级请求的 Origin 是否在白名单里。浏览器一定会带 Origin，没带的一律拒绝。 */

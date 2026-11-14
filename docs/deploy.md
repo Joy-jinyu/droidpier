@@ -28,7 +28,7 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 `.github/workflows/pages.yml`：合并进 `main` 后自动构建并部署整站（官网、`/app/`、下载包、`install.sh`）；PR 上只跑测试和构建，不部署。官网源码在本仓库的 `site/`。
 
 - nsh 用 `longbridge/nsh` 的发行版（工作流里的 `NSH_VERSION`），下载后核对 sha256。
-- 网关下载包只在网关源码（`gateway/`、`shared/`、`scripts/build-binary.ts`、`scripts/scrub-paths.ts`、`package.json`、`pnpm-lock.yaml`）变了时重建，否则沿用线上那份，免得用户每次运行安装命令都重新下载。判断方法：源码指纹随下载包发布在 `/download/droidpier-darwin-arm64.source`，和当前代码算出的比。手动运行（Actions → pages → Run workflow）勾选“强制重新构建网关下载包”可以强制重建。
+- 网关下载包只在网关源码（`gateway/`、`shared/`、`scripts/build-binary.ts`、`scripts/scrub-paths.ts`、`package.json`、`pnpm-lock.yaml`）或 `PUBLIC_ORIGIN` 变了时重建，否则沿用线上那份，免得用户每次运行安装命令都重新下载。判断方法：源码指纹随下载包发布在 `/download/droidpier-darwin-arm64.source`，和当前代码算出的比。手动运行（Actions → pages → Run workflow）勾选“强制重新构建网关下载包”可以强制重建。
 - 部署前扫描部署目录和解压后的可执行文件，命中就不部署；日志里只列命中的文件名，不打印内容。
 
 仓库 Settings → Secrets and variables → Actions 里要有：
@@ -38,6 +38,24 @@ curl -fsSL https://droid.devpier.dev/install.sh | sh
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API 令牌，权限 Account → Cloudflare Pages → Edit |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账号 ID |
 | `PRIVACY_PATTERNS` | 不能出现在公开产物里的词，一行一个正则（不区分大小写）；没配就不部署 |
+
+## 部署自己的一套（fork）
+
+整套部署的地址只有一个设置：环境变量 `PUBLIC_ORIGIN`（`https://主机`，不带路径和结尾的 `/`），不设就是官方的 `https://droid.devpier.dev`。
+
+- `build:bin` 把它打进网关：网关只信任这个来源的页面，启动时打开它的 `/app/`，升级命令也从它的 `/install.sh` 装。
+- `build-pages.ts` 把官网和 `install.sh` 里的官方地址换成它，再检查没有漏掉的。
+- 页面不用设：官网链接和"没连上"时给的安装命令都取页面自己的来源（网关托管的本机页面看不出来，用官方的）。
+
+在 fork 上用流水线部署：
+
+1. Cloudflare 里先建好 Pages 项目（`bunx wrangler@4 pages project create <项目名> --production-branch main`），要用自己的域名就在项目的 Custom domains 里绑上。
+2. fork 的 Settings → Secrets and variables → Actions：Secrets 里配上面三个密钥；Variables 里设 `PUBLIC_ORIGIN`（例如 `https://<项目名>.pages.dev` 或绑的域名）和 `PAGES_PROJECT`（项目名）。
+3. 推到 fork 的 `main`。第一次部署时线上还没有下载包，网关会重新构建。
+
+装了自己那一套的 Mac 上，`install.sh` 装出来的仍是 `~/.local/bin/droidpier` 和后台服务 `dev.devpier.droidpier`，会换掉官方的那份。
+
+手动部署时，下面"部署步骤"的 2、3 两步都带上同一个 `PUBLIC_ORIGIN`，项目名换成自己的。
 
 下面的手动步骤在流水线不可用时照做。
 

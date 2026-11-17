@@ -59,6 +59,8 @@ const SIDEBAR_KEY = "droidpier.sidebar";
 // 还不知道设备尺寸、容器也没量出来时，hello 用这个尺寸（网关会夹到设备尺寸内）
 const FALLBACK_CSS = { width: 540, height: 1170 };
 const RESIZE_DEBOUNCE_MS = 150;
+// 转向后等页面按新方向排好屏幕区的最长时间；过了还没排（页面没跟着变）就按现有屏幕区换画布
+const TURN_RELAYOUT_MS = 300;
 
 type Player = { hostEvent(name: string, payload: unknown): void };
 type Boot = BootMsg & { seconds: number };
@@ -78,6 +80,10 @@ export async function createHost(player: Player) {
   // 画布当前的 CSS 尺寸，由容器大小和设备宽高比算出
   let css = { width: 0, height: 0 };
   let slotSize = { width: 0, height: 0 };
+  // 转向后等屏幕区按新方向排好再换画布：先按旧屏幕区算会缩成一小块，和机身的转动差一帧
+  let turnRelayout: ReturnType<typeof setTimeout> | null = null;
+  // 连上设备后的第一条方向消息是它原来的方向，不是转了向；页面只在真转向时转动机身
+  let oriented = false;
   const size = () => {
     const base = css.width ? css : slotSize.width ? slotSize : FALLBACK_CSS;
     return { width: Math.round(base.width * dpr), height: Math.round(base.height * dpr) };
@@ -141,7 +147,10 @@ export async function createHost(player: Player) {
     const slot = box.parentElement;
     if (!slot) return;
     slotSize = { width: slot.clientWidth, height: slot.clientHeight };
-    layout(true);
+    // 转向后第一次排好：网关马上换尺寸，不等防抖
+    const turned = turnRelayout !== null;
+    if (turnRelayout !== null) { clearTimeout(turnRelayout); turnRelayout = null; }
+    layout(!turned);
   });
 
   let draws = 0;
@@ -256,18 +265,22 @@ export async function createHost(player: Player) {
       deviceId = extra.deviceId ?? (sn ? `emulator-${sn}` : "");
       kind = extra.kind ?? "emulator";
       caps = extra.caps ?? null;
+      oriented = false;
       layout(false);
       statusEvent();
       refreshAvds();
     },
     onInspectMode: (on, mapped) => setInspect(on && mapped),
     onOrientation: (r) => {
+      const turned = oriented;
+      oriented = true;
       if (r === rotation) return;
       // 方向变了，正按着的手指按旧方向换算过，先抬起
       pointer.cancel();
       rotation = r;
-      layout(false);
-      player.hostEvent("emu.orientation", { rotation });
+      if (turnRelayout !== null) clearTimeout(turnRelayout);
+      turnRelayout = setTimeout(() => { turnRelayout = null; layout(false); }, TURN_RELAYOUT_MS);
+      player.hostEvent("emu.orientation", { rotation, turned });
     },
     onFrame: (h, px) => renderer.put(px, h.width, h.height, h.tsMs),
     onVideo: (h, data) => video.push(h, data),

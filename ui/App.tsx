@@ -1,4 +1,4 @@
-import { cleanup, colorScheme, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, View } from "nsh";
+import { cleanup, colorScheme, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, View } from "nsh";
 import { Button, ContextMenu, Dialog, Input, Menu, MenuItem, MenuSeparator, Radio, RadioGroup, Select, Toggle, Toolbar, ToolbarGroup, Tooltip } from "nsh/base";
 import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
@@ -7,6 +7,7 @@ import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, displayNameErro
 import { ADB_UNRESPONSIVE, OFFICIAL_ORIGIN, type DeviceCaps, type PhoneInfo, type Rotation } from "../shared/protocol";
 import { parseTheme, type Theme } from "../shared/theme";
 import { deviceFrame } from "../shared/screen";
+import { glideFrames, poseAt, REST, startPose, turnAngle, type Glide } from "./device-motion";
 import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
 import { matchesAvd } from "./device-search";
 import { canPick, currentPhoneOf, phoneDetail, phoneLabel, phoneStatus, showPhones } from "./phones";
@@ -215,6 +216,10 @@ const animateNext = () => {
 
 // 机身边框：内边距 + 1 像素描边
 const BEZEL = 11;
+// 机身缩放、转向的过渡时长和曲线（Material 的 standard easing：起步不拖、收尾减速）
+const ZOOM_MS = 260;
+const TURN_MS = 340;
+const GLIDE_EASE = [0.4, 0, 0.2, 1] as const;
 const H5_EMPTY = "没有可审查的 H5。只有 debug 包或开启了 WebView 调试的 App 才能审查；先在 App 里打开一个 H5 页面。";
 // 下拉框里没有标题的页面，地址大约放得下的字符数
 const URL_CHARS = 28;
@@ -1062,7 +1067,6 @@ function App() {
     if (logOpen()) sideTab.set("log");
   };
   const rotation = signal(0);
-  host.on("emu.orientation", (p: { rotation: number }) => rotation.set(p.rotation));
   const env = signal<Env | null>(null);
   const installs = signal<InstallProgress[]>([]);
   const license = signal<Licence | null>(null);
@@ -1313,20 +1317,59 @@ function App() {
   // 设备框的宽高比：当前设备的分辨率，横屏时对调；不知道分辨率时按 1080×2340
   // 机身大小：放进按键之间剩下的地方，屏幕区按当前设备转过之后的宽高比；不知道分辨率时按 1080×2340
   // 画面缩放：1 是适应窗口；读到这台浏览器存的值后换过去
-  // 点缩放按钮时机身平滑变大小，画布跟着屏幕区的 ResizeObserver 逐帧走；读到存的值时直接换，不做动画
   const zoom = signal(1);
   host.call("emu.zoom", {}).then((z: unknown) => zoom.set(parseZoom(z)));
-  const setZoom = (z: number) => {
-    animateNext();
-    zoom.set(z);
-    host.call("emu.setZoom", { zoom: z });
-  };
   const deviceArea = signal({ width: 0, height: 0 });
   const frame = () => {
     const a = currentAvd();
     const d = a?.width && a.height ? { width: a.width, height: a.height } : deviceSize().width ? deviceSize() : { width: 1080, height: 2340 };
     return deviceFrame(deviceArea(), d, rotation() as Rotation, BEZEL, zoom());
   };
+  // 点缩放、设备转向时机身平滑过渡（ui/device-motion.ts）：只动机身的 transform，画布在机身里跟着一起动，不逐帧排版。
+  // 转动中机身不收指针：画布斜着时 getBoundingClientRect 换算出的设备坐标不对。读到存的缩放、换设备时直接换，不做动画
+  const motion = createMotion();
+  let glide: Glide | null = null;
+  const turning = signal(false);
+  // 不做动画的变化（减少动态效果、换设备）：正在播的过渡停到原位，免得旧的缩放套在新布局上接着播
+  const settle = () => {
+    if (!glide) return;
+    glide = null;
+    motion.reset();
+    turning.set(false);
+  };
+  const glideFrom = (prev: { width: number; height: number }, angle: number) => {
+    const next = frame();
+    if (reduceMotion() || !prev.width || !next.width) return settle();
+    const now = Date.now();
+    const from = startPose(prev, glide ? poseAt(glide, now) : REST, next, angle);
+    const ms = angle || from.rotate ? TURN_MS : ZOOM_MS;
+    // 关键帧按 ease 预先算好（每帧约 16ms 一个，斜着时缩到放得进设备区），播放时相邻两帧之间线性走
+    const frames = glideFrames(from, next, deviceArea(), GLIDE_EASE, Math.ceil(ms / 16));
+    const g: Glide = { frames, start: now, ms };
+    glide = g;
+    turning.set(from.rotate !== 0);
+    motion.play(
+      { keyframes: { rotate: frames.map((f) => f.rotate), scaleX: frames.map((f) => f.scaleX), scaleY: frames.map((f) => f.scaleY) }, duration: ms, easing: "linear" },
+    ).then(() => {
+      if (glide !== g) return;
+      glide = null;
+      turning.set(false);
+    });
+  };
+  const setZoom = (z: number) => {
+    const prev = frame();
+    zoom.set(z);
+    glideFrom(prev, 0);
+    host.call("emu.setZoom", { zoom: z });
+  };
+  // turned：连着的设备真转了向（连上设备时报的原方向不算，见 host/src/main.ts 的 onOrientation）
+  host.on("emu.orientation", (p: { rotation: number; turned?: boolean }) => {
+    const prev = frame();
+    const angle = turnAngle(rotation() as Rotation, p.rotation as Rotation);
+    rotation.set(p.rotation);
+    if (!p.turned) settle();
+    else if (angle) glideFrom(prev, angle);
+  });
   // 主区现在连着的真机（不是真机时为 undefined）；lastPhone 给重启中手机暂时不在列表里时用
   let lastPhone: PhoneInfo | undefined;
   const currentPhone = () => {
@@ -1725,7 +1768,8 @@ function App() {
           <View style={{ flex: 1, minHeight: 0, alignItems: "center", gap: 14, paddingTop: 24, paddingBottom: 16, paddingHorizontal: 16 }}>
             <View onLayout={({ bounds }) => deviceArea.set({ width: bounds.size.width, height: bounds.size.height })}
               style={{ flex: 1, minHeight: 0, alignSelf: "stretch", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000" }}>
+                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000",
+                  transform: motion.transform, pointerEvents: turning() ? "none" : "auto" }}>
                   <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
                   <If when={drag().active}>
                     <View role="status" style={{

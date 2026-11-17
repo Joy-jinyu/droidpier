@@ -1474,6 +1474,8 @@ export async function startServer(opts: {
       : deleting.size ? "正在删除设备"
       : rebooting ? "设备正在重启"
       : transfers.size ? "正在传文件"
+      // 重启会断开 DevTools，而 iframe 里的票据只能用一次，前端自带的重连连不上
+      : devtoolsWss.clients.size ? "正在调试 H5"
       : null,
     notifyUpdate: (r) => broadcast({ t: "update", ...r }),
     close: async () => {

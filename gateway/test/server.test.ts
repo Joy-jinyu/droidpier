@@ -1316,6 +1316,20 @@ test("/devtools/：带 inspect 签发的票据、Origin 是 appspot 时接通上
   await until(() => up.socks.length === 1);
 });
 
+test("busy：H5 控制台连着时报“正在调试 H5”，关掉后恢复", async (t) => {
+  const up = await upstream(t);
+  const f = fakeDebug();
+  f.port = up.port;
+  const { c, srv } = await debugSetup(t, f);
+  assert.equal(srv.busy(), null);
+  const dt = rawClient(t, await inspectWs(c, srv.port), APPSPOT);
+  await new Promise((r) => dt.ws.once("open", r));
+  await until(() => up.socks.length === 1);
+  assert.equal(srv.busy(), "正在调试 H5");
+  dt.ws.close();
+  await until(() => srv.busy() === null);
+});
+
 test("/devtools/：白名单里的 Origin 带票据也能接通", async (t) => {
   const up = await upstream(t);
   const f = fakeDebug();

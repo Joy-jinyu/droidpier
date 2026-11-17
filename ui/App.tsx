@@ -1313,9 +1313,11 @@ function App() {
   // 设备框的宽高比：当前设备的分辨率，横屏时对调；不知道分辨率时按 1080×2340
   // 机身大小：放进按键之间剩下的地方，屏幕区按当前设备转过之后的宽高比；不知道分辨率时按 1080×2340
   // 画面缩放：1 是适应窗口；读到这台浏览器存的值后换过去
+  // 点缩放按钮时机身平滑变大小，画布跟着屏幕区的 ResizeObserver 逐帧走；读到存的值时直接换，不做动画
   const zoom = signal(1);
   host.call("emu.zoom", {}).then((z: unknown) => zoom.set(parseZoom(z)));
   const setZoom = (z: number) => {
+    animateNext();
     zoom.set(z);
     host.call("emu.setZoom", { zoom: z });
   };

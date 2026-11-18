@@ -141,6 +141,9 @@ Details and examples: "Commits and pull requests" in [CONTRIBUTING.md](CONTRIBUT
   trailing period, about 72 characters in all. No conventional prefixes (`fix:`, `feat:`). Say what it does for the
   user, not which files changed.
 - The body explains why, wrapped at 72 columns: the problem, the cause, the fix and what it costs.
+- Pull request titles and descriptions, review comments and replies to them are in English only, though code
+  comments, log lines and user-facing strings stay in Chinese. Chinese text quoted from the code or the page stays
+  as it is.
 - One commit / PR does one thing; no unrelated refactors, cleanup or formatting.
 - A PR that changes the protocol says so and states whether `PROTOCOL_VERSION` moved and why.
 

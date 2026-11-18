@@ -210,8 +210,8 @@ const ANDROID: Record<number, string> = {
  * 交互状态（悬停、焦点、选中、按下、外观切换）的过渡，style 里展开用；用户要求减少动态效果时不过渡。
  * nsh 的样式过渡不看这个设置（docs/animation.md「Reduce motion」），所以这里自己判断。
  */
-const ease = (speed: keyof typeof MOTION = "fast") =>
-  reduceMotion() ? {} : ({ transitionProperty: "colors, opacity, transform", transitionDuration: MOTION[speed], transitionTimingFunction: "ease-out" } as const);
+const ease = (speed: keyof typeof MOTION = "fast", property: "colors, opacity, transform" | "colors" = "colors, opacity, transform") =>
+  reduceMotion() ? {} : ({ transitionProperty: property, transitionDuration: MOTION[speed], transitionTimingFunction: "ease-out" } as const);
 /** 按下时轻微缩小（activeStyle 用）。 */
 const pressed = () => (reduceMotion() ? {} : { transform: [{ scale: PRESS }] });
 /**
@@ -1611,6 +1611,10 @@ function App() {
     const g: Glide = { frames, start: now, ms };
     glide = g;
     turning.set(from.rotate !== 0);
+    // 先把起点姿态设上，和新布局同一帧生效：play 的第一个值要下一帧才到，中间那帧机身会以新尺寸闪一下
+    motion.rotate.set(from.rotate);
+    motion.scaleX.set(from.scaleX);
+    motion.scaleY.set(from.scaleY);
     motion.play(
       { keyframes: { rotate: frames.map((f) => f.rotate), scaleX: frames.map((f) => f.scaleX), scaleY: frames.map((f) => f.scaleY) }, duration: ms, easing: "linear" },
     ).then(() => {
@@ -2146,9 +2150,9 @@ function App() {
           <View style={{ flex: 1, minHeight: 0, alignItems: "center", gap: SPACE.inset, paddingTop: SPACE.section, paddingBottom: SPACE.group, paddingHorizontal: SPACE.group }}>
             <View onLayout={({ bounds }) => deviceArea.set({ width: bounds.size.width, height: bounds.size.height })}
               style={{ flex: 1, minHeight: 0, alignSelf: "stretch", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                {/* 键盘焦点在画面上时机身描一圈焦点环（画布自己不画焦点框） */}
+                {/* 键盘焦点在画面上时机身描一圈焦点环（画布自己不画焦点框）。只过渡颜色：transform 由 motion 逐帧写，再套过渡会把起点拉平，缩放、转向时机身先跳到新尺寸再弹回去 */}
                 <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: keyboardShown() ? token("ring") : token("border-strong"), backgroundColor: token("device-bezel"),
-                  boxShadow: keyboardShown() ? [{ x: 0, y: 0, blur: 0, spread: 2, color: token("ring") }] : [], transform: motion.transform, pointerEvents: turning() ? "none" : "auto", ...ease() }}>
+                  boxShadow: keyboardShown() ? [{ x: 0, y: 0, blur: 0, spread: 2, color: token("ring") }] : [], transform: motion.transform, pointerEvents: turning() ? "none" : "auto", ...ease("fast", "colors") }}>
                   <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
                   <If when={drag().active}>
                     <View role="summary" style={{

@@ -40,7 +40,20 @@ test("fitMiddle 中文按一个字号宽估，比同样字数的英文先省略"
   assert.ok(fitMiddle("一二三四五六七八九十", 130, 18).includes("…"));
 });
 
+test("fitMiddle 表情按一个字号宽估：一排表情比同样个数的字母先省略", () => {
+  assert.equal(fitMiddle("abcdefghij", 130, 18), "abcdefghij");
+  assert.ok(fitMiddle("😀".repeat(10), 130, 18).includes("…"));
+  assert.ok(fitMiddle("☕".repeat(10), 130, 18).includes("…"));
+});
+
+const NBSP = String.fromCharCode(0xa0);
+
 test("noBreak：空格都换成不断行空格，别的字不动", () => {
-  assert.equal(noBreak("Android 16 · 1080×2400"), "Android\u00a016\u00a0·\u00a01080×2400");
+  assert.equal(noBreak("Android 16 · 1080×2400"), ["Android", "16", "·", "1080×2400"].join(NBSP));
   assert.equal(noBreak("API36"), "API36");
+});
+
+test("noBreak：网页标题里的换行和首尾空白不会让单行只剩第一行（或只剩「…」）", () => {
+  assert.equal(noBreak("\n  longbridge.app.local\n  首页 "), ["longbridge.app.local", "首页"].join(NBSP));
+  assert.equal(noBreak("a\t\tb"), ["a", "b"].join(NBSP));
 });

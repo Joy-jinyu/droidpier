@@ -39,9 +39,11 @@ test("自动更新没成（下载站还没新版本、失败）时改成给安�
   assert.match(b!.text, /下载站上的版本签名不对/);
 });
 
-test("timeoutText：网关级别不够时说太旧不支持；够或还不知道时用原来的说明", () => {
-  assert.equal(timeoutText(null, 1, "删除设备", "slow"), "网关版本太旧，不支持删除设备，请运行安装命令更新网关");
-  assert.equal(timeoutText(svc(0), 1, "删除设备", "slow"), "网关版本太旧，不支持删除设备，请运行安装命令更新网关");
-  assert.equal(timeoutText(svc(1), 1, "删除设备", "slow"), "slow");
-  assert.equal(timeoutText(undefined, 1, "删除设备", "slow"), "slow");
+test("timeoutText：网关级别不够时说太旧不支持，并给出更新的命令；够或还不知道时用原来的说明", () => {
+  const cmd = "curl -fsSL https://droid.devpier.dev/install.sh | sh";
+  const old = `网关版本太旧，不支持删除设备。请在终端运行 ${cmd} 更新网关`;
+  assert.equal(timeoutText(null, 1, "删除设备", "slow", cmd), old);
+  assert.equal(timeoutText(svc(0), 1, "删除设备", "slow", cmd), old);
+  assert.equal(timeoutText(svc(1), 1, "删除设备", "slow", cmd), "slow");
+  assert.equal(timeoutText(undefined, 1, "删除设备", "slow", cmd), "slow");
 });

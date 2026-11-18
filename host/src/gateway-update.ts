@@ -37,10 +37,13 @@ export function gatewayBanner(info: GatewayInfo | null, pageLevel: number, repor
   }
 }
 
+/** 网关太旧、不支持某个操作时的话，带上更新网关的命令（command 是这个站点的安装命令）。 */
+export const tooOldText = (what: string, command: string) => `网关版本太旧，不支持${what}。请在终端运行 ${command} 更新网关`;
+
 /**
  * 请求超时（15 秒没回）时给用户看的话。网关功能级别低于这条消息要的级别时说它太旧、不支持；
  * 否则是网关真的慢（删大目录），slow 是那种情况的说明。
  */
-export function timeoutText(info: GatewayInfo | null | undefined, level: number, what: string, slow: string): string {
-  return info !== undefined && gatewayBelow(info, level) ? `网关版本太旧，不支持${what}，请运行安装命令更新网关` : slow;
+export function timeoutText(info: GatewayInfo | null | undefined, level: number, what: string, slow: string, command: string): string {
+  return info !== undefined && gatewayBelow(info, level) ? tooOldText(what, command) : slow;
 }

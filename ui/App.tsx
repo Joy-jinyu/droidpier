@@ -67,16 +67,17 @@ type Confirm = { kind: "install"; ids: EnvId[] } | { kind: "avd"; avd: NewAvd };
 const DOCS_PATH = "/docs/getting-started/install/";
 
 /**
- * 颜色都在 ui/theme.json（nsh.json 的 "theme"，shadcn/ui 的 cssVars，Zinc 灰阶 + 品牌紫），这里只按角色用 token()，
+ * 颜色都在 ui/theme.json（nsh.json 的 "theme"，shadcn/ui 的 cssVars；颜色取自官网 site/src/styles/theme.css 的青色品牌色和带青的灰阶，两边一起改），这里只按角色用 token()，
  * 外观切换时 token() 自己换值；读的地方都要在 JSX 表达式或函数里，存进普通变量就只读一次。
  * 选中和开着用两种颜色：列表、分段控件、标签页里选中的一项用中性的 accent 底（或 foreground 指示条）；
- * 紫色（primary）只给主操作按钮和开着的开关（工具栏的 H5、日志）。
+ * 品牌青（primary）只给主操作按钮和开着的开关（工具栏的 H5、日志），和官网「强调色只给主按钮、选中态」一致。
  * shadcn 角色之外的：field 输入框和触发器的底，border-subtle / border-strong 比 border 淡一档、深一档，
- * toolbar-foreground 工具栏图标，primary-soft / primary-text 中性底上的紫色底和紫色字，primary-hover 主按钮悬停，
+ * toolbar-foreground 工具栏图标，primary-soft / primary-text 中性底上的品牌色底和品牌色字，primary-hover 主按钮悬停，
  * warning / success 状态色，overlay 画面上的浮层提示，drag-shade 拖文件时盖在画面上的底，scrim 对话框后面的遮罩，
  * selection 输入框的选区，device-bezel 机身。
- * 浅色 muted-foreground 是 #5b5b63（原来 zinc-500 #71717a）：在选中行 #e4e4e7 上 5.30:1、拖文件的遮罩盖在纯黑画面上时 4.57:1，
- * 都过 WCAG AA 的 4.5:1（2026-11-17 按 WCAG 相对亮度公式算）。
+ * 对比度（2026-11-18 按 WCAG 相对亮度公式算）：次要文字 muted-foreground 在各层底色上浅色 ≥5.83:1、深色 ≥6.03:1；
+ * 主按钮上的字浅色 6.14:1、深色 6.95:1。浅色的 success / warning / destructive 比官网没有的状态色深一档（#166534、#a3460a、#c81e1e），
+ * 压在灰色填充 muted 上也过 4.5:1。
  */
 
 /** 输入框的占位符、光标和选区颜色：nsh/base 的 Input 不设就是浏览器默认（选区是系统蓝）。 */
@@ -310,7 +311,7 @@ const withWhy = (label: string, disabled: boolean | undefined, why: string | und
 /** 菜单开着时触发器是按下的样子：nsh 的 Button 不收 expandedStyle，用 aria-expanded: 类（颜色是主题 token）。 */
 const EXPANDED = "aria-expanded:bg-accent";
 
-/** 文字按钮：默认是次要按钮；primary 是一屏一个的主操作（紫），danger 是破坏性操作。why：禁用时说明原因。 */
+/** 文字按钮：默认是次要按钮；primary 是一屏一个的主操作（品牌青），danger 是破坏性操作。why：禁用时说明原因。 */
 function Btn(props: { label: string; onPress: () => void; kind?: "danger" | "primary"; disabled?: boolean; why?: string }) {
   const primary = () => props.kind === "primary";
   return (
@@ -380,7 +381,7 @@ function ToolGroup(props: { label: string; children: JSX.Element }) {
 const panelBar = () =>
   ({ flexDirection: "row", alignItems: "center", gap: SPACE.item, paddingVertical: SPACE.item, paddingHorizontal: SPACE.inset, borderBottomWidth: 1, borderColor: token("border-subtle") }) as const;
 
-/** 开关按钮（工具栏的 H5 调试、日志，日志面板的暂停、跟随最新）：开着时是紫色；名字固定，开没开由 pressed 告诉读屏。 */
+/** 开关按钮（工具栏的 H5 调试、日志，日志面板的暂停、跟随最新）：开着时是品牌色；名字固定，开没开由 pressed 告诉读屏。 */
 function ToolToggle(props: { icon: IconName; label: string; tip: string; on: boolean; onChange: () => void; variant?: "ghost" | "toolbar" }) {
   return (
     <Toggle pressed={props.on} onChange={props.onChange} accessibilityLabel={props.label} tooltip={<Tip label={props.tip} />}

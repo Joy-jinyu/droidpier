@@ -2,6 +2,7 @@
   "name": "Droidpier",
   "id": "dev.devpier.droidpier",
   "icon": "./icon.png",
+  "theme": "./theme.json",
   "capabilities": {
     "host": ["emu.*"],
     "openUrl": { "schemes": ["https"] }

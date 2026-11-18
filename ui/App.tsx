@@ -1,4 +1,4 @@
-import { cleanup, colorScheme, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, View } from "nsh";
+import { cleanup, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, token, View } from "nsh";
 import { Button, ContextMenu, Dialog, Input, Menu, MenuItem, MenuSeparator, Radio, RadioGroup, Select, Toggle, Toolbar, ToolbarGroup, Tooltip } from "nsh/base";
 import { middleEllipsis } from "./ellipsis";
 import { isStaleStatus } from "./status-rev";
@@ -62,58 +62,19 @@ type Confirm = { kind: "install"; ids: EnvId[] } | { kind: "avd"; avd: NewAvd };
 // 菜单里回官网的链接；官网的来源由 host 给（emu.site：公网页面自己的来源，本机网关托管的页面用官方的）
 const DOCS_PATH = "/docs/getting-started/install/";
 
-// shadcn/ui 设计系统（Zinc 灰阶 + 品牌紫），紫色只给选中状态和主操作
-const DARK = {
-  bg: "#09090b",
-  surface: "#111113",
-  panel: "#18181b",
-  hover: "#27272a",
-  lineSoft: "#1f1f23",
-  line: "#27272a",
-  lineStrong: "#3f3f46",
-  text: "#fafafa",
-  keyText: "#d4d4d8",
-  muted: "#a1a1aa",
-  warn: "#fbbf24",
-  danger: "#f87171",
-  ok: "#4ade80",
-  accent: "#7544f2",
-  accentSoft: "rgba(139,102,246,0.16)",
-  accentText: "#c4b2fb",
-  // 紫底上的文字
-  onAccent: "#fafafa",
-  overlay: "#18181bf2",
-  // 没在运行的设备前面的圆点
-  idle: "#52525b",
-  primaryHover: "#6435e0",
-  // 拖文件到设备上时盖在画面上的底色
-  dragShade: "rgba(9,9,11,0.82)",
-};
-const LIGHT: typeof DARK = {
-  bg: "#f4f4f5",
-  surface: "#ffffff",
-  panel: "#fafafa",
-  hover: "#e4e4e7",
-  lineSoft: "#e4e4e7",
-  line: "#e4e4e7",
-  lineStrong: "#d4d4d8",
-  text: "#09090b",
-  keyText: "#3f3f46",
-  muted: "#71717a",
-  warn: "#b45309",
-  danger: "#dc2626",
-  ok: "#16a34a",
-  accent: "#7544f2",
-  accentSoft: "rgba(117,68,242,0.12)",
-  accentText: "#5b2fd6",
-  onAccent: "#fafafa",
-  overlay: "#fffffff2",
-  idle: "#a1a1aa",
-  primaryHover: "#6435e0",
-  dragShade: "rgba(250,250,250,0.85)",
-};
-// 外观换了颜色跟着换：每次读 C.x 都按当前外观取，读的地方都在 JSX 表达式里，会重新求值
-const C = new Proxy(DARK, { get: (_, key: keyof typeof DARK) => (colorScheme() === "light" ? LIGHT : DARK)[key] });
+/**
+ * 颜色都在 ui/theme.json（nsh.json 的 "theme"，shadcn/ui 的 cssVars，Zinc 灰阶 + 品牌紫），这里只按角色用 token()，
+ * 外观切换时 token() 自己换值；读的地方都要在 JSX 表达式或函数里，存进普通变量就只读一次。紫色只给选中状态和主操作。
+ * shadcn 角色之外的：field 输入框和触发器的底，border-subtle / border-strong 比 border 淡一档、深一档，
+ * toolbar-foreground 工具栏图标，primary-soft / primary-text 中性底上的紫色底和紫色字，primary-hover 主按钮悬停，
+ * warning / success 状态色，overlay 画面上的浮层提示，drag-shade 拖文件时盖在画面上的底，scrim 对话框后面的遮罩，
+ * selection 输入框的选区，device-bezel 机身。
+ * 浅色 muted-foreground 是 #5b5b63（原来 zinc-500 #71717a）：在选中行 #e4e4e7 上 5.30:1、拖文件的遮罩盖在纯黑画面上时 4.57:1，
+ * 都过 WCAG AA 的 4.5:1（2026-11-17 按 WCAG 相对亮度公式算）。
+ */
+
+/** 输入框的占位符、光标和选区颜色：nsh/base 的 Input 不设就是浏览器默认（选区是系统蓝）。 */
+const inputColors = () => ({ placeholderColor: token("muted-foreground"), caretColor: token("foreground"), selectionColor: token("selection") });
 
 const LABEL: Record<State, string> = {
   connecting: "连接中…",
@@ -235,12 +196,12 @@ function Btn(props: { label: string; onPress: () => void; kind?: "danger" | "pri
   const primary = () => props.kind === "primary";
   return (
     <View onPress={props.onPress} role="button" accessibilityLabel={props.label} disabled={props.disabled}
-      hoverStyle={{ backgroundColor: primary() ? C.primaryHover : C.hover }} focusStyle={{ borderColor: C.muted }} activeStyle={pressed(0.97)}
+      hoverStyle={{ backgroundColor: primary() ? token("primary-hover") : token("accent") }} focusStyle={{ borderColor: token("ring") }} activeStyle={pressed(0.97)}
       style={{
-        height: 32, justifyContent: "center", backgroundColor: primary() ? C.accent : C.panel, borderRadius: 8, paddingHorizontal: 12,
-        borderWidth: 1, borderColor: primary() ? C.accent : C.line, opacity: props.disabled ? 0.4 : 1, ...ease(),
+        height: 32, justifyContent: "center", backgroundColor: primary() ? token("primary") : token("secondary"), borderRadius: 8, paddingHorizontal: 12,
+        borderWidth: 1, borderColor: primary() ? token("primary") : token("border"), opacity: props.disabled ? 0.4 : 1, ...ease(),
       }}>
-      <Text style={{ color: props.kind === "danger" ? C.danger : primary() ? C.onAccent : C.text, fontSize: 13, fontWeight: primary() ? "600" : "500" }}>{props.label}</Text>
+      <Text style={{ color: props.kind === "danger" ? token("destructive") : primary() ? token("primary-foreground") : token("foreground"), fontSize: 13, fontWeight: primary() ? "600" : "500" }}>{props.label}</Text>
     </View>
   );
 }
@@ -249,7 +210,7 @@ function Btn(props: { label: string; onPress: () => void; kind?: "danger" | "pri
 function AdbStuck(props: { onReboot: () => void }) {
   return (
     <View role="alert" style={{ gap: 6 }}>
-      <Text style={{ color: C.danger, fontSize: 12, lineHeight: 18 }}>{ADB_UNRESPONSIVE}</Text>
+      <Text style={{ color: token("destructive"), fontSize: 12, lineHeight: 18 }}>{ADB_UNRESPONSIVE}</Text>
       <View style={{ flexDirection: "row" }}>
         <Btn label="重启模拟器" onPress={props.onReboot} />
       </View>
@@ -261,10 +222,17 @@ function AdbStuck(props: { onReboot: () => void }) {
 function MsgLine(props: { msg: Msg; onReboot: () => void }) {
   return (
     <If when={!props.msg.adbStuck} else={<AdbStuck onReboot={props.onReboot} />}>
-      <Text role={props.msg.error ? "alert" : "text"} style={{ color: props.msg.error ? C.danger : C.ok, fontSize: 12, lineHeight: 18 }}>{props.msg.text}</Text>
+      <Text role={props.msg.error ? "alert" : "text"} style={{ color: props.msg.error ? token("destructive") : token("success"), fontSize: 12, lineHeight: 18 }}>{props.msg.text}</Text>
     </If>
   );
 }
+
+/**
+ * 下拉框的一行：focus: 是方向键或指针所在的那行（高亮），selected: 是当前选中的那项（紫字加粗）。
+ * renderItem 拿不到行的状态，字的颜色靠行上的 group 和 group-selected:；所以字的颜色写在 class 里，不能写在 style 里（style 比 class 优先）。
+ */
+const SELECT_ITEM = "group rounded-md focus:bg-accent";
+const SELECT_ITEM_TEXT = "text-foreground group-selected:text-primary-text group-selected:font-semibold";
 
 const LOG_LEVELS: Array<{ value: LogLevel; title: string }> = [
   { value: "V", title: "全部级别" },
@@ -275,6 +243,8 @@ const LOG_LEVELS: Array<{ value: LogLevel; title: string }> = [
   { value: "F", title: "只看严重" },
 ];
 const ALL_APPS = "\u0000all";
+/** 日志级别的颜色角色（ui/log-store.ts 的 levelColor）对应的主题 token。 */
+const LEVEL_TOKEN = { muted: "muted-foreground", text: "foreground", warn: "warning", danger: "destructive" } as const;
 /** 日志一行的高度：固定行高、一行显示不下就截断。换行的话虚拟列表按估计高度摆放，测出实际高度前行会叠在一起（2026-11-16 实测）。 */
 const LOG_ROW_H = 17;
 
@@ -282,17 +252,17 @@ const LOG_ROW_H = 17;
 function LogRowView(props: { row: () => LogRow }) {
   return (
     <If when={!("skipped" in props.row())} else={
-      <Text style={{ height: LOG_ROW_H, paddingHorizontal: 10, color: C.muted, fontSize: 11, lineHeight: LOG_ROW_H, fontStyle: "italic", numberOfLines: 1 }}>{`省略了 ${(props.row() as { skipped: number }).skipped} 行（页面跟不上）`}</Text>
+      <Text style={{ height: LOG_ROW_H, paddingHorizontal: 10, color: token("muted-foreground"), fontSize: 11, lineHeight: LOG_ROW_H, fontStyle: "italic", numberOfLines: 1 }}>{`省略了 ${(props.row() as { skipped: number }).skipped} 行（页面跟不上）`}</Text>
     }>
       {(() => {
         const l = () => props.row() as LogLine;
-        const color = () => C[levelColor(l().level)];
+        const color = () => token(LEVEL_TOKEN[levelColor(l().level)]);
         const cell = { fontSize: 11, lineHeight: LOG_ROW_H, fontFamily: "monospace", numberOfLines: 1 } as const;
         return (
           <View style={{ height: LOG_ROW_H, flexDirection: "row", gap: 6, paddingHorizontal: 10 }}>
-            <Text style={{ ...cell, flexShrink: 0, color: C.muted }}>{`${l().time.slice(6)} ${l().pid}`}</Text>
+            <Text style={{ ...cell, flexShrink: 0, color: token("muted-foreground") }}>{`${l().time.slice(6)} ${l().pid}`}</Text>
             <Text style={{ ...cell, flexShrink: 0, maxWidth: "35%", color: color(), fontWeight: "600" }}>{`${l().level} ${l().tag}`}</Text>
-            <Text style={{ ...cell, flex: 1, minWidth: 0, color: l().level === "E" || l().level === "F" ? C.danger : C.text }}>{l().msg}</Text>
+            <Text style={{ ...cell, flex: 1, minWidth: 0, color: l().level === "E" || l().level === "F" ? token("destructive") : token("foreground") }}>{l().msg}</Text>
           </View>
         );
       })()}
@@ -351,40 +321,45 @@ function LogPanel(props: { device: () => string; live: () => boolean; onClose: (
     { value: ALL_APPS, title: "全部 App" },
     ...[...new Set([...(apps().foreground ? [apps().foreground!] : []), ...apps().apps])].map((a) => ({ value: a, title: a === apps().foreground ? `${a}（前台）` : a })),
   ];
-  const selectStyle = { popupStyle: { backgroundColor: C.panel, borderRadius: 8, borderWidth: 1, borderColor: C.line, padding: 4, minWidth: 220, maxHeight: 360 } };
+  // 函数：在 JSX 里调用才会跟着外观换色（存成对象只在创建时读一次）
+  const popupStyle = () => ({ backgroundColor: token("popover"), borderRadius: 8, borderWidth: 1, borderColor: token("border"), padding: 4, minWidth: 220, maxHeight: 360 });
+  const searchStyle = () => ({
+    height: 28, marginBottom: 4, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: token("input"), backgroundColor: token("field"),
+    color: token("foreground"), fontSize: 12, ...inputColors(),
+  });
   const trigger = (label: () => string, width: number) => (
-    <View style={{ width, height: 30, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: C.line, backgroundColor: C.bg }}
-      hoverStyle={{ borderColor: C.lineStrong }} focusStyle={{ borderColor: C.muted }}>
-      <Text style={{ flex: 1, color: C.text, fontSize: 12, numberOfLines: 1 }}>{label()}</Text>
-      <Icon name="chevron" size={14} tint={C.muted} />
+    <View style={{ width, height: 30, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: token("input"), backgroundColor: token("field") }}
+      hoverStyle={{ borderColor: token("border-strong") }} focusStyle={{ borderColor: token("ring") }}>
+      <Text style={{ flex: 1, color: token("foreground"), fontSize: 12, numberOfLines: 1 }}>{label()}</Text>
+      <Icon name="chevron" size={14} tint={token("muted-foreground")} />
     </View>
   );
   const renderItem = (item: { title: string }) => (
-    <View style={{ height: 28, justifyContent: "center", paddingHorizontal: 8, borderRadius: 6 }} hoverStyle={{ backgroundColor: C.hover }}>
-      <Text style={{ color: C.text, fontSize: 12, numberOfLines: 1 }}>{item.title}</Text>
+    <View style={{ height: 28, justifyContent: "center", paddingHorizontal: 8 }}>
+      <Text class={SELECT_ITEM_TEXT} style={{ fontSize: 12, numberOfLines: 1 }}>{item.title}</Text>
     </View>
   );
 
   return (
     <View role="region" accessibilityLabel="日志" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-      <View role="toolbar" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: C.lineSoft }}>
-        <Select items={appItems()} value={pkg() ?? ALL_APPS} accessibilityLabel="按 App 过滤" {...selectStyle} renderItem={renderItem}
-          searchable searchPlaceholder="搜包名" searchAccessibilityLabel="搜包名"
+      <View role="toolbar" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: token("border-subtle") }}>
+        <Select items={appItems()} value={pkg() ?? ALL_APPS} accessibilityLabel="按 App 过滤" popupStyle={popupStyle()} itemClass={SELECT_ITEM} renderItem={renderItem}
+          searchable searchPlaceholder="搜包名" searchAccessibilityLabel="搜包名" searchStyle={searchStyle()}
           onOpenChange={({ open }) => { if (open) void loadApps(); }}
           onChange={({ value }) => { pkg.set(value === ALL_APPS ? null : value); refilter(); }}
           trigger={trigger(() => pkg() ?? "全部 App", 190)} />
-        <Select items={LOG_LEVELS} value={level()} accessibilityLabel="最低级别" {...selectStyle} renderItem={renderItem}
+        <Select items={LOG_LEVELS} value={level()} accessibilityLabel="最低级别" popupStyle={popupStyle()} itemClass={SELECT_ITEM} renderItem={renderItem}
           onChange={({ value }) => { level.set(value as LogLevel); refilter(); }}
           trigger={trigger(() => LOG_LEVELS.find((l) => l.value === level())!.title, 112)} />
-        <View style={{ flex: 1, minWidth: 120, height: 30, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: C.line, backgroundColor: C.bg }}>
-          <Icon name="search" size={14} tint={C.muted} />
+        <View style={{ flex: 1, minWidth: 120, height: 30, flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: token("input"), backgroundColor: token("field") }}>
+          <Icon name="search" size={14} tint={token("muted-foreground")} />
           <Input value={text()} placeholder="搜 tag 或内容" accessibilityLabel="搜 tag 或内容" autoCapitalize="none" autoCorrect={false}
             onChange={({ value }) => {
               text.set(value);
               clearTimeout(textTimer);
               textTimer = setTimeout(refilter, 300);
             }}
-            style={{ flex: 1, minWidth: 0, height: 28, color: C.text, fontSize: 12 }} />
+            style={{ flex: 1, minWidth: 0, height: 28, color: token("foreground"), fontSize: 12, ...inputColors() }} />
         </View>
         <IconBtn icon={paused() ? "play" : "pause"} label={paused() ? "继续" : "暂停"} onPress={() => {
           if (paused()) {
@@ -397,14 +372,14 @@ function LogPanel(props: { device: () => string; live: () => boolean; onClose: (
         <IconBtn icon="toEnd" label={follow() ? "跟随中" : "跟随最新"} onPress={() => { follow.set(true); list?.scrollToEnd({ animated: false }); }} />
         <IconBtn icon="close" label="关闭日志" onPress={props.onClose} />
       </View>
-      <List each={rows()} keyExtractor={(r) => String(r.n)} estimatedItemSize={LOG_ROW_H} style={{ flex: 1, minHeight: 0, backgroundColor: C.surface }}
+      <List each={rows()} keyExtractor={(r) => String(r.n)} estimatedItemSize={LOG_ROW_H} style={{ flex: 1, minHeight: 0, backgroundColor: token("background") }}
         ref={(r) => (list = r)} scrollEventThrottle={100}
         onScroll={(e) => {
           // 往上翻离开底部就不再跟随；滚回底部又自动跟随
           const atEnd = e.offset.y + e.size.height >= e.contentSize.height - 40;
           if (atEnd !== follow()) follow.set(atEnd);
         }}
-        empty={<Text style={{ padding: 16, color: C.muted, fontSize: 12 }}>{paused() ? "已暂停" : "还没有日志"}</Text>}>
+        empty={<Text style={{ padding: 16, color: token("muted-foreground"), fontSize: 12 }}>{paused() ? "已暂停" : "还没有日志"}</Text>}>
         {(row) => <LogRowView row={row} />}
       </List>
     </View>
@@ -512,50 +487,51 @@ function H5Console(props: {
 
   return (
     <View role="region" accessibilityLabel="H5 控制台" style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-      <View role="toolbar" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: C.lineSoft }}>
+      <View role="toolbar" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderColor: token("border-subtle") }}>
         <Select items={items()} value={activeKey() ?? undefined} accessibilityLabel="调试页面" disabled={items().length === 0}
           onChange={({ value }) => {
             const p = appPages().find((x) => pageKey(x) === value);
             if (p) inspect(p);
           }}
-          popupStyle={{ backgroundColor: C.panel, borderRadius: 8, borderWidth: 1, borderColor: C.line, padding: 4, minWidth: 220 }}
+          popupStyle={{ backgroundColor: token("popover"), borderRadius: 8, borderWidth: 1, borderColor: token("border"), padding: 4, minWidth: 220 }}
+          itemClass={SELECT_ITEM}
           renderItem={(item) => (
-            <View style={{ height: 30, justifyContent: "center", paddingHorizontal: 8, borderRadius: 6 }} hoverStyle={{ backgroundColor: C.hover }}>
-              <Text style={{ color: C.text, fontSize: 13, numberOfLines: 1 }}>{item.title}</Text>
+            <View style={{ height: 30, justifyContent: "center", paddingHorizontal: 8 }}>
+              <Text class={SELECT_ITEM_TEXT} style={{ fontSize: 13, numberOfLines: 1 }}>{item.title}</Text>
             </View>
           )}
           trigger={
-            <View style={{ width: 160, height: 32, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: C.line, backgroundColor: C.bg }}
-              hoverStyle={{ borderColor: C.lineStrong }} focusStyle={{ borderColor: C.muted }}>
-              <Text style={{ flex: 1, color: activePage() ? C.text : C.muted, fontSize: 13, numberOfLines: 1 }}>
+            <View style={{ width: 160, height: 32, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: 1, borderColor: token("input"), backgroundColor: token("field") }}
+              hoverStyle={{ borderColor: token("border-strong") }} focusStyle={{ borderColor: token("ring") }}>
+              <Text style={{ flex: 1, color: activePage() ? token("foreground") : token("muted-foreground"), fontSize: 13, numberOfLines: 1 }}>
                 {activePage() ? pageTitle(activePage()!) : "没有页面"}
               </Text>
-              <Icon name="chevron" size={14} tint={C.muted} />
+              <Icon name="chevron" size={14} tint={token("muted-foreground")} />
             </View>
           } />
         {/* 当前页面的地址：改了按回车跳转（localhost 自动 adb reverse），Escape 放弃修改 */}
         <View role="group" accessibilityLabel="页面地址"
-          style={{ flex: 1, minWidth: 180, height: 32, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: 10, paddingRight: 2, borderRadius: 8, borderWidth: 1, borderColor: addressFocused() ? C.muted : C.line, backgroundColor: C.bg, opacity: navigating() ? 0.6 : 1 }}>
-          <Icon name="link" size={14} tint={C.muted} />
+          style={{ flex: 1, minWidth: 180, height: 32, flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: 10, paddingRight: 2, borderRadius: 8, borderWidth: 1, borderColor: addressFocused() ? token("ring") : token("input"), backgroundColor: token("field"), opacity: navigating() ? 0.6 : 1 }}>
+          <Icon name="link" size={14} tint={token("muted-foreground")} />
           <Input value={addressShown(draft(), currentUrl())} onChange={({ value }) => draft.set(addressEdit(currentUrl(), value))} onSubmit={navigate}
             submitBehavior="submit" readonly={!activePage() || navigating()}
             onFocus={() => addressFocused.set(true)} onBlur={() => addressFocused.set(false)}
             placeholder="localhost:5173/path" accessibilityLabel="页面地址，改了按回车跳转" autoCapitalize="none" autoCorrect={false}
-            style={{ flex: 1, minWidth: 0, height: 30, color: C.text, fontSize: 12, fontFamily: "monospace" }} />
+            style={{ flex: 1, minWidth: 0, height: 30, color: token("foreground"), fontSize: 12, fontFamily: "monospace", ...inputColors() }} />
           <IconBtn icon="copy" label="复制地址" disabled={!currentUrl()} onPress={() => props.onCopy(currentUrl()!)} />
         </View>
         <IconBtn icon="rotate" label="重新加载控制台" disabled={!props.inspected()} onPress={() => host.call("emu.devtoolsReload", {})} />
         <IconBtn icon="close" label="关闭控制台" onPress={props.onClose} />
       </View>
       <If when={inspectMsg() || listError() || result() || props.picking()}>
-        <View style={{ gap: 4, paddingVertical: 6, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: C.lineSoft }}>
+        <View style={{ gap: 4, paddingVertical: 6, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: token("border-subtle") }}>
           <If when={props.picking()}>
-            <Text role="status" style={{ color: C.text, fontSize: 12, lineHeight: 18 }}>选择元素：在画面上移动鼠标高亮，点一下选中；点在网页以外的地方不起作用</Text>
+            <Text role="status" style={{ color: token("foreground"), fontSize: 12, lineHeight: 18 }}>选择元素：在画面上移动鼠标高亮，点一下选中；点在网页以外的地方不起作用</Text>
           </If>
           <If when={inspectMsg()}>
             {(m) => (
               <If when={!m().adbStuck} else={<AdbStuck onReboot={props.onReboot} />}>
-                <Text role={m().error ? "alert" : "text"} style={{ color: m().error ? C.danger : C.text, fontSize: 12, lineHeight: 18 }}>{m().text}</Text>
+                <Text role={m().error ? "alert" : "text"} style={{ color: m().error ? token("destructive") : token("foreground"), fontSize: 12, lineHeight: 18 }}>{m().text}</Text>
               </If>
             )}
           </If>
@@ -566,8 +542,8 @@ function H5Console(props: {
       <View style={{ flex: 1, minHeight: 0, position: "relative" }}>
         <View testID="devtools" style={{ flex: 1, minHeight: 0, position: "relative" }} />
         <If when={!props.inspected()}>
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: C.surface }}>
-            <Text style={{ maxWidth: 360, color: C.muted, fontSize: 13, lineHeight: 20, textAlign: "center" }}>{placeholder()}</Text>
+          <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24, backgroundColor: token("background") }}>
+            <Text style={{ maxWidth: 360, color: token("muted-foreground"), fontSize: 13, lineHeight: 20, textAlign: "center" }}>{placeholder()}</Text>
           </View>
         </If>
       </View>
@@ -626,9 +602,9 @@ function IconBtn(props: { icon: IconName; label: string; onPress: () => void; di
   return (
     <View onPress={props.onPress} role="button" accessibilityLabel={props.tip ? `${props.label}：${props.tip}` : props.label} disabled={props.disabled}
       tooltip={<Tip label={props.tip ?? props.label} />}
-      hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} activeStyle={pressed(0.92)}
+      hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} activeStyle={pressed(0.92)}
       style={{ width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 8, borderWidth: 1, borderColor: "transparent", opacity: props.disabled ? 0.4 : 1, ...ease() }}>
-      <Icon name={props.icon} size={16} tint={C.muted} />
+      <Icon name={props.icon} size={16} tint={token("muted-foreground")} />
     </View>
   );
 }
@@ -636,8 +612,8 @@ function IconBtn(props: { icon: IconName; label: string; onPress: () => void; di
 function Tip(props: { label: string }) {
   return (
     <Tooltip placement="bottom" style={ease(120)} startingStyle={popOut(-3)} endingStyle={popOut(-3)}>
-      <View style={{ paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: C.line, backgroundColor: C.panel }}>
-        <Text style={{ color: C.text, fontSize: 12 }}>{props.label}</Text>
+      <View style={{ paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderColor: token("border"), backgroundColor: token("popover") }}>
+        <Text style={{ color: token("foreground"), fontSize: 12 }}>{props.label}</Text>
       </View>
     </Tooltip>
   );
@@ -648,9 +624,9 @@ function ToolBtn(props: { icon: IconName; label: string; onPress: () => void; di
   return (
     <Button onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.tip ? `${props.label}：${props.tip}` : props.label}
       tooltip={<Tip label={props.tip ? `${props.label}（${props.tip}）` : props.label} />}
-      hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} disabledStyle={{ opacity: 0.35 }} activeStyle={pressed(0.9)}
+      hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} disabledStyle={{ opacity: 0.35 }} activeStyle={pressed(0.9)}
       style={{ ...TOOL_BTN, ...ease() }}>
-      <Icon name={props.icon} size={17} tint={C.keyText} />
+      <Icon name={props.icon} size={17} tint={token("toolbar-foreground")} />
     </Button>
   );
 }
@@ -660,7 +636,7 @@ const TOOL_BTN = { height: 30, minWidth: 30, alignItems: "center", justifyConten
 function ToolGroup(props: { label: string; children: JSX.Element }) {
   return (
     <ToolbarGroup accessibilityLabel={props.label}
-      style={{ flexDirection: "row", alignItems: "center", gap: 1, padding: 2, borderRadius: 9, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.panel, ...ease(200) }}>
+      style={{ flexDirection: "row", alignItems: "center", gap: 1, padding: 2, borderRadius: 9, borderWidth: 1, borderColor: token("border-subtle"), backgroundColor: token("card"), ...ease(200) }}>
       {props.children}
     </ToolbarGroup>
   );
@@ -673,15 +649,15 @@ function ToolGroup(props: { label: string; children: JSX.Element }) {
 function Item(props: { label: string; onSelect: () => void; disabled?: boolean; danger?: boolean; icon?: IconName; trail?: string }) {
   return (
     <MenuItem onSelect={props.onSelect} disabled={props.disabled}
-      hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ backgroundColor: C.hover }} disabledStyle={{ opacity: 0.4 }}
+      hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ backgroundColor: token("accent") }} disabledStyle={{ opacity: 0.4 }}
       style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, ...ease(100) }}>
-      <If when={props.icon}>{(i) => <Icon name={i()} size={16} tint={C.muted} />}</If>
-      <Text style={{ flex: 1, color: props.danger ? C.danger : C.text, fontSize: 13 }}>{props.label}</Text>
-      <If when={props.trail}>{(t) => <Text style={{ color: C.muted, fontSize: 12 }}>{t()}</Text>}</If>
+      <If when={props.icon}>{(i) => <Icon name={i()} size={16} tint={token("muted-foreground")} />}</If>
+      <Text style={{ flex: 1, color: props.danger ? token("destructive") : token("foreground"), fontSize: 13 }}>{props.label}</Text>
+      <If when={props.trail}>{(t) => <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>{t()}</Text>}</If>
     </MenuItem>
   );
 }
-const menuPopup = () => ({ minWidth: 168, padding: 4, gap: 1, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.panel, ...ease(140) });
+const menuPopup = () => ({ minWidth: 168, padding: 4, gap: 1, borderRadius: 10, borderWidth: 1, borderColor: token("border"), backgroundColor: token("popover"), ...ease(140) });
 
 /** 设备画面缩放：缩小、当前比例（点一下回到适应窗口）、放大。 */
 function ZoomControl(props: { zoom: number; onZoom: (z: number) => void }) {
@@ -690,8 +666,8 @@ function ZoomControl(props: { zoom: number; onZoom: (z: number) => void }) {
     <ToolGroup label="画面缩放">
       <ToolBtn icon="minus" label="缩小" disabled={props.zoom === ZOOM_STEPS[0]} onPress={() => props.onZoom(stepZoom(props.zoom, -1))} />
       <Button onPress={() => props.onZoom(1)} accessibilityLabel={`缩放 ${percent()}，适应窗口`} tooltip={<Tip label="适应窗口" />}
-        hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} activeStyle={pressed(0.95)} style={{ ...TOOL_BTN, minWidth: 46, paddingHorizontal: 4, ...ease() }}>
-        <Text style={{ color: C.keyText, fontSize: 12 }}>{percent()}</Text>
+        hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} activeStyle={pressed(0.95)} style={{ ...TOOL_BTN, minWidth: 46, paddingHorizontal: 4, ...ease() }}>
+        <Text style={{ color: token("toolbar-foreground"), fontSize: 12 }}>{percent()}</Text>
       </Button>
       <ToolBtn icon="plus" label="放大" disabled={props.zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1]} onPress={() => props.onZoom(stepZoom(props.zoom, 1))} />
     </ToolGroup>
@@ -710,13 +686,13 @@ const THEME_OPTIONS: { theme: Theme; icon: IconName; label: string }[] = [
  */
 function ThemePicker(props: { value: Theme; onPick: (t: Theme) => void }) {
   return (
-    <View role="group" accessibilityLabel="外观" style={{ flexDirection: "row", gap: 2, padding: 2, borderRadius: 8, backgroundColor: C.hover }}>
+    <View role="group" accessibilityLabel="外观" style={{ flexDirection: "row", gap: 2, padding: 2, borderRadius: 8, backgroundColor: token("muted") }}>
       <Each of={THEME_OPTIONS} key={(o) => o.theme}>{(o) => (
         <MenuItem role="menuitemradio" checked={props.value === o().theme} closeOnSelect={false} onSelect={() => props.onPick(o().theme)}
           accessibilityLabel={`外观：${o().label}`}
           style={{ width: 30, height: 24, alignItems: "center", justifyContent: "center", borderRadius: 6, borderWidth: 1, borderColor: "transparent", ...ease() }}
-          checkedStyle={{ backgroundColor: C.surface, borderColor: C.line }} focusStyle={{ borderColor: C.muted }}>
-          <Icon name={o().icon} size={15} tint={props.value === o().theme ? C.text : C.muted} />
+          checkedStyle={{ backgroundColor: token("background"), borderColor: token("border") }} focusStyle={{ borderColor: token("ring") }}>
+          <Icon name={o().icon} size={15} tint={props.value === o().theme ? token("foreground") : token("muted-foreground")} />
         </MenuItem>
       )}</Each>
     </View>
@@ -726,8 +702,8 @@ function ThemePicker(props: { value: Theme; onPick: (t: Theme) => void }) {
 /** Droidpier 的标记：圆底上一个 D，菜单顶部和侧栏底部的按钮都用它。 */
 function Mark(props: { size: number }) {
   return (
-    <View style={{ width: props.size, height: props.size, borderRadius: props.size / 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: C.accentSoft, backgroundColor: C.accentSoft }}>
-      <Text style={{ color: C.accentText, fontSize: Math.round(props.size * 0.42), fontWeight: "600" }}>D</Text>
+    <View style={{ width: props.size, height: props.size, borderRadius: props.size / 2, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: token("primary-soft"), backgroundColor: token("primary-soft") }}>
+      <Text style={{ color: token("primary-text"), fontSize: Math.round(props.size * 0.42), fontWeight: "600" }}>D</Text>
     </View>
   );
 }
@@ -736,26 +712,26 @@ function Mark(props: { size: number }) {
 function AppMenu(props: { site: string; theme: Theme; onTheme: (t: Theme) => void }) {
   return (
     <Menu placement="top" offset={6} popupStyle={{ ...menuPopup(), minWidth: 248, padding: 6 }} popupStartingStyle={popOut(4)} popupEndingStyle={popOut(4)} trigger={
-      <Button accessibilityLabel="Droidpier 菜单" hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }}
+      <Button accessibilityLabel="Droidpier 菜单" hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }}
         style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: "transparent", ...ease() }}>
         <Mark size={28} />
-        <Text style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: "600" }}>Droidpier</Text>
-        <Icon name="chevronUp" size={15} tint={C.muted} />
+        <Text style={{ flex: 1, color: token("foreground"), fontSize: 13, fontWeight: "600" }}>Droidpier</Text>
+        <Icon name="chevronUp" size={15} tint={token("muted-foreground")} />
       </Button>
     }>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 6, paddingBottom: 10, paddingHorizontal: 8 }}>
         <Mark size={36} />
         <View style={{ gap: 2 }}>
-          <Text style={{ color: C.text, fontSize: 14, fontWeight: "600" }}>Droidpier</Text>
-          <Text style={{ color: C.muted, fontSize: 12 }}>{props.site.replace(/^https?:\/\//, "")}</Text>
+          <Text style={{ color: token("foreground"), fontSize: 14, fontWeight: "600" }}>Droidpier</Text>
+          <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>{props.site.replace(/^https?:\/\//, "")}</Text>
         </View>
       </View>
-      <MenuSeparator style={{ height: 1, marginBottom: 4, marginHorizontal: 4, backgroundColor: C.line }} />
+      <MenuSeparator style={{ height: 1, marginBottom: 4, marginHorizontal: 4, backgroundColor: token("border") }} />
       <Item icon="globe" label="官网" trail="↗" onSelect={() => void openUrl(`${props.site}/`)} />
       <Item icon="book" label="使用文档" trail="↗" onSelect={() => void openUrl(props.site + DOCS_PATH)} />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 4, paddingLeft: 10, paddingRight: 4 }}>
-        <Icon name="sun" size={16} tint={C.muted} />
-        <Text style={{ flex: 1, color: C.text, fontSize: 13 }}>外观</Text>
+        <Icon name="sun" size={16} tint={token("muted-foreground")} />
+        <Text style={{ flex: 1, color: token("foreground"), fontSize: 13 }}>外观</Text>
         <ThemePicker value={props.theme} onPick={props.onTheme} />
       </View>
     </Menu>
@@ -776,10 +752,10 @@ function CopyCmd(props: { cmd: string }) {
   cleanup(() => clearTimeout(timer));
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-      <Text style={{ flexShrink: 1, color: C.text, fontSize: 12, fontFamily: "monospace", userSelect: "text" }}>{props.cmd}</Text>
+      <Text style={{ flexShrink: 1, color: token("foreground"), fontSize: 12, fontFamily: "monospace", userSelect: "text" }}>{props.cmd}</Text>
       <Btn label="复制命令" onPress={copy} />
       <If when={result() !== null}>
-        <Text style={{ color: result() === "ok" ? C.ok : C.danger, fontSize: 12 }}>{result() === "ok" ? "已复制" : "复制失败，请手动选中复制"}</Text>
+        <Text style={{ color: result() === "ok" ? token("success") : token("destructive"), fontSize: 12 }}>{result() === "ok" ? "已复制" : "复制失败，请手动选中复制"}</Text>
       </If>
     </View>
   );
@@ -796,9 +772,9 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
   const toggleManual = (id: string) => manualOpen.set(manualOpen().includes(id) ? manualOpen().filter((x) => x !== id) : [...manualOpen(), id]);
   return (
     <View role="region" accessibilityLabel="环境检查"
-      style={{ width: 560, maxWidth: "100%", gap: 10, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.warn }}>
+      style={{ width: 560, maxWidth: "100%", gap: 10, backgroundColor: token("overlay"), borderRadius: 8, padding: 12, borderWidth: 1, borderColor: token("warning") }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <Text role="header" style={{ color: C.text, fontSize: 14, fontWeight: "bold" }}>环境检查</Text>
+        <Text role="header" style={{ color: token("foreground"), fontSize: 14, fontWeight: "bold" }}>环境检查</Text>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <If when={installable().length > 1}>
             <Btn label={`全部安装（${sizeText(total())}）`} disabled={busy()} onPress={() => props.onInstall({ ids: installable().map((m) => m.id), kind: "install" })} />
@@ -808,20 +784,20 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
           </If>
         </View>
       </View>
-      <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>
+      <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18 }}>
         {props.env.missing.length > 0
           ? `还不能启动设备，缺 ${props.env.missing.length} 项。点“安装”会先让你确认要下载什么、装到哪里。`
           : props.env.error ? "" : "环境已经齐全。"}
       </Text>
       <If when={props.env.error}>
-        {(e) => <Text role="alert" style={{ color: C.danger, fontSize: 13, lineHeight: 20 }}>{`${e()}。请重新运行网关后再打开页面。`}</Text>}
+        {(e) => <Text role="alert" style={{ color: token("destructive"), fontSize: 13, lineHeight: 20 }}>{`${e()}。请重新运行网关后再打开页面。`}</Text>}
       </If>
       <Scroll style={{ maxHeight: 460 }} contentStyle={{ gap: 8 }}>
         <Each of={props.env.missing} key={(m) => m.id}>
           {(m) => (
-            <View style={{ gap: 6, padding: 10, borderRadius: 8, backgroundColor: C.panel, borderWidth: 1, borderColor: C.line }}>
+            <View style={{ gap: 6, padding: 10, borderRadius: 8, backgroundColor: token("card"), borderWidth: 1, borderColor: token("border") }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Text style={{ flex: 1, color: C.text, fontSize: 13, fontWeight: "bold" }}>
+                <Text style={{ flex: 1, color: token("foreground"), fontSize: 13, fontWeight: "bold" }}>
                   {`${envName(m().id)}${m().sizeMb ? ` · ${sizeText(m().sizeMb!)}` : ""}`}
                 </Text>
                 <If when={m().auto}>
@@ -832,15 +808,15 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
                   </If>
                 </If>
               </View>
-              <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>{m().detail}</Text>
+              <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18 }}>{m().detail}</Text>
               <If when={manualHint(m(), props.env) !== null || !!m().command}>
                 <View style={{ gap: 6 }}>
                   <View onPress={() => toggleManual(m().id)} role="button" accessibilityLabel="手动安装" accessibilityState={{ expanded: manualOpen().includes(m().id) }}
                     hoverStyle={{ opacity: 0.8 }} style={{ flexDirection: "row", alignSelf: "flex-start", gap: 4 }}>
-                    <Text style={{ color: C.muted, fontSize: 12 }}>{`${manualOpen().includes(m().id) ? "▾" : "▸"} 手动安装`}</Text>
+                    <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>{`${manualOpen().includes(m().id) ? "▾" : "▸"} 手动安装`}</Text>
                   </View>
                   <If when={manualOpen().includes(m().id)}>
-                    <If when={manualHint(m(), props.env)}>{(h) => <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18, userSelect: "text" }}>{h()}</Text>}</If>
+                    <If when={manualHint(m(), props.env)}>{(h) => <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18, userSelect: "text" }}>{h()}</Text>}</If>
                     {/* 旧网关给的 sdkmanager / avdmanager 命令 */}
                     <If when={m().command}>{(cmd) => <CopyCmd cmd={cmd()} />}</If>
                   </If>
@@ -851,18 +827,18 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
         </Each>
         <If when={props.installs.length > 0}>
           <View role="list" accessibilityLabel="安装进度" style={{ gap: 6 }}>
-            <Text style={{ color: C.muted, fontSize: 12 }}>安装进度</Text>
+            <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>安装进度</Text>
             <Each of={props.installs} key={(p) => p.id}>
               {(p) => (
-                <View style={{ gap: 4, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: p().phase === "failed" ? C.danger : C.line }}>
+                <View style={{ gap: 4, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: p().phase === "failed" ? token("destructive") : token("border") }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ flex: 1, color: C.text, fontSize: 13 }}>{envName(p().id)}</Text>
-                    <Text style={{ color: p().phase === "failed" ? C.danger : p().phase === "done" ? C.ok : C.warn, fontSize: 12 }}>
+                    <Text style={{ flex: 1, color: token("foreground"), fontSize: 13 }}>{envName(p().id)}</Text>
+                    <Text style={{ color: p().phase === "failed" ? token("destructive") : p().phase === "done" ? token("success") : token("warning"), fontSize: 12 }}>
                       {`${PHASE[p().phase]}${p().pct !== undefined && p().phase === "download" ? ` ${p().pct}%` : ""}`}
                     </Text>
                   </View>
                   <If when={p().logTail}>
-                    {(log) => <Text style={{ color: C.muted, fontSize: 11, lineHeight: 16, fontFamily: "monospace", userSelect: "text" }}>{log()}</Text>}
+                    {(log) => <Text style={{ color: token("muted-foreground"), fontSize: 11, lineHeight: 16, fontFamily: "monospace", userSelect: "text" }}>{log()}</Text>}
                   </If>
                 </View>
               )}
@@ -886,10 +862,10 @@ function Choice(props: { label: string; detail: string; detailColor?: string; ch
         flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1,
         borderColor: "transparent", backgroundColor: "transparent", ...ease(),
       }}
-      checkedStyle={{ borderColor: C.lineStrong, backgroundColor: C.hover }}
-      focusStyle={{ borderColor: C.text }}>
-      <Text style={{ flex: 1, color: C.text, fontSize: 13 }}>{props.label}</Text>
-      <Text style={{ color: props.detailColor ?? C.muted, fontSize: 12 }}>{props.detail}</Text>
+      checkedStyle={{ borderColor: token("border-strong"), backgroundColor: token("accent") }}
+      focusStyle={{ borderColor: token("ring") }}>
+      <Text style={{ flex: 1, color: token("foreground"), fontSize: 13 }}>{props.label}</Text>
+      <Text style={{ color: props.detailColor ?? token("muted-foreground"), fontSize: 12 }}>{props.detail}</Text>
     </Radio>
   );
 }
@@ -954,15 +930,15 @@ function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; o
 
   return (
     <View role="group" accessibilityLabel="创建设备" style={{ gap: 10 }}>
-      <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>创建设备</Text>
-      <If when={props.loadError}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 13 }}>{e()}</Text>}</If>
-      <If when={catalog()} else={<Text style={{ color: C.muted, fontSize: 13 }}>正在读取机型和系统版本…</Text>}>
+      <Text role="header" style={{ color: token("foreground"), fontSize: 15, fontWeight: "bold" }}>创建设备</Text>
+      <If when={props.loadError}>{(e) => <Text role="alert" style={{ color: token("destructive"), fontSize: 13 }}>{e()}</Text>}</If>
+      <If when={catalog()} else={<Text style={{ color: token("muted-foreground"), fontSize: 13 }}>正在读取机型和系统版本…</Text>}>
         {(c) => (
           <View style={{ gap: 10 }}>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
             <View style={{ flex: 1, minWidth: 240, gap: 8 }}>
-            <Text style={{ color: C.muted, fontSize: 12 }}>{pickedDevice() ? `机型：${pickedDevice()!.name}` : "机型"}</Text>
-            <Scroll ref={(r) => (deviceScroll = r)} style={{ height: 248, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface }}>
+            <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>{pickedDevice() ? `机型：${pickedDevice()!.name}` : "机型"}</Text>
+            <Scroll ref={(r) => (deviceScroll = r)} style={{ height: 248, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: token("border"), backgroundColor: token("background") }}>
               <RadioGroup style={{ gap: 4 }}>
                 <Each of={c().devices} key={(d) => d.id}>
                   {(d) => (
@@ -974,26 +950,26 @@ function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; o
             </Scroll>
             </View>
             <View style={{ flex: 1, minWidth: 240, gap: 8 }}>
-            <Text style={{ color: C.muted, fontSize: 12 }}>{pickedImage() ? `系统版本：${imageLabel(pickedImage()!)}` : "系统版本"}</Text>
-            <If when={c().imagesError}>{(e) => <Text role="alert" style={{ color: C.warn, fontSize: 12, lineHeight: 18 }}>{`${e()}，只列出已安装的`}</Text>}</If>
-            <Scroll ref={(r) => (imageScroll = r)} style={{ height: 248, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface }}>
+            <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>{pickedImage() ? `系统版本：${imageLabel(pickedImage()!)}` : "系统版本"}</Text>
+            <If when={c().imagesError}>{(e) => <Text role="alert" style={{ color: token("warning"), fontSize: 12, lineHeight: 18 }}>{`${e()}，只列出已安装的`}</Text>}</If>
+            <Scroll ref={(r) => (imageScroll = r)} style={{ height: 248, padding: 4, borderRadius: 10, borderWidth: 1, borderColor: token("border"), backgroundColor: token("background") }}>
               <RadioGroup style={{ gap: 4 }}>
                 <Each of={c().images} key={(i) => i.pkg}>
                   {(i) => (
                     <Choice label={imageLabel(i())} checked={pickedImage()?.pkg === i().pkg} onPress={() => image.set(i().pkg)}
                       detail={i().installed ? (i().tag === "google_apis" ? "已安装" : `已安装 · ${i().tag}`) : `下载${sizeText(i().sizeMb ?? 0)}`}
-                      detailColor={i().installed ? C.ok : C.muted} ref={(r) => imageRefs.set(i().pkg, r)} />
+                      detailColor={i().installed ? token("success") : token("muted-foreground")} ref={(r) => imageRefs.set(i().pkg, r)} />
                   )}
                 </Each>
               </RadioGroup>
             </Scroll>
             </View>
             </View>
-            <Text style={{ color: C.muted, fontSize: 12 }}>设备名</Text>
+            <Text style={{ color: token("muted-foreground"), fontSize: 12 }}>设备名</Text>
             <Input value={name()} onChange={({ value }) => customName.set(value)} onSubmit={next}
               accessibilityLabel="设备名" autoCapitalize="none" autoCorrect={false}
-              style={{ height: 36, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: nameError() && name() !== "" ? C.danger : C.line, backgroundColor: C.bg, color: C.text, fontSize: 13, fontFamily: "monospace" }} />
-            <If when={pickedDevice() ? nameError() : null}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 12 }}>{e()}</Text>}</If>
+              style={{ height: 36, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: nameError() && name() !== "" ? token("destructive") : token("input"), backgroundColor: token("field"), color: token("foreground"), fontSize: 13, fontFamily: "monospace", ...inputColors() }} />
+            <If when={pickedDevice() ? nameError() : null}>{(e) => <Text role="alert" style={{ color: token("destructive"), fontSize: 12 }}>{e()}</Text>}</If>
           </View>
         )}
       </If>
@@ -1313,7 +1289,7 @@ function App() {
   const gw = (p: Promise<{ ok: boolean }>) =>
     p.then((r) => { if (!r.ok) showNotice({ text: "没有连上网关，操作没有发出", error: true }); });
 
-  const problemColor = () => (state() === "page-outdated" ? C.warn : C.danger);
+  const problemColor = () => (state() === "page-outdated" ? token("warning") : token("destructive"));
   const bootingName = () => Object.values(boots()).find(isBooting);
   const currentAvd = () => (avds() ?? []).find((a) => a.running === "grpc" && a.serial === serial());
   // 设备框的宽高比：当前设备的分辨率，横屏时对调；不知道分辨率时按 1080×2340
@@ -1431,7 +1407,7 @@ function App() {
     const b = boots()[a.name];
     return isBooting(b) ? `启动中 ${b!.seconds} 秒` : "未运行";
   };
-  const avdTint = (a: Avd) => (a.running === "grpc" ? C.ok : a.running === "no-grpc" || isBooting(boots()[a.name]) ? C.warn : C.muted);
+  const avdTint = (a: Avd) => (a.running === "grpc" ? token("success") : a.running === "no-grpc" || isBooting(boots()[a.name]) ? token("warning") : token("muted-foreground"));
   const avdSpec = (a: Avd) => {
     const parts: string[] = [];
     if (a.apiLevel) parts.push(ANDROID[a.apiLevel] ? `Android ${ANDROID[a.apiLevel]}` : `API ${a.apiLevel}`);
@@ -1577,16 +1553,16 @@ function App() {
     return (
       <ContextMenu offset={4} popupStyle={menuPopup()} popupStartingStyle={popOut(-4)} popupEndingStyle={popOut(-4)} trigger={
         <Button onPress={() => pickDevice(a())} selected={shown()?.name === a().name} accessibilityLabel={`${avdLabel(a())}，${avdStatus(a())}`}
-          hoverStyle={{ backgroundColor: C.hover }} selectedStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} activeStyle={pressed(0.985)}
+          hoverStyle={{ backgroundColor: token("accent") }} selectedStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} activeStyle={pressed(0.985)}
           style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: "transparent", ...ease() }}>
-          <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: C.surface }}>
+          <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: token("background") }}>
             <Icon name="smartphone" size={17} tint={avdTint(a())} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-            <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, fontWeight: "600" }}>{avdLabel(a())}</Text>
-            <Text style={{ color: a().running === "no-grpc" || isBooting(boots()[a().name]) ? C.warn : C.muted, fontSize: 11, lineHeight: 15 }}>{avdStatus(a())}</Text>
+            <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 18, fontWeight: "600" }}>{avdLabel(a())}</Text>
+            <Text style={{ color: a().running === "no-grpc" || isBooting(boots()[a().name]) ? token("warning") : token("muted-foreground"), fontSize: 11, lineHeight: 15 }}>{avdStatus(a())}</Text>
           </View>
-          <Text style={{ color: C.muted, fontSize: 11 }}>{a().apiLevel ? ANDROID[a().apiLevel!] ?? `API ${a().apiLevel}` : ""}</Text>
+          <Text style={{ color: token("muted-foreground"), fontSize: 11 }}>{a().apiLevel ? ANDROID[a().apiLevel!] ?? `API ${a().apiLevel}` : ""}</Text>
         </Button>
       }>
         <Item label="重命名" disabled={beingDeleted(a())} onSelect={() => openRename(a())} />
@@ -1602,55 +1578,55 @@ function App() {
     const p = props.phone;
     return (
       <Button onPress={() => pickPhone(p())} disabled={!canPick(p())} selected={selected() === p().id} accessibilityLabel={`${phoneLabel(p())}，${phoneStatus(p(), isCurrentPhone(p()))}`}
-        hoverStyle={{ backgroundColor: C.hover }} selectedStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} activeStyle={pressed(0.985)}
+        hoverStyle={{ backgroundColor: token("accent") }} selectedStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} activeStyle={pressed(0.985)}
         style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: "transparent", ...ease() }}>
-        <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: C.surface }}>
-          <Icon name="smartphone" size={17} tint={p().state === "device" ? C.text : C.muted} />
+        <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: token("background") }}>
+          <Icon name="smartphone" size={17} tint={p().state === "device" ? token("foreground") : token("muted-foreground")} />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-          <Text style={{ color: C.text, fontSize: 13, lineHeight: 18, fontWeight: "600" }}>{phoneLabel(p())}</Text>
-          <Text style={{ color: p().state === "device" ? C.muted : C.warn, fontSize: 11, lineHeight: 15 }}>{phoneStatus(p(), isCurrentPhone(p()))}</Text>
+          <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 18, fontWeight: "600" }}>{phoneLabel(p())}</Text>
+          <Text style={{ color: p().state === "device" ? token("muted-foreground") : token("warning"), fontSize: 11, lineHeight: 15 }}>{phoneStatus(p(), isCurrentPhone(p()))}</Text>
         </View>
-        <Text style={{ color: C.muted, fontSize: 11 }}>{phoneDetail(p())}</Text>
+        <Text style={{ color: token("muted-foreground"), fontSize: 11 }}>{phoneDetail(p())}</Text>
       </Button>
     );
   };
 
   return (
-    <View style={{ flex: 1, flexDirection: "row", backgroundColor: C.surface, ...ease(200) }}>
+    <View style={{ flex: 1, flexDirection: "row", backgroundColor: token("background"), ...ease(200) }}>
       <If when={!sidebarHidden()}>
         <View role="navigation" accessibilityLabel="设备列表"
-          style={{ width: 264, margin: 8, marginRight: 0, padding: 8, gap: 6, borderRadius: 14, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.bg, ...ease(200) }}>
+          style={{ width: 264, margin: 8, marginRight: 0, padding: 8, gap: 6, borderRadius: 14, borderWidth: 1, borderColor: token("border-subtle"), backgroundColor: token("sidebar"), ...ease(200) }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
             <IconBtn icon="plus" label="新建设备" disabled={setupBusy() || !env()} onPress={openCreate} />
             <IconBtn icon="panelLeft" label="收起侧栏" onPress={() => setSidebar(true)} />
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, height: 32, paddingHorizontal: 10, borderRadius: 8, backgroundColor: C.hover }}>
-            <Icon name="search" size={14} tint={C.muted} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, height: 32, paddingHorizontal: 10, borderRadius: 8, backgroundColor: token("muted") }}>
+            <Icon name="search" size={14} tint={token("muted-foreground")} />
             <Input value={query()} onChange={({ value }) => query.set(value)} placeholder="搜索设备" accessibilityLabel="搜索设备" autoCapitalize="none" autoCorrect={false}
-              style={{ flex: 1, height: 30, borderWidth: 0, backgroundColor: "transparent", color: C.text, fontSize: 13 }} />
+              style={{ flex: 1, height: 30, borderWidth: 0, backgroundColor: "transparent", color: token("foreground"), fontSize: 13, ...inputColors() }} />
           </View>
-          <Text style={{ color: C.muted, fontSize: 11, fontWeight: "600", paddingHorizontal: 8, paddingTop: 8, paddingBottom: 2 }}>设备</Text>
+          <Text style={{ color: token("muted-foreground"), fontSize: 11, fontWeight: "600", paddingHorizontal: 8, paddingTop: 8, paddingBottom: 2 }}>设备</Text>
           <Scroll style={{ flex: 1 }} contentStyle={{ gap: 2 }}>
-            <If when={avds() !== null} else={<Text style={{ color: C.muted, fontSize: 13, paddingHorizontal: 8 }}>正在读取设备列表…</Text>}>
+            <If when={avds() !== null} else={<Text style={{ color: token("muted-foreground"), fontSize: 13, paddingHorizontal: 8 }}>正在读取设备列表…</Text>}>
               <If when={(avds() ?? []).length > 0} else={
                 <View style={{ gap: 8, paddingHorizontal: 8, alignItems: "flex-start" }}>
-                  <Text style={{ color: C.muted, fontSize: 13, lineHeight: 20 }}>本机还没有模拟器设备</Text>
+                  <Text style={{ color: token("muted-foreground"), fontSize: 13, lineHeight: 20 }}>本机还没有模拟器设备</Text>
                   <Btn label="创建设备" disabled={setupBusy() || !env()} onPress={openCreate} />
                   <If when={env() && emulatorButtonShown(env()!, (avds() ?? []).length, !!showSetup())}>
                     <Btn label={`安装模拟器（缺 ${missingEmulatorItems(env()!)} 项）`} onPress={() => { animateNext(); setupDismissed.set(false); setupWanted.set(true); }} />
                   </If>
                 </View>
               }>
-                <If when={listed().length > 0} else={<Text style={{ color: C.muted, fontSize: 13, lineHeight: 20, paddingHorizontal: 8 }}>{`没有名字含“${query().trim()}”的设备`}</Text>}>
+                <If when={listed().length > 0} else={<Text style={{ color: token("muted-foreground"), fontSize: 13, lineHeight: 20, paddingHorizontal: 8 }}>{`没有名字含“${query().trim()}”的设备`}</Text>}>
                   <Each of={listed()} key={(a) => a.name}>{(a) => <DeviceRow avd={a} />}</Each>
                 </If>
               </If>
             </If>
             <If when={showPhones(phones())}>
-              <Text style={{ color: C.muted, fontSize: 11, fontWeight: "600", paddingHorizontal: 8, paddingTop: 12, paddingBottom: 2 }}>真机</Text>
+              <Text style={{ color: token("muted-foreground"), fontSize: 11, fontWeight: "600", paddingHorizontal: 8, paddingTop: 12, paddingBottom: 2 }}>真机</Text>
               <If when={(phones() ?? []).length > 0} else={
-                <Text style={{ color: C.muted, fontSize: 13, lineHeight: 20, paddingHorizontal: 8 }}>
+                <Text style={{ color: token("muted-foreground"), fontSize: 13, lineHeight: 20, paddingHorizontal: 8 }}>
                   {env()?.missing.some((m) => m.id === "platform-tools") ? "先在环境检查里安装 platform-tools（adb），才能看到手机" : "插上手机，并在手机上打开 USB 调试"}
                 </Text>
               }>
@@ -1658,7 +1634,7 @@ function App() {
               </If>
             </If>
           </Scroll>
-          <View style={{ height: 1, marginHorizontal: 4, backgroundColor: C.lineSoft }} />
+          <View style={{ height: 1, marginHorizontal: 4, backgroundColor: token("border-subtle") }} />
           <AppMenu site={site()} theme={theme()} onTheme={pickTheme} />
         </View>
       </If>
@@ -1669,14 +1645,14 @@ function App() {
           </If>
           <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Text role="header" style={{ flexShrink: 1, color: C.text, fontSize: 14, fontWeight: "600", numberOfLines: 1 }}>{shown() ? avdLabel(shown()!) : currentPhone() ? phoneLabel(currentPhone()!) : "没有连接设备"}</Text>
+              <Text role="header" style={{ flexShrink: 1, color: token("foreground"), fontSize: 14, fontWeight: "600", numberOfLines: 1 }}>{shown() ? avdLabel(shown()!) : currentPhone() ? phoneLabel(currentPhone()!) : "没有连接设备"}</Text>
               <If when={h5Open() && foregroundPkg(pages() ?? [])}>
-                {(pkg) => <Text style={{ flexShrink: 1, color: C.muted, fontSize: 12, fontFamily: "monospace", numberOfLines: 1 }}>{pkg()}</Text>}
+                {(pkg) => <Text style={{ flexShrink: 1, color: token("muted-foreground"), fontSize: 12, fontFamily: "monospace", numberOfLines: 1 }}>{pkg()}</Text>}
               </If>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: shownIsLive() && state() === "connected" ? C.ok : shown() ? avdTint(shown()!) : C.warn }} />
-              <Text style={{ flexShrink: 1, color: C.muted, fontSize: 11, numberOfLines: 1 }}>{subtitle()}</Text>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: shownIsLive() && state() === "connected" ? token("success") : shown() ? avdTint(shown()!) : token("warning") }} />
+              <Text style={{ flexShrink: 1, color: token("muted-foreground"), fontSize: 11, numberOfLines: 1 }}>{subtitle()}</Text>
             </View>
           </View>
           <Toolbar accessibilityLabel="设备操作" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
@@ -1696,23 +1672,23 @@ function App() {
             <If when={h5Key() && shownIsLive()}>
               <ToolGroup label="H5 调试">
                 <Toggle pressed={h5Open()} onChange={toggleH5} accessibilityLabel="H5 控制台" tooltip={<Tip label="H5 控制台" />}
-                  hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} pressedStyle={{ backgroundColor: C.accentSoft }} activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, ...ease() }}>
-                  <Icon name="code" size={17} tint={h5Open() ? C.accentText : C.keyText} />
+                  hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} pressedStyle={{ backgroundColor: token("primary-soft") }} activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, ...ease() }}>
+                  <Icon name="code" size={17} tint={h5Open() ? token("primary-text") : token("toolbar-foreground")} />
                 </Toggle>
               </ToolGroup>
             </If>
             <If when={logcatOk() && device() !== ""}>
               <ToolGroup label="日志">
                 <Toggle pressed={logOpen()} onChange={toggleLog} accessibilityLabel="日志" tooltip={<Tip label="日志（logcat）" />}
-                  hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }} pressedStyle={{ backgroundColor: C.accentSoft }} activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, ...ease() }}>
-                  <Icon name="logs" size={17} tint={logOpen() ? C.accentText : C.keyText} />
+                  hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} pressedStyle={{ backgroundColor: token("primary-soft") }} activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, ...ease() }}>
+                  <Icon name="logs" size={17} tint={logOpen() ? token("primary-text") : token("toolbar-foreground")} />
                 </Toggle>
               </ToolGroup>
             </If>
             <Menu align="end" offset={6} popupStyle={menuPopup()} popupStartingStyle={popOut(-4)} popupEndingStyle={popOut(-4)} trigger={
-              <Button accessibilityLabel="更多操作" tooltip={<Tip label="更多操作" />} hoverStyle={{ backgroundColor: C.hover }} focusStyle={{ borderColor: C.muted }}
-                activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, borderColor: C.lineSoft, backgroundColor: C.panel, ...ease() }}>
-                <Icon name="more" size={17} tint={C.keyText} />
+              <Button accessibilityLabel="更多操作" tooltip={<Tip label="更多操作" />} hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }}
+                activeStyle={pressed(0.9)} style={{ ...TOOL_BTN, borderColor: token("border-subtle"), backgroundColor: token("card"), ...ease() }}>
+                <Icon name="more" size={17} tint={token("toolbar-foreground")} />
               </Button>
             }>
               <If when={caps()?.reboot !== false}>
@@ -1721,7 +1697,7 @@ function App() {
               <If when={caps()?.stop !== false}>
                 <Item label="关闭模拟器" disabled={!shownIsLive() || state() !== "connected"} onSelect={() => act(host.call("emu.stop", {}))} />
               </If>
-              <MenuSeparator style={{ height: 1, marginVertical: 4, backgroundColor: C.line }} />
+              <MenuSeparator style={{ height: 1, marginVertical: 4, backgroundColor: token("border") }} />
               <Item label="重命名" disabled={!shown() || beingDeleted(shown()!)} onSelect={() => { const a = shown(); if (a) openRename(a); }} />
               <Item label="删除" danger disabled={!shown() || beingDeleted(shown()!)}
                 onSelect={() => { const a = shown(); if (a) openDelete(a); }} />
@@ -1735,12 +1711,12 @@ function App() {
             <View style={{ alignItems: "center", gap: 8, paddingTop: 12, paddingHorizontal: 16 }}>
               <If when={PROBLEM[state()]}>
                 {(text) => (
-                  <View role="alert" style={{ gap: 8, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: problemColor(), maxWidth: 520 }}>
+                  <View role="alert" style={{ gap: 8, backgroundColor: token("overlay"), borderRadius: 8, padding: 12, borderWidth: 1, borderColor: problemColor(), maxWidth: 520 }}>
                     <Text style={{ color: problemColor(), fontSize: 13, fontWeight: "bold", lineHeight: 20 }}>{text()}</Text>
                     <If when={state() === "no-gateway" && upgrade()}>
                       {(cmd) => (
                         <View style={{ gap: 6 }}>
-                          <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>在终端运行下面的命令（第一次会自动安装，之后直接启动；它在后台运行，关闭终端也不影响），这个页面会自动连上</Text>
+                          <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>在终端运行下面的命令（第一次会自动安装，之后直接启动；它在后台运行，关闭终端也不影响），这个页面会自动连上</Text>
                           <CopyCmd cmd={cmd()} />
                         </View>
                       )}
@@ -1748,7 +1724,7 @@ function App() {
                     <If when={state() === "gateway-outdated" && upgrade()}>
                       {(cmd) => (
                         <View style={{ gap: 8 }}>
-                          <Text style={{ color: C.text, fontSize: 12, fontFamily: "monospace", userSelect: "text" }}>{cmd()}</Text>
+                          <Text style={{ color: token("foreground"), fontSize: 12, fontFamily: "monospace", userSelect: "text" }}>{cmd()}</Text>
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                             <Btn label="复制命令" onPress={() => {
                               host.call("emu.copy", { text: cmd() }).then(
@@ -1757,7 +1733,7 @@ function App() {
                               );
                             }} />
                             <If when={cmdCopyResult() !== null}>
-                              <Text style={{ color: cmdCopyResult() === "ok" ? C.ok : C.danger, fontSize: 12 }}>
+                              <Text style={{ color: cmdCopyResult() === "ok" ? token("success") : token("destructive"), fontSize: 12 }}>
                                 {cmdCopyResult() === "ok" ? "已复制" : "复制失败，请手动选中复制"}
                               </Text>
                             </If>
@@ -1776,30 +1752,30 @@ function App() {
           <View style={{ flex: 1, minHeight: 0, alignItems: "center", gap: 14, paddingTop: 24, paddingBottom: 16, paddingHorizontal: 16 }}>
             <View onLayout={({ bounds }) => deviceArea.set({ width: bounds.size.width, height: bounds.size.height })}
               style={{ flex: 1, minHeight: 0, alignSelf: "stretch", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: "#000",
+                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: token("border-strong"), backgroundColor: token("device-bezel"),
                   transform: motion.transform, pointerEvents: turning() ? "none" : "auto" }}>
                   <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
                   <If when={drag().active}>
                     <View role="status" style={{
                       position: "absolute", top: BEZEL - 1, left: BEZEL - 1, right: BEZEL - 1, bottom: BEZEL - 1, pointerEvents: "none",
                       alignItems: "center", justifyContent: "center", gap: 6, padding: 24, borderRadius: 34, borderWidth: 2,
-                      borderColor: drag().blocked ? C.danger : C.accent, backgroundColor: C.dragShade,
+                      borderColor: drag().blocked ? token("destructive") : token("primary"), backgroundColor: token("drag-shade"),
                     }}>
-                      <Text style={{ color: drag().blocked ? C.danger : C.text, fontSize: 15, fontWeight: "600", textAlign: "center" }}>
+                      <Text style={{ color: drag().blocked ? token("destructive") : token("foreground"), fontSize: 15, fontWeight: "600", textAlign: "center" }}>
                         {drag().blocked ? `不能安装：${drag().blocked}` : `松开以安装到 ${currentAvd() ? avdLabel(currentAvd()!) : "这台设备"}`}
                       </Text>
                       <If when={!drag().blocked}>
-                        <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18, textAlign: "center" }}>APK 会直接安装，其他文件放进 下载 文件夹</Text>
+                        <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18, textAlign: "center" }}>APK 会直接安装，其他文件放进 下载 文件夹</Text>
                       </If>
                     </View>
                   </If>
                 </View>
               {/* 选中的不是画面上这台（没在运行、正在启动、正在切换）：盖住画面，说明它的状态 */}
               <If when={!shownIsLive()}>
-                <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 10, padding: 24, backgroundColor: C.surface }}>
-                  <Icon name="smartphone" size={40} tint={shown() ? avdTint(shown()!) : C.muted} />
-                  <Text style={{ color: C.text, fontSize: 15, fontWeight: "600", textAlign: "center" }}>{shown() ? avdLabel(shown()!) : "没有连接设备"}</Text>
-                  <Text style={{ maxWidth: 360, color: C.muted, fontSize: 13, lineHeight: 20, textAlign: "center" }}>{emptyText()}</Text>
+                <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", gap: 10, padding: 24, backgroundColor: token("background") }}>
+                  <Icon name="smartphone" size={40} tint={shown() ? avdTint(shown()!) : token("muted-foreground")} />
+                  <Text style={{ color: token("foreground"), fontSize: 15, fontWeight: "600", textAlign: "center" }}>{shown() ? avdLabel(shown()!) : "没有连接设备"}</Text>
+                  <Text style={{ maxWidth: 360, color: token("muted-foreground"), fontSize: 13, lineHeight: 20, textAlign: "center" }}>{emptyText()}</Text>
                   <If when={shown()?.running === "grpc"}>
                     <Btn label="切换到这台" kind="primary" onPress={() => { const a = shown(); if (a) switchTo(a); }} />
                   </If>
@@ -1813,7 +1789,7 @@ function App() {
               </If>
             </View>
             <Toolbar accessibilityLabel="系统导航"
-              style={{ flexDirection: "row", gap: 4, padding: 3, borderRadius: 12, borderWidth: 1, borderColor: C.lineSoft, backgroundColor: C.panel }}>
+              style={{ flexDirection: "row", gap: 4, padding: 3, borderRadius: 12, borderWidth: 1, borderColor: token("border-subtle"), backgroundColor: token("card") }}>
               <ToolBtn icon="back" label="返回" tip="点过屏幕后按 ⌘⌫" disabled={!shownIsLive() || caps()?.input === false} onPress={() => key("GoBack")} />
               <ToolBtn icon="home" label="主页" tip="点过屏幕后按 ⇧⌘H" disabled={!shownIsLive() || caps()?.input === false} onPress={() => key("GoHome")} />
               <ToolBtn icon="recents" label="最近" tip="点过屏幕后按 ⌘O" disabled={!shownIsLive() || caps()?.input === false} onPress={() => key("AppSwitch")} />
@@ -1822,8 +1798,8 @@ function App() {
           <View style={{ position: "absolute", top: 8, left: 0, right: 0, alignItems: "center", gap: 8 }}>
             <If when={gatewayShown()}>
               {(b) => (
-                <View role="status" style={{ gap: 8, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: b().kind === "manual" ? C.warn : C.line, maxWidth: 520 }}>
-                  <Text style={{ color: b().kind === "manual" ? C.warn : C.text, fontSize: 13, lineHeight: 20 }}>{b().text}</Text>
+                <View role="status" style={{ gap: 8, backgroundColor: token("overlay"), borderRadius: 8, padding: 12, borderWidth: 1, borderColor: b().kind === "manual" ? token("warning") : token("border"), maxWidth: 520 }}>
+                  <Text style={{ color: b().kind === "manual" ? token("warning") : token("foreground"), fontSize: 13, lineHeight: 20 }}>{b().text}</Text>
                   <If when={b().command}>
                     {(cmd) => <CopyCmd cmd={cmd()} />}
                   </If>
@@ -1836,8 +1812,8 @@ function App() {
               )}
             </If>
             <If when={clip() !== null}>
-              <View role="alert" style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.overlay, borderRadius: 8, padding: 8, borderWidth: 1, borderColor: C.line }}>
-                <Text style={{ color: copyFailed() ? C.danger : C.text, fontSize: 13 }}>
+              <View role="alert" style={{ flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: token("overlay"), borderRadius: 8, padding: 8, borderWidth: 1, borderColor: token("border") }}>
+                <Text style={{ color: copyFailed() ? token("destructive") : token("foreground"), fontSize: 13 }}>
                   {copyFailed() ? "复制失败，请再点一次" : "模拟器里复制了新内容"}
                 </Text>
                 <Btn label="点击复制" onPress={copyClip} />
@@ -1845,7 +1821,7 @@ function App() {
               </View>
             </If>
             <If when={adbStuck() && state() === "connected"}>
-              <View style={{ gap: 8, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.danger, maxWidth: 520 }}>
+              <View style={{ gap: 8, backgroundColor: token("overlay"), borderRadius: 8, padding: 12, borderWidth: 1, borderColor: token("destructive"), maxWidth: 520 }}>
                 <AdbStuck onReboot={() => rebootAsk.set(true)} />
                 <View style={{ flexDirection: "row" }}>
                   <Btn label="忽略" onPress={() => adbStuck.set(false)} />
@@ -1853,12 +1829,12 @@ function App() {
               </View>
             </If>
             <If when={uploads().length > 0}>
-              <View role="status" accessibilityLabel="传文件" style={{ gap: 6, backgroundColor: C.overlay, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: C.line, width: 420, maxWidth: "92%" }}>
+              <View role="status" accessibilityLabel="传文件" style={{ gap: 6, backgroundColor: token("overlay"), borderRadius: 8, padding: 12, borderWidth: 1, borderColor: token("border"), width: 420, maxWidth: "92%" }}>
                 <Each of={uploads()} key={(u) => u.id}>
                   {(u) => (
                     <View style={{ gap: 2 }}>
-                      <Text style={{ color: C.text, fontSize: 13, numberOfLines: 1 }}>{u().name}</Text>
-                      <Text style={{ color: u().state === "failed" ? C.danger : u().state === "done" ? C.ok : C.muted, fontSize: 12, lineHeight: 18, userSelect: "text" }}>
+                      <Text style={{ color: token("foreground"), fontSize: 13, numberOfLines: 1 }}>{u().name}</Text>
+                      <Text style={{ color: u().state === "failed" ? token("destructive") : u().state === "done" ? token("success") : token("muted-foreground"), fontSize: 12, lineHeight: 18, userSelect: "text" }}>
                         {uploadText(u())}
                       </Text>
                     </View>
@@ -1873,8 +1849,8 @@ function App() {
             </If>
             <If when={notice()}>
               {(n) => (
-                <View role="status" style={{ gap: 8, backgroundColor: C.overlay, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: n().error ? C.danger : C.line, maxWidth: 520 }}>
-                  <Text style={{ color: n().error ? C.danger : C.text, fontSize: 13, userSelect: n().sticky ? "text" : undefined }}>{n().text}</Text>
+                <View role="status" style={{ gap: 8, backgroundColor: token("overlay"), borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: n().error ? token("destructive") : token("border"), maxWidth: 520 }}>
+                  <Text style={{ color: n().error ? token("destructive") : token("foreground"), fontSize: 13, userSelect: n().sticky ? "text" : undefined }}>{n().text}</Text>
                   <If when={n().sticky}>
                     <View style={{ flexDirection: "row" }}>
                       <Btn label="关闭" onPress={() => notice.set(null)} />
@@ -1886,14 +1862,14 @@ function App() {
           </View>
         </View>
         <If when={h5Open() || logOpen()}>
-          <View style={{ flex: 1.2, minWidth: 0, borderLeftWidth: 1, borderColor: C.lineSoft }}>
+          <View style={{ flex: 1.2, minWidth: 0, borderLeftWidth: 1, borderColor: token("border-subtle") }}>
             <If when={h5Open() && logOpen()}>
-              <View role="tablist" style={{ flexDirection: "row", gap: 4, paddingHorizontal: 10, paddingTop: 8, borderBottomWidth: 1, borderColor: C.lineSoft }}>
+              <View role="tablist" style={{ flexDirection: "row", gap: 4, paddingHorizontal: 10, paddingTop: 8, borderBottomWidth: 1, borderColor: token("border-subtle") }}>
                 {(["h5", "log"] as const).map((t) => (
                   <View role="tab" accessibilityLabel={t === "h5" ? "H5 调试" : "日志"} accessibilityState={{ selected: sideTab() === t }} onPress={() => sideTab.set(t)}
-                    hoverStyle={{ backgroundColor: C.hover }}
-                    style={{ paddingHorizontal: 12, paddingVertical: 6, borderTopLeftRadius: 6, borderTopRightRadius: 6, borderBottomWidth: 2, borderColor: sideTab() === t ? C.accentText : "transparent" }}>
-                    <Text style={{ color: sideTab() === t ? C.text : C.muted, fontSize: 12, fontWeight: "600" }}>{t === "h5" ? "H5 调试" : "日志"}</Text>
+                    hoverStyle={{ backgroundColor: token("accent") }}
+                    style={{ paddingHorizontal: 12, paddingVertical: 6, borderTopLeftRadius: 6, borderTopRightRadius: 6, borderBottomWidth: 2, borderColor: sideTab() === t ? token("primary-text") : "transparent" }}>
+                    <Text style={{ color: sideTab() === t ? token("foreground") : token("muted-foreground"), fontSize: 12, fontWeight: "600" }}>{t === "h5" ? "H5 调试" : "日志"}</Text>
                   </View>
                 ))}
               </View>
@@ -1914,8 +1890,8 @@ function App() {
         </View>
       </View>
       <Dialog open={confirm() !== null} animation="fade" onOpenChange={({ open }) => { if (!open) confirm.set(null); }}
-        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        style={{ marginHorizontal: "auto", marginTop: "12%", width: 460, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        backdropStyle={{ backgroundColor: token("scrim") }}
+        style={{ marginHorizontal: "auto", marginTop: "12%", width: 460, maxWidth: "92%", backgroundColor: token("card"), borderRadius: 10, borderWidth: 1, borderColor: token("border"), padding: 16, gap: 10 }}>
         <If when={confirm()}>
           {(c) => {
             // 确认框列出的项和磁盘检查用的项：安装取环境检查里的缺失项，建设备取 createItems（和网关同一套）
@@ -1930,43 +1906,43 @@ function App() {
             const hasAvd = () => items().some((i) => i.id === "avd");
             return (
               <View role="group" accessibilityLabel={avd() ? "确认创建设备" : "确认安装"} style={{ gap: 10 }}>
-                <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>
+                <Text role="header" style={{ color: token("foreground"), fontSize: 15, fontWeight: "bold" }}>
                   {avd() ? `创建设备 ${avd()!.name}？` : `下载并安装 ${items().length} 项？`}
                 </Text>
                 <If when={avd()} else={
                   <View style={{ gap: 4 }}>
                     <Each of={items()} key={(i) => i.id}>
-                      {(i) => <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>{`· ${envName(i().id)}${i().pkg ? `（${i().pkg}）` : ""}${i().sizeMb ? `，${sizeText(i().sizeMb!)}` : ""}`}</Text>}
+                      {(i) => <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>{`· ${envName(i().id)}${i().pkg ? `（${i().pkg}）` : ""}${i().sizeMb ? `，${sizeText(i().sizeMb!)}` : ""}`}</Text>}
                     </Each>
                   </View>
                 }>
                   {(a) => (
                     <View style={{ gap: 4 }}>
-                      <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>
+                      <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>
                         {`机型 ${a().device.name} · ${imageLabel(a().image)} · 内存 ${ramMbFor(a().image.apiLevel)} MB`}
                       </Text>
                       <If when={!a().image.installed}>
-                        <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>
+                        <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>
                           {`要先下载系统镜像（${a().image.pkg}），${sizeText(a().image.sizeMb ?? 0)}，装到 ${env()?.sdkRoot ?? ""}`}
                         </Text>
                       </If>
                     </View>
                   )}
                 </If>
-                <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>
+                <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>
                   {`${space().downloadMb ? `下载${sizeText(space().downloadMb)}，` : ""}安装后${sizeText(space().diskMb).replace("约", "约占")}，${env()?.sdkRoot ?? ""} 所在磁盘剩余 ${gbText(env()?.freeMb ?? 0)}`}
                 </Text>
                 <If when={hasAvd() && env() && !env()!.sameDisk}>
-                  <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>{`${env()?.avdHome ?? ""} 所在磁盘剩余 ${gbText(env()?.avdFreeMb ?? 0)}`}</Text>
+                  <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>{`${env()?.avdHome ?? ""} 所在磁盘剩余 ${gbText(env()?.avdFreeMb ?? 0)}`}</Text>
                 </If>
                 <If when={space().shortMb > 0}>
-                  <Text role="alert" style={{ color: C.danger, fontSize: 13, fontWeight: "bold" }}>{`磁盘空间不足：还需要约 ${gbText(space().shortMb)}`}</Text>
+                  <Text role="alert" style={{ color: token("destructive"), fontSize: 13, fontWeight: "bold" }}>{`磁盘空间不足：还需要约 ${gbText(space().shortMb)}`}</Text>
                 </If>
                 <If when={hasAvd()}>
-                  <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18, userSelect: "text" }}>{`设备建在 ${env()?.avdHome ?? ""}，第一次启动时要约 ${gbText(AVD_DISK_MB)} 空闲空间`}</Text>
+                  <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18, userSelect: "text" }}>{`设备建在 ${env()?.avdHome ?? ""}，第一次启动时要约 ${gbText(AVD_DISK_MB)} 空闲空间`}</Text>
                 </If>
                 <If when={downloads()}>
-                  <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>
+                  <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18 }}>
                     {"从 Google 的 SDK 仓库（dl.google.com）直接下载，校验 sha1 后再解压。下载前会显示 Google 的许可证，你同意后才会继续。"}
                   </Text>
                 </If>
@@ -1980,8 +1956,8 @@ function App() {
         </If>
       </Dialog>
       <Dialog open={createOpen()} animation="fade" onOpenChange={({ open }) => { if (!open) createOpen.set(false); }}
-        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        style={{ marginHorizontal: "auto", marginTop: "6%", width: 720, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        backdropStyle={{ backgroundColor: token("scrim") }}
+        style={{ marginHorizontal: "auto", marginTop: "6%", width: 720, maxWidth: "92%", backgroundColor: token("card"), borderRadius: 10, borderWidth: 1, borderColor: token("border"), padding: 16, gap: 10 }}>
         <If when={createOpen()}>
           <CreateAvd catalog={catalog()} loadError={catalogError()} onCancel={() => createOpen.set(false)}
             onNext={(a) => {
@@ -1991,13 +1967,13 @@ function App() {
         </If>
       </Dialog>
       <Dialog open={license() !== null} animation="fade" closeOnEscape={false} closeOnBackdropPress={false}
-        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-        style={{ marginHorizontal: "auto", marginTop: "6%", width: 680, maxWidth: "94%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        backdropStyle={{ backgroundColor: token("scrim") }}
+        style={{ marginHorizontal: "auto", marginTop: "6%", width: 680, maxWidth: "94%", backgroundColor: token("card"), borderRadius: 10, borderWidth: 1, borderColor: token("border"), padding: 16, gap: 10 }}>
         <View role="group" accessibilityLabel="许可证" style={{ gap: 10 }}>
-          <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>{`同意许可证 ${license()?.name ?? ""} 后继续安装`}</Text>
-          <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>下面是 Google 的 SDK 仓库清单里这份许可证的全文。同意后会记在 SDK 的 licenses 目录里，Android Studio 也认；不同意的话，这一项不会安装。</Text>
-          <Scroll style={{ height: 420, borderRadius: 6, borderWidth: 1, borderColor: C.line, backgroundColor: C.bg }} contentStyle={{ padding: 10 }}>
-            <Text style={{ color: C.text, fontSize: 12, lineHeight: 18, fontFamily: "monospace", userSelect: "text" }}>{license()?.text ?? ""}</Text>
+          <Text role="header" style={{ color: token("foreground"), fontSize: 15, fontWeight: "bold" }}>{`同意许可证 ${license()?.name ?? ""} 后继续安装`}</Text>
+          <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18 }}>下面是 Google 的 SDK 仓库清单里这份许可证的全文。同意后会记在 SDK 的 licenses 目录里，Android Studio 也认；不同意的话，这一项不会安装。</Text>
+          <Scroll style={{ height: 420, borderRadius: 6, borderWidth: 1, borderColor: token("border"), backgroundColor: token("field") }} contentStyle={{ padding: 10 }}>
+            <Text style={{ color: token("foreground"), fontSize: 12, lineHeight: 18, fontFamily: "monospace", userSelect: "text" }}>{license()?.text ?? ""}</Text>
           </Scroll>
           <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
             <Btn label="不同意" kind="danger" disabled={answered() === license()?.id} onPress={() => answer("emu.rejectLicenses")} />
@@ -2006,17 +1982,17 @@ function App() {
         </View>
       </Dialog>
       <Dialog open={renameTarget() !== null} animation="fade" onOpenChange={({ open }) => { if (!open) renameTarget.set(null); }}
-        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        backdropStyle={{ backgroundColor: token("scrim") }}
+        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: token("card"), borderRadius: 10, borderWidth: 1, borderColor: token("border"), padding: 16, gap: 10 }}>
         <If when={renameTarget()}>
           {(a) => (
             <View role="group" accessibilityLabel="重命名设备" style={{ gap: 10 }}>
-              <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>重命名设备</Text>
-              <Text style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>{`只改显示的名字，Android Studio 里也会看到；设备 id ${a().name} 不变。`}</Text>
+              <Text role="header" style={{ color: token("foreground"), fontSize: 15, fontWeight: "bold" }}>重命名设备</Text>
+              <Text style={{ color: token("muted-foreground"), fontSize: 12, lineHeight: 18 }}>{`只改显示的名字，Android Studio 里也会看到；设备 id ${a().name} 不变。`}</Text>
               <Input value={renameDraft()} onChange={({ value }) => { renameDraft.set(value); renameError.set(null); }} onSubmit={saveRename}
                 autoFocus accessibilityLabel="设备名称" autoCorrect={false}
-                style={{ height: 36, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: renameError() ? C.danger : C.line, backgroundColor: C.bg, color: C.text, fontSize: 13 }} />
-              <If when={renameError()}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 12, lineHeight: 18 }}>{e()}</Text>}</If>
+                style={{ height: 36, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: renameError() ? token("destructive") : token("input"), backgroundColor: token("field"), color: token("foreground"), fontSize: 13, ...inputColors() }} />
+              <If when={renameError()}>{(e) => <Text role="alert" style={{ color: token("destructive"), fontSize: 12, lineHeight: 18 }}>{e()}</Text>}</If>
               <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
                 <Btn label="取消" onPress={() => renameTarget.set(null)} />
                 <Btn label={renaming() ? "保存中…" : "保存"} kind="primary" disabled={renaming()} onPress={saveRename} />
@@ -2026,17 +2002,17 @@ function App() {
         </If>
       </Dialog>
       <Dialog open={deleteTarget() !== null} animation="fade" onOpenChange={({ open }) => { if (!open && !deleting()) deleteTarget.set(null); }}
-        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        backdropStyle={{ backgroundColor: token("scrim") }}
+        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: token("card"), borderRadius: 10, borderWidth: 1, borderColor: token("border"), padding: 16, gap: 10 }}>
         <If when={deleteTarget()}>
           {(a) => (
             <View role="group" accessibilityLabel="确认删除设备" style={{ gap: 10 }}>
-              <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>{`删除设备 ${avdLabel(a())}？`}</Text>
-              <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>会删除这台设备的全部数据（已装的 App、文件、快照），不能恢复。系统镜像不会删除。</Text>
+              <Text role="header" style={{ color: token("foreground"), fontSize: 15, fontWeight: "bold" }}>{`删除设备 ${avdLabel(a())}？`}</Text>
+              <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>会删除这台设备的全部数据（已装的 App、文件、快照），不能恢复。系统镜像不会删除。</Text>
               <If when={live(a())}>
-                <Text style={{ color: C.warn, fontSize: 13, lineHeight: 20 }}>这台设备正在运行，删除前会先停止它。</Text>
+                <Text style={{ color: token("warning"), fontSize: 13, lineHeight: 20 }}>这台设备正在运行，删除前会先停止它。</Text>
               </If>
-              <If when={deleteError()}>{(e) => <Text role="alert" style={{ color: C.danger, fontSize: 12, lineHeight: 18, userSelect: "text" }}>{e()}</Text>}</If>
+              <If when={deleteError()}>{(e) => <Text role="alert" style={{ color: token("destructive"), fontSize: 12, lineHeight: 18, userSelect: "text" }}>{e()}</Text>}</If>
               <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
                 <Btn label="取消" disabled={deleting()} onPress={() => deleteTarget.set(null)} />
                 <Btn label={deleting() ? "删除中…" : "删除"} kind="danger" disabled={deleting()} onPress={confirmDelete} />
@@ -2046,11 +2022,11 @@ function App() {
         </If>
       </Dialog>
       <Dialog open={rebootAsk()} animation="fade" onOpenChange={({ open }) => { if (!open) rebootAsk.set(false); }}
-        backdropStyle={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: C.panel, borderRadius: 10, borderWidth: 1, borderColor: C.line, padding: 16, gap: 10 }}>
+        backdropStyle={{ backgroundColor: token("scrim") }}
+        style={{ marginHorizontal: "auto", marginTop: "12%", width: 420, maxWidth: "92%", backgroundColor: token("card"), borderRadius: 10, borderWidth: 1, borderColor: token("border"), padding: 16, gap: 10 }}>
         <View role="group" accessibilityLabel={kind() === "phone" ? "确认重启手机" : "确认重启模拟器"} style={{ gap: 10 }}>
-          <Text role="header" style={{ color: C.text, fontSize: 15, fontWeight: "bold" }}>{kind() === "phone" ? "重启手机？" : "重启模拟器系统？"}</Text>
-          <Text style={{ color: C.text, fontSize: 13, lineHeight: 20 }}>{kind() === "phone" ? "手机会重启，正在运行的 App 和未保存的内容会丢失。开机后自动重新连接，大约 1 分钟。" : "正在运行的 App 和未保存的内容会丢失，约 30 秒后恢复。"}</Text>
+          <Text role="header" style={{ color: token("foreground"), fontSize: 15, fontWeight: "bold" }}>{kind() === "phone" ? "重启手机？" : "重启模拟器系统？"}</Text>
+          <Text style={{ color: token("foreground"), fontSize: 13, lineHeight: 20 }}>{kind() === "phone" ? "手机会重启，正在运行的 App 和未保存的内容会丢失。开机后自动重新连接，大约 1 分钟。" : "正在运行的 App 和未保存的内容会丢失，约 30 秒后恢复。"}</Text>
           <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
             <Btn label="取消" onPress={() => rebootAsk.set(false)} />
             <Btn label="重启" kind="danger" onPress={reboot} />

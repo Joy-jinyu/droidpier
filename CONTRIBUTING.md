@@ -77,6 +77,8 @@ Commit subjects and pull request titles name the area first, then say what chang
 - Do not use conventional prefixes (`fix:`, `feat:`, `chore:`).
 - The body (optional for small changes) explains why, wrapped at 72 columns: the problem, the cause, the approach and
   what it costs.
+- Write pull request titles and descriptions in English only. Code comments, log lines and the page's text are in
+  Chinese; quote them as they are when the change is about them.
 
 Examples:
 
@@ -132,3 +134,5 @@ Check whether the tests and the description cover the behavior the pull request 
 emulator booting, running, rebooting, closed outside Droidpier, adb not answering; the page and the gateway on
 different versions; an AVD whose display name differs from its id. Ask for a manual check only for what tests cannot
 exercise, and name the scenario.
+
+Write review comments and replies to them in English only, as pull request descriptions are.

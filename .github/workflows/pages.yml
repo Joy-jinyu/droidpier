@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 env:
-  # 本地一直用的 nsh 是 v0.4.0 之前 32 个提交，选最接近的发行版；升级单独提 PR，PR 上的构建先验一遍
-  NSH_VERSION: v0.4.0
+  # nsh 发行版；升级单独提 PR，PR 上的构建先验一遍。v0.5.0 起发行包不带 web 运行时，构建时 nsh 从同一发行版下载并核对 sha256
+  NSH_VERSION: v0.6.0
   # 只从 main 部署、签名：手动运行在别的分支上时只构建
   DEPLOY: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
   # 部署到哪：网关下载包只信任这个来源的页面，官网和 install.sh 里的地址也换成它

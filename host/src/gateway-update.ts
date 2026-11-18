@@ -42,5 +42,5 @@ export function gatewayBanner(info: GatewayInfo | null, pageLevel: number, repor
  * 否则是网关真的慢（删大目录），slow 是那种情况的说明。
  */
 export function timeoutText(info: GatewayInfo | null | undefined, level: number, what: string, slow: string): string {
-  return info !== undefined && gatewayBelow(info, level) ? `网关版本太旧，不支持${what}，请更新 droidpier` : slow;
+  return info !== undefined && gatewayBelow(info, level) ? `网关版本太旧，不支持${what}，请运行安装命令更新网关` : slow;
 }

@@ -74,16 +74,25 @@ const FUNCTION_KEYS = new Set([
 ]);
 
 /**
+ * 键盘离开设备画面的键：Shift+Tab。画面有焦点时其他键（Tab、Escape 在内）都发给 Android，这一个不发，
+ * 由页面把焦点挪到画面前面的控件上，免得键盘进了画面就出不来（WCAG 2.1.2）。只按 Tab 仍然发给 Android。
+ */
+export function leavesScreen(e: { key: string; shiftKey?: boolean; metaKey: boolean; ctrlKey: boolean; altKey: boolean }): boolean {
+  return e.key === "Tab" && !!e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey;
+}
+
+/**
  * 将键盘事件转换为 ClientMsg。
- * metaKey / isComposing → null；单个 ASCII 可打印字符 keydown → keypress 消息；
+ * metaKey / isComposing / 离开画面的键（leavesScreen）→ null；单个 ASCII 可打印字符 keydown → keypress 消息；
  * 功能键 → key 消息；其他 → null。
  */
 export function keyToMsg(
-  e: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; isComposing: boolean },
+  e: { key: string; shiftKey?: boolean; metaKey: boolean; ctrlKey: boolean; altKey: boolean; isComposing: boolean },
   type: "keydown" | "keyup"
 ): ClientMsg | null {
   if (e.metaKey) return null;
   if (e.isComposing) return null;
+  if (leavesScreen(e)) return null;
 
   if (e.key.length === 1) {
     const code = e.key.codePointAt(0)!;

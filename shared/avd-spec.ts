@@ -12,12 +12,12 @@ export function defaultAvdName(modelName: string, api: string): string {
   return `${base}_API_${api}`;
 }
 
-/** 设备名不能用时的原因；能用返回 null。规则：^[A-Za-z0-9][A-Za-z0-9._-]*$。existing 不分大小写比较（macOS 的文件系统默认不分）。 */
+/** 设备 ID（AVD 的名字，创建后不能改；页面上显示的是显示名称）不能用时的原因；能用返回 null。规则：^[A-Za-z0-9][A-Za-z0-9._-]*$。existing 不分大小写比较（macOS 的文件系统默认不分）。 */
 export function avdNameError(name: string, existing: string[]): string | null {
-  if (name === "") return "请输入设备名";
-  if (!/^[A-Za-z0-9._-]+$/.test(name)) return "设备名只能用英文字母、数字、点、下划线和短横线";
+  if (name === "") return "请输入设备 ID";
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) return "设备 ID 只能用英文字母、数字、点、下划线和短横线";
   // 开头是 - 时命令行（emulator -avd、avdmanager）会把它当成选项
-  if (!/^[A-Za-z0-9]/.test(name)) return "设备名要以英文字母或数字开头";
+  if (!/^[A-Za-z0-9]/.test(name)) return "设备 ID 要以英文字母或数字开头";
   const same = existing.find((n) => n.toLowerCase() === name.toLowerCase());
   return same ? `已有同名设备 ${same}` : null;
 }
@@ -28,9 +28,9 @@ export const DISPLAY_NAME_MAX = 50;
 /** 显示名不能用时的原因；能用返回 null。它是 config.ini 里的一行，所以不能有换行等控制字符。 */
 export function displayNameError(name: string): string | null {
   const t = name.trim();
-  if (t === "") return "请输入名称";
-  if (/[\u0000-\u001f\u007f]/.test(name)) return "名称里不能有换行等控制字符";
-  if ([...t].length > DISPLAY_NAME_MAX) return `名称最多 ${DISPLAY_NAME_MAX} 个字`;
+  if (t === "") return "请输入显示名称";
+  if (/[\u0000-\u001f\u007f]/.test(name)) return "显示名称里不能有换行等控制字符";
+  if ([...t].length > DISPLAY_NAME_MAX) return `显示名称最多 ${DISPLAY_NAME_MAX} 个字`;
   return null;
 }
 

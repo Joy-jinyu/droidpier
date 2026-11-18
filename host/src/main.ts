@@ -1,4 +1,5 @@
-import { inputToMsgs, keyToMsg, pasteToMsgs, shortcutToMsg, textToMsgs, toDevice, wheelToSwipe } from "../../shared/input-map.ts";
+import { inputToMsgs, keyToMsg, leavesScreen, pasteToMsgs, shortcutToMsg, textToMsgs, toDevice, wheelToSwipe } from "../../shared/input-map.ts";
+import { failText } from "../../shared/fail-text.ts";
 import { drawHighlight } from "./highlight.ts";
 import { fitSize, frameLatencyMs } from "../../shared/screen.ts";
 import { createClipSync } from "./clip-sync.ts";
@@ -382,7 +383,7 @@ export async function createHost(player: Player) {
         ? kind === "phone"
           ? { text: "手机两分钟内没开机完成：开机后重新插拔手机", error: true }
           : { text: "模拟器已重启，但里面的 adb 还没有响应：H5 调试暂时不可用", error: true }
-        : { text: `重启失败：${error ?? "未知原因"}`, error: true }),
+        : { text: failText("重启失败", error), error: true }),
     onVersionError: (code, cmd) => {
       state = code;
       upgrade = cmd;
@@ -567,9 +568,26 @@ export async function createHost(player: Player) {
   }, { passive: false });
   canvas.addEventListener("focus", () => ime.focus({ preventScroll: true }));
 
+  // Shift+Tab 离开画面（shared/input-map.ts 的 leavesScreen）：焦点交给画面前面最近的、Tab 走得到的控件。
+  // 不能交给浏览器默认处理：键盘焦点在画面里的隐藏 textarea 上，它前面就是画布，画布一拿到焦点又转回 textarea
+  const focusBefore = () => {
+    const prev = [...document.querySelectorAll<HTMLElement>("a[href],button,input,select,textarea,iframe,[tabindex]")].filter((el) => {
+      if (el.tabIndex < 0 || frame.contains(el) || el.closest("[inert],[aria-hidden=true]") || (el as HTMLButtonElement).disabled) return false;
+      const r = el.getBoundingClientRect();
+      // 隐藏的面板（display: none 的 View）里的控件还在 DOM 里，只是没有大小
+      return r.width > 0 && r.height > 0 && (canvas.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+    }).at(-1);
+    if (prev) prev.focus();
+    else ime.blur();
+  };
   const onKey = (type: "keydown" | "keyup") => (e: KeyboardEvent) => {
     // 229：输入法正在处理这个键
     if (e.keyCode === 229) return;
+    if (leavesScreen(e)) {
+      e.preventDefault();
+      if (type === "keydown") focusBefore();
+      return;
+    }
     if (type === "keydown") {
       const s = shortcutToMsg(e);
       if (s) {
@@ -589,6 +607,10 @@ export async function createHost(player: Player) {
   ime.addEventListener("keydown", onKey("keydown"));
   ime.addEventListener("keyup", onKey("keyup"));
   ime.addEventListener("blur", releaseAll);
+  // 键盘焦点在不在画面上：页面据此给机身画焦点环、显示「已接管键盘」（窗口失焦时也算离开）
+  const keyboardEvent = () => player.hostEvent("emu.keyboard", { on: document.activeElement === ime && document.hasFocus() });
+  ime.addEventListener("focus", keyboardEvent);
+  ime.addEventListener("blur", keyboardEvent);
   canvas.addEventListener("blur", releaseAll);
   window.addEventListener("blur", releaseAll);
   // 标签页在后台时让网关停推画面
@@ -630,6 +652,16 @@ export async function createHost(player: Player) {
     if (why) return player.hostEvent("emu.notice", { text: why, error: true });
     if (list.length) uploads.add(list);
   };
+  // 「发送文件…」：选好的文件和拖进来的走同一条路。不放进 DOM，click() 照样弹出选择框；
+  // 要在用户的点击里调用（Chrome 要求用户激活，2026-11-17 实测 host.call 到这里时激活还在）
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.multiple = true;
+  picker.addEventListener("change", () => {
+    const list = [...(picker.files ?? [])];
+    picker.value = "";
+    takeFiles(list);
+  });
   const hasFiles = (e: DragEvent) => !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
   let dragDepth = 0;
   let shownBlocked: string | null = null;
@@ -858,6 +890,13 @@ export async function createHost(player: Player) {
       // 旧网关不认这条，等满超时后同样回空列表
       if (name === "emu.logcatApps") {
         return conn.request({ t: "logcatApps" }).then((r) => ({ foreground: r.foreground, apps: r.apps }), () => ({ foreground: null, apps: [] }));
+      }
+      // 页面的「发送文件…」按钮调用，处在用户点击里
+      if (name === "emu.pickFiles") {
+        const why = dropBlocked();
+        if (why) return { ok: false, error: why };
+        picker.click();
+        return { ok: true };
       }
       if (name === "emu.uploadsClear") {
         uploads.clear();

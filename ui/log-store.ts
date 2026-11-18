@@ -20,3 +20,13 @@ export function applyBatch(rows: readonly LogRow[], batch: { lines: LogLine[]; r
 export function levelColor(l: LogLevel): "muted" | "text" | "warn" | "danger" {
   return l === "W" ? "warn" : l === "E" || l === "F" ? "danger" : l === "I" ? "text" : "muted";
 }
+
+/**
+ * 日志列表空着时说什么：断开了、暂停了、有过滤条件（App、级别、关键字）时没有符合的、真的还没有日志，分开说。
+ * 网关按条件过滤后才推过来，页面看不出不加条件时有没有日志，所以有条件时只能说「没有符合条件的」。
+ */
+export function logEmptyText(s: { live: boolean; paused: boolean; filtered: boolean }): string {
+  if (!s.live) return "设备已断开，重新连上后继续显示日志。";
+  if (s.paused) return "已暂停";
+  return s.filtered ? "没有符合条件的日志。" : "还没有日志";
+}

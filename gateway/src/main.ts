@@ -18,7 +18,8 @@ import { createLogcatHub, dumpLogcat, parseApps, readLogcat } from "./logcat.ts"
 import type { LogFilter } from "../../shared/logcat.ts";
 import { createReverses } from "./reverse.ts";
 import { connectCdp } from "./cdp.ts";
-import { adb, killAdbChildren } from "./adb.ts";
+import { adb, emulatorId, killAdbChildren } from "./adb.ts";
+import { turnOffAutoPrivateDns } from "./private-dns.ts";
 import { createPhones } from "./phones.ts";
 import { connectPhone, type PhoneDeps } from "./phone-session.ts";
 import { materializeScrcpyServer, scrcpyServerPath } from "./scrcpy-server.ts";
@@ -216,6 +217,13 @@ async function discover(avdName?: string): Promise<EmulatorSession | null> {
     last = s;
     note(`已连接 emulator-${running.serial}（gRPC ${running.grpcPort}，${s.device.width}x${s.device.height}）`);
     s.onClosed(() => note(`emulator-${running.serial} 已退出`));
+    // 不等它：模拟器可能还在开机，等开机完成后在后台改（gateway/src/private-dns.ts）
+    void turnOffAutoPrivateDns({
+      exec: adb.device(emulatorId(running.serial)),
+      now: () => Date.now(),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      log: (m) => note(`emulator-${running.serial}：${m}`),
+    });
     return s;
   } catch (e) {
     note((e as Error).message);

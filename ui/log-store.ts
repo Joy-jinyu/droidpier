@@ -16,7 +16,7 @@ export function applyBatch(rows: readonly LogRow[], batch: { lines: LogLine[]; r
   return out.length > MAX_LINES ? out.slice(out.length - MAX_LINES) : out;
 }
 
-/** 级别的颜色，对应 App.tsx 里颜色表 C 的键。 */
+/** 级别的颜色角色，App.tsx 的 LEVEL_TOKEN 把它换成主题 token。 */
 export function levelColor(l: LogLevel): "muted" | "text" | "warn" | "danger" {
   return l === "W" ? "warn" : l === "E" || l === "F" ? "danger" : l === "I" ? "text" : "muted";
 }

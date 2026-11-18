@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activePage, foregroundPkg, h5KeyShown, pickPage } from "../../ui/h5-pages.ts";
+import { activePage, foregroundPkg, h5KeyShown, pickPage, visibleTitle } from "../../ui/h5-pages.ts";
 
 const page = (id: string, o: { pkg?: string; url?: string; visible?: boolean } = {}) => ({
   socket: "webview_devtools_remote_1", id, title: "", url: o.url ?? `https://example.com/${id}`, pkg: o.pkg ?? "com.example.app", visible: o.visible ?? false,
@@ -52,4 +52,11 @@ test("activePage：前台可见的页面；后台的、data: 预加载的不算"
   assert.equal(activePage([page("pre", { url: "data:text/html,", visible: true }), page("bg")]), undefined);
   assert.equal(activePage([page("bg")]), undefined);
   assert.equal(activePage([]), undefined);
+});
+
+test("页面标题：只有零宽字符或空白时当作没有标题，界面改用网址", () => {
+  assert.equal(visibleTitle("\u200b"), "");
+  assert.equal(visibleTitle(" \ufeff\n"), "");
+  assert.equal(visibleTitle("  首页 "), "首页");
+  assert.equal(visibleTitle("a\u200bb"), "a\u200bb");
 });

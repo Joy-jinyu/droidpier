@@ -1,8 +1,10 @@
-import { type AccessibilityRole, type ViewRef, cleanup, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, token, View, windowSize } from "nsh";
+import { type ViewRef, cleanup, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, token, View, windowSize } from "nsh";
 import { Button, Collapsible, ContextMenu, Dialog, Input, Menu, MenuItem, MenuSeparator, Radio, RadioGroup, Select, Tab, Tabs, Toggle, Toolbar, ToolbarGroup, Tooltip } from "nsh/base";
 import { fitMiddle, middleEllipsis, noBreak } from "./ellipsis";
 import { gatewayDown } from "./gateway-state";
-import { noticeTimeoutMs, pickBanner, type BannerKind } from "./banners";
+import { activeBanners, addNotice, currentNotice, dropNotice, NO_NOTICES, noticeTimeoutMs, pickBanner, timedNotice, waitingShown, type BannerKind, type Notice, type Notices } from "./banners";
+import { isStopping, STOP_IDLE, stopStep, type StopEvent, type StopFlow } from "./stop-flow";
+import { PENDING_MS, pendingAfter, type Pending, type PendingEvent } from "./start-pending";
 import { failText } from "../shared/fail-text";
 import { logCells } from "./log-columns";
 import { isStaleStatus } from "./status-rev";
@@ -17,7 +19,7 @@ import { matchesAvd } from "./device-search";
 import { canPick, currentPhoneOf, phoneDetail, phoneLabel, phoneStatus, showPhones } from "./phones";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
-import { activePage, foregroundPkg, h5KeyShown, pickPage } from "./h5-pages";
+import { activePage, foregroundPkg, h5KeyShown, pickPage, visibleTitle } from "./h5-pages";
 import { AUTO_START, autoOpen } from "./console-auto";
 import { addressEdit, addressShown, addressSubmit, type AddressDraft } from "./address-field";
 import { emulatorButtonShown, missingEmulatorItems, setupCardShown, setupNeeded } from "./setup-card";
@@ -31,8 +33,6 @@ type State =
   | "unsupported-browser" | "lna-denied" | "lna-prompt" | "bad-origin" | "no-gateway" | "refused";
 type Avd = { name: string; displayName?: string; width?: number; height?: number; apiLevel?: number; running: "no" | "grpc" | "no-grpc"; serial?: number };
 type Boot = { name: string; progress: string; error?: string; seconds: number };
-/** sticky：不自动消失，文字可选中复制，带关闭按钮。 */
-type Notice = { text: string; error?: boolean; sticky?: boolean };
 type Page = { socket: string; pkg?: string; id: string; title: string; url: string; visible: boolean };
 type InspectResult = { opened: true } | { cancelled: true } | { hint: string } | { error: string; adbStuck?: boolean };
 type Inspected = { key: string; title: string; device: string };
@@ -341,12 +341,11 @@ const iconSquare = (size: "sm" | "md" = "md") =>
  */
 function IconButton(props: {
   icon: IconName; label: string; onPress?: () => void; disabled?: boolean; why?: string; tip?: string; variant?: "ghost" | "toolbar"; size?: "sm" | "md";
-  ref?: (r: ViewRef) => void;
 }) {
   const tipLabel = () => (props.disabled && props.why ? `${props.label}：${props.why}` : props.tip ? `${props.label}（${props.tip}）` : props.label);
   return (
     <Button onPress={props.onPress} disabled={props.disabled} accessibilityLabel={withWhy(props.tip ? `${props.label}：${props.tip}` : props.label, props.disabled, props.why)}
-      tooltip={<Tip label={tipLabel()} />} ref={props.ref} class={EXPANDED}
+      tooltip={<Tip label={tipLabel()} />} class={EXPANDED}
       hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }} disabledStyle={{ opacity: DISABLED }} activeStyle={pressed()}
       style={{ ...iconSquare(props.size), ...ease() }}>
       <Icon name={props.icon} size={ICON.md} tint={props.variant === "toolbar" ? token("toolbar-foreground") : token("muted-foreground")} />
@@ -430,13 +429,15 @@ function AppSelect(props: {
   empty?: string;
   style: { width: number; flexShrink?: number; minWidth?: number };
 }) {
+  // 触发器上字的宽度：放不下时按它中间省略；标题、地址、包名里常有放不下的一长段，用 noBreak 按字截断兜底（见 ui/ellipsis.ts）
+  const labelWidth = signal(0);
   return (
     <Select items={props.items} value={props.value} accessibilityLabel={props.accessibilityLabel} disabled={props.disabled} style={props.style}
       popupStyle={{ backgroundColor: token("popover"), borderRadius: token("radius-lg"), borderWidth: 1, borderColor: token("border"), padding: SPACE.part, minWidth: 220, maxHeight: 360, boxShadow: popupShadow() }}
       itemClass={SELECT_ITEM}
       renderItem={(item) => (
         <View style={{ height: CONTROL.sm, justifyContent: "center", paddingHorizontal: SPACE.item }}>
-          <Text class={SELECT_ITEM_TEXT} style={{ ...TYPE.body, numberOfLines: 1 }}>{item.title}</Text>
+          <Text class={SELECT_ITEM_TEXT} style={{ ...TYPE.body, numberOfLines: 1 }}>{noBreak(item.title)}</Text>
         </View>
       )}
       searchable={props.search !== undefined} searchPlaceholder={props.search} searchAccessibilityLabel={props.search}
@@ -450,7 +451,10 @@ function AppSelect(props: {
       trigger={
         <View style={{ height: CONTROL.md, flexDirection: "row", alignItems: "center", gap: SPACE.part, paddingLeft: SPACE.inset, paddingRight: SPACE.item, borderRadius: token("radius"), borderWidth: 1, borderColor: token("input"), backgroundColor: token("field") }}
           hoverStyle={{ borderColor: token("border-strong") }} focusStyle={{ borderColor: token("ring") }} expandedStyle={{ borderColor: token("ring") }}>
-          <Text style={{ ...TYPE.body, flex: 1, color: props.muted ? token("muted-foreground") : token("foreground"), numberOfLines: 1 }}>{props.label}</Text>
+          <Text onLayout={({ bounds }) => labelWidth.set(bounds.size.width)}
+            style={{ ...TYPE.body, flex: 1, color: props.muted ? token("muted-foreground") : token("foreground"), numberOfLines: 1 }}>
+            {noBreak(fitMiddle(props.label, labelWidth(), TYPE.body.fontSize))}
+          </Text>
           <Icon name="chevron" size={ICON.sm} tint={token("muted-foreground")} />
         </View>
       } />
@@ -522,13 +526,13 @@ function AppDialog(props: { open: boolean; size: keyof typeof DIALOG_W; onClose?
  * 对话框里的内容：标题和说明一组、正文、按钮行，三段之间隔 SPACE.group。正文放不下时滚动；
  * scroll 为 false 时正文不套滚动，由里面会缩的那块自己滚（许可证全文：flexShrink 1、minHeight 0）。
  */
-function DialogContent(props: { title: string; description?: string; alert?: boolean; scroll?: boolean; footer: JSX.Element; children: JSX.Element }) {
+function DialogContent(props: { title: string; description?: string; scroll?: boolean; footer: JSX.Element; children: JSX.Element }) {
   const body = { flexShrink: 1, minHeight: 0, gap: SPACE.item } as const;
   // 滚动区本身跟着对话框缩；里面的内容不缩，超出的部分才滚得出来
-  // nsh 的 Dialog 不收 role 和名字，放在里面这一层：nsh 网页端把它不认识的 role 原样写进 role 属性（nsh.js updateAria），
-  // 类型里没有 dialog、alertdialog，只能断言。alert：要用户确认后果的（删除、重启、停止、许可证）
+  // 读屏听不到 dialog 角色：nsh 0.4.0 的 Dialog 不收 role 和名字（网页端只给外层写 aria-modal），AccessibilityRole
+  // （nsh-core props.rs）也没有 dialog、alertdialog，写了也不会进 DOM（2026-11-18 实测）。这里只能把内容标成以标题命名的一组
   return (
-    <View role={(props.alert ? "alertdialog" : "dialog") as AccessibilityRole} accessibilityLabel={props.title} accessibilityHint={props.description}
+    <View role="group" accessibilityLabel={props.title} accessibilityHint={props.description}
       style={{ flexShrink: 1, minHeight: 0, gap: SPACE.group }}>
       <View style={{ gap: SPACE.part }}>
         <Text role="header" style={{ ...TYPE.title, color: token("foreground") }}>{props.title}</Text>
@@ -774,7 +778,7 @@ function H5Console(props: {
     inspecting.set(true);
     call<InspectResult>("emu.inspect", { socket: p.socket, id: p.id }).then(
       (r: InspectResult) => {
-        if ("opened" in r) props.onInspect(pageKey(p), p.title || p.url);
+        if ("opened" in r) props.onInspect(pageKey(p), visibleTitle(p.title) || p.url);
         else if ("cancelled" in r) return;
         else if ("hint" in r) inspectMsg.set({ text: r.hint });
         else inspectMsg.set({ text: r.error, error: true, adbStuck: r.adbStuck });
@@ -830,7 +834,8 @@ function H5Console(props: {
     cleanup(keymap.bind("escape", () => draft.set(null), { when: "always" }));
   });
 
-  const pageTitle = (p: Page) => `${p.title || middleEllipsis(p.url, URL_CHARS)}${p.visible ? "" : "（后台）"}`;
+  // 标题只有空白（网页的 <title> 里常带换行）时也用地址
+  const pageTitle = (p: Page) => `${visibleTitle(p.title) || middleEllipsis(p.url, URL_CHARS)}${p.visible ? "" : "（后台）"}`;
   const items = () => appPages().map((p) => ({ value: pageKey(p), title: pageTitle(p) }));
   // DevTools 还没打开时盖在占位区上的说明；打开被取消、失败了（原因在上面的提示条里）时给下一步
   const placeholder = () => {
@@ -940,11 +945,13 @@ function Mark(props: { size: number }) {
 }
 
 /**
- * 菜单打开时把键盘焦点放到触发器上：nsh 的按钮被鼠标按下时不拿焦点，焦点留在原处（常常是 DevTools 的 iframe），
- * 接着按的 Escape 落到 iframe 里，关不掉菜单（2026-11-17 走查实测）。
+ * 菜单打开时让键盘焦点离开 DevTools 的 iframe 和画面（host 的 emu.releaseFocus）：nsh 的按钮被鼠标按下时不拿焦点，
+ * 焦点留在原处，接着按的 Escape 落到 iframe 或画面里，关不掉菜单（2026-11-17 走查实测）。不把焦点放到触发器上：
+ * 工具栏里的按钮除了 Tab 停的那一个都不收 focus()（nsh.js 的 focusPressable 只认 tabIndex 0），焦点就落在 body 上；
+ * 焦点在 body 上时 Escape 照样关得掉菜单（2026-11-18 用最小的 nsh 应用实测）。
  */
-const focusOnOpen = (get: () => ViewRef | undefined) => (e: { open: boolean }) => {
-  if (e.open) get()?.focus();
+const releaseOnOpen = (e: { open: boolean }) => {
+  if (e.open) void host.call("emu.releaseFocus", {});
 };
 
 /**
@@ -952,11 +959,10 @@ const focusOnOpen = (get: () => ViewRef | undefined) => (e: { open: boolean }) =
  * setup：环境还缺东西、环境检查卡片被关掉了时，菜单里给一项把它重新打开（文字是项的名字）。
  */
 function AppMenu(props: { site: string; theme: Theme; onTheme: (t: Theme) => void; setup: string | null; onSetup: () => void }) {
-  let trigger: ViewRef | undefined;
   return (
     <Menu placement="top" offset={SPACE.item} popupStyle={{ ...menuPopup("bottom left"), minWidth: 248 }} popupStartingStyle={popOut("below")} popupEndingStyle={popOut("below")}
-      onOpenChange={focusOnOpen(() => trigger)} trigger={
-      <Button accessibilityLabel="Droidpier 菜单" ref={(r) => (trigger = r)} class={EXPANDED} hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }}
+      onOpenChange={releaseOnOpen} trigger={
+      <Button accessibilityLabel="Droidpier 菜单" class={EXPANDED} hoverStyle={{ backgroundColor: token("accent") }} focusStyle={{ borderColor: token("ring") }}
         style={{ flexDirection: "row", alignItems: "center", gap: SPACE.item, paddingVertical: SPACE.part, paddingHorizontal: SPACE.item, borderRadius: token("radius"), borderWidth: 1, borderColor: "transparent", ...ease() }}>
         <Mark size={28} />
         <Text style={{ flex: 1, color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>Droidpier</Text>
@@ -1008,7 +1014,7 @@ function CopyCmd(props: { cmd: string }) {
 }
 
 /** 画面上方的环境检查卡片：缺什么、多大、手动命令，以及安装进度。安装只在确认框里确认后才开始。 */
-function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c: Confirm) => void; onCreate: () => void; onDismiss: () => void }) {
+function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c: Confirm) => void; onCreate: () => void; onDismiss: () => void; sidebarShown: boolean }) {
   const busy = () => props.installs.some(isActive);
   // 设备要在「创建设备」对话框里选机型和系统版本，不在「全部安装」里
   const installable = () => props.env.missing.filter((m) => m.auto && m.id !== "avd");
@@ -1034,7 +1040,7 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
       </View>
       <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>
         {props.env.missing.length > 0
-          ? `还不能启动设备，缺 ${props.env.missing.length} 项。点「安装…」会先让你确认要下载什么、装到哪里。关掉后可以从左下角的 Droidpier 菜单重新打开。`
+          ? `还不能启动设备，缺 ${props.env.missing.length} 项。点「安装…」会先让你确认要下载什么、装到哪里。${props.sidebarShown ? "关掉后可以从左下角的 Droidpier 菜单重新打开。" : "关掉后可以展开侧栏，从左下角的 Droidpier 菜单重新打开。"}`
           : props.env.error ? "" : "环境已经齐全。"}
       </Text>
       <If when={props.env.error}>
@@ -1104,12 +1110,11 @@ function SetupCard(props: { env: Env; installs: InstallProgress[]; onInstall: (c
   );
 }
 
-// nsh 没有导出 ViewRef 类型，从 Radio 的 ref 取
-type Focusable = Exclude<NonNullable<Parameters<typeof Radio>[0]["ref"]>, (node: never) => void>;
+// nsh 没有导出 ScrollRef 类型，从 Scroll 的 ref 取
 type Scroller = Exclude<NonNullable<Parameters<typeof Scroll>[0]["ref"]>, (node: never) => void>;
 
 /** 一行单选项（nsh 的 Radio：方向键在组内移动、Space 选中）：左边名字，右边说明；选中时底色变亮。 */
-function Choice(props: { label: string; detail: string; detailColor?: string; checked: boolean; onPress: () => void; ref: (r: Focusable) => void }) {
+function Choice(props: { label: string; detail: string; detailColor?: string; checked: boolean; onPress: () => void; ref: (r: ViewRef) => void }) {
   return (
     <Radio checked={props.checked} onChange={props.onPress} accessibilityLabel={`${props.label}，${props.detail}`} ref={props.ref}
       style={{
@@ -1125,7 +1130,7 @@ function Choice(props: { label: string; detail: string; detailColor?: string; ch
 }
 
 /** 把选中的那项滚到列表可见处（列表刚挂上，还在顶部）；focus 为真时再把键盘焦点放上去。 */
-const reveal = async (scroller: Scroller | undefined, item: Focusable | undefined, focus: boolean) => {
+const reveal = async (scroller: Scroller | undefined, item: ViewRef | undefined, focus: boolean) => {
   if (!item) return;
   const [m, s] = await Promise.all([item.measure(), scroller?.measure()]);
   if (m && s && scroller) scroller.scrollTo({ y: Math.max(0, m.pagePosition.y - s.pagePosition.y - 4), animated: false });
@@ -1159,8 +1164,8 @@ function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; o
     return customName() ?? (d && i ? defaultAvdName(d.name, i.api) : "");
   };
   // 目录第一次到达（每次打开对话框一次）：把默认选中的机型和版本滚进可见处，焦点放在机型上
-  const deviceRefs = new Map<string, Focusable>();
-  const imageRefs = new Map<string, Focusable>();
+  const deviceRefs = new Map<string, ViewRef>();
+  const imageRefs = new Map<string, ViewRef>();
   let deviceScroll: Scroller | undefined;
   let imageScroll: Scroller | undefined;
   let revealed = false;
@@ -1272,7 +1277,9 @@ function App() {
   const caps = signal<DeviceCaps | null>(null);
   const deviceSize = signal({ width: 0, height: 0 });
   const boots = signal<Record<string, Boot>>({});
-  const notice = signal<Notice | null>(null);
+  // 画面上方的通知（ui/banners.ts 的 Notices）：错误留着等用户关，一般消息显示出来后几秒收起
+  const notices = signal<Notices>(NO_NOTICES);
+  const notice = () => currentNotice(notices());
   const upgrade = signal<string | null>(null);
   const gatewayNote = signal<GatewayBanner | null>(null);
   // 用户关掉的那条网关提示（按文字记）：同一条不再出现，换了内容再出现
@@ -1381,13 +1388,7 @@ function App() {
     adbStuck.set(false);
     act(host.call("emu.reboot", {}));
   };
-  let noticeTimer: number | undefined;
-  const showNotice = (n: Notice) => {
-    notice.set(n);
-    clearTimeout(noticeTimer);
-    const ms = noticeTimeoutMs(n);
-    if (ms !== null) noticeTimer = setTimeout(() => notice.set(null), ms);
-  };
+  const showNotice = (n: Notice) => notices.set(addNotice(notices(), n));
 
   // H5 页面列表：连着设备时一直轮询（3 秒一次，连续成功后放宽到 5 秒；标签页隐藏时跳过，回到前台立即刷一次），左侧 H5 键和控制台都用它
   const pages = signal<Page[] | null>(null);
@@ -1495,13 +1496,16 @@ function App() {
   host.on("emu.phones", (p: { list: PhoneInfo[] | null }) => phones.set(p.list));
   host.on("emu.boot", (b: Boot) => {
     boots.set({ ...boots(), [b.name]: b });
-    if (pending()?.what === "start" && pending()!.name === b.name) settlePending();
+    pendingEvent({ kind: "boot", name: b.name });
     if (b.progress === "failed") {
       const a = (avds() ?? []).find((x) => x.name === b.name);
       showNotice({ text: `${a ? avdLabel(a) : b.name} 启动失败${b.error ? `：${b.error}` : ""}`, error: true, sticky: true });
     }
   });
-  host.on("emu.notice", (n: Notice) => showNotice(n));
+  host.on("emu.notice", (n: Notice & { gateway?: boolean }) => {
+    if (n.gateway) pendingEvent({ kind: "gateway-error" });
+    showNotice({ text: n.text, error: n.error, sticky: n.sticky });
+  });
   // 自动写电脑剪贴板失败时带内容来，等用户点一下再写；之后有新内容写成功时带 null 来，收起
   const clip = signal<string | null>(null);
   const copyFailed = signal(false);
@@ -1548,23 +1552,23 @@ function App() {
   const GW_DOWN = "没有连上网关，操作没有发出。等网关重新连上后再试。";
   const gw = (p: Promise<{ ok: boolean }>) =>
     p.then((r) => { if (!r.ok) showNotice({ text: GW_DOWN, error: true }); });
-  // 点了「启动」「切换到这台」、结果还没到（启动等网关推来开机进度，切换等画面换过去）：按钮换成进行中的字并禁用，免得连点发出好几次。
-  // PENDING_MS 后还没有结果就放开（估的：切换一般 1～2 秒，启动一两秒内就有开机进度）
-  const PENDING_MS = 20_000;
-  const pending = signal<{ name: string; what: "start" | "use" } | null>(null);
+  // 点了「启动」「切换到这台」、结果还没到：按钮换成进行中的字并禁用（什么时候放开见 ui/start-pending.ts）
+  const pending = signal<Pending>(null);
   let pendingTimer: ReturnType<typeof setTimeout> | undefined;
-  const settlePending = () => {
+  const pendingEvent = (e: PendingEvent) => {
+    const next = pendingAfter(pending(), e);
+    if (next === pending()) return;
     clearTimeout(pendingTimer);
-    pending.set(null);
+    pending.set(next);
   };
   cleanup(() => clearTimeout(pendingTimer));
   const begin = (name: string, what: "start" | "use") => {
     if (pending()) return;
     pending.set({ name, what });
-    pendingTimer = setTimeout(settlePending, PENDING_MS);
+    pendingTimer = setTimeout(() => pendingEvent({ kind: "timeout" }), PENDING_MS);
     (host.call(what === "start" ? "emu.start" : "emu.use", { name }) as Promise<{ ok: boolean }>).then((r) => {
       if (r.ok) return;
-      settlePending();
+      pendingEvent({ kind: "not-sent" });
       showNotice({ text: GW_DOWN, error: true });
     });
   };
@@ -1683,19 +1687,22 @@ function App() {
   const shown = () => (avds() ?? []).find((a) => a.name === selected()) ?? currentAvd() ?? null;
   // 主区现在显示的就是画面上这台：没有选中的设备时（列表里没有它），连着就算
   const shownIsLive = () => { const a = shown(); return a ? isCurrent(a) : state() === "connected"; };
+  // 画面上连着（或重启中）的模拟器设备；画面上是手机或没有设备时为 null
+  const onScreen = () => (shownIsLive() ? shown() : null);
+  // 画面上这台重启中不能停：网关停掉它后仍按重启在等 adb，页面会一直显示重启中，约 2 分钟后报一个假的 adb 错误
+  const stoppable = (a: Avd | null) =>
+    !!a && !gatewayDown(state()) && live(a) && !beingStopped(a) && !beingDeleted(a) && !(isCurrent(a) && state() === "rebooting");
   const switchTo = (a: Avd) => begin(a.name, "use");
-  // 切换到的那台到了画面上：切换结束
-  effect(() => {
-    const p = pending();
-    if (p?.what === "use" && currentAvd()?.name === p.name && state() === "connected") settlePending();
-  });
+  // 切换到的那台到了画面上、和网关断开了：不再等
+  effect(() => pendingEvent({ kind: "status", down: gatewayDown(state()), onScreen: state() === "connected" ? currentAvd()?.name ?? null : null }));
   const pendingText = (a: Avd, what: "start" | "use") => (pending()?.name === a.name && pending()!.what === what ? (what === "start" ? "启动中…" : "切换中…") : null);
   const isCurrentPhone = (p: PhoneInfo) => kind() === "phone" && p.id === deviceId() && (state() === "connected" || state() === "rebooting");
   const pickPhone = (p: PhoneInfo) => {
     if (!canPick(p)) return;
     if (p.id !== selected()) animateNext();
     selected.set(p.id);
-    if (!isCurrentPhone(p)) gw(host.call("emu.use", { name: p.id }));
+    // 没连着网关时列表是旧的，只选中，不去切换（同 pickDevice）
+    if (!gatewayDown(state()) && !isCurrentPhone(p)) gw(host.call("emu.use", { name: p.id }));
   };
   const copyHref = (url: string) =>
     host.call("emu.copy", { text: url }).then(
@@ -1783,27 +1790,34 @@ function App() {
     const e = env();
     return e && !e.ok && !showSetup() ? (e.missing.length > 0 ? `环境检查（缺 ${e.missing.length} 项）` : "环境检查") : null;
   };
-  let moreTrigger: ViewRef | undefined;
   const pickFiles = () =>
     (host.call("emu.pickFiles", {}) as Promise<{ ok: boolean; error?: string }>).then((r) => {
       if (!r.ok) showNotice({ text: r.error ?? "没有连接设备", error: true });
     });
   // 画面上方现在显示哪条提示（ui/banners.ts）
-  const banner = () => {
-    const n = notice();
-    const active: BannerKind[] = [];
-    if (adbStuck() && state() === "connected") active.push("adb");
-    if (n) active.push(noticeTimeoutMs(n) === null ? "error" : "info");
-    if (gatewayShown()) active.push("gateway");
-    if (clip() !== null) active.push("clip");
-    if (uploads().length > 0) active.push("uploads");
-    return pickBanner(active);
-  };
+  const banner = () => pickBanner(activeBanners({ adbStuck: adbStuck(), state: state(), notices: notices(), gateway: !!gatewayShown(), clip: clip() !== null }));
+  const gatewayManual = () => gatewayShown()?.kind === "manual";
   const bannerBorder = (k: BannerKind) =>
-    k === "adb" || (k === "error" && notice()?.error) ? token("destructive") : k === "gateway" && gatewayShown()?.kind === "manual" ? token("warning") : token("border");
-  // 键盘焦点在不在画面上（host 的 emu.keyboard）：在的时候机身画焦点环，下面说怎么离开
+    k === "adb" || (k === "error" && notice()?.error) ? token("destructive") : k === "gateway" && gatewayManual() ? token("warning") : token("border");
+  // 一般消息只在真的显示出来时倒计时：被前面的提示挡着时停下，再露出来时重新计（ui/banners.ts 的 timedNotice）
+  let timed: Notice | null = null;
+  let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+  effect(() => {
+    const n = timedNotice(banner().shown, notices());
+    if (n === timed) return;
+    clearTimeout(noticeTimer);
+    timed = n;
+    const ms = n ? noticeTimeoutMs(n) : null;
+    if (n && ms !== null) noticeTimer = setTimeout(() => notices.set(dropNotice(notices(), n)), ms);
+  });
+  cleanup(() => clearTimeout(noticeTimer));
+  // 画面上方的提示卡片（一条提示、传文件进度各一张）
+  const bannerCard = () => ({ gap: SPACE.item, backgroundColor: token("overlay"), borderRadius: token("radius-lg"), padding: SPACE.inset, borderWidth: 1, maxWidth: "92%" }) as const;
+  // 键盘焦点在不在画面上（host 的 emu.keyboard）：在的时候机身画焦点环，下面说怎么离开。画面上没有在连着的设备时不算
+  // （停了、重启中：host 那边也会让出焦点，见 host/src/main.ts 的 onState）
   const keyboardOn = signal(false);
   host.on("emu.keyboard", (p: { on: boolean }) => keyboardOn.set(p.on));
+  const keyboardShown = () => keyboardOn() && shownIsLive() && state() === "connected";
   const showSetup = () => {
     const e = env();
     if (!e) return null;
@@ -1873,55 +1887,30 @@ function App() {
       (e: Error) => { if (still()) deleteError.set(failText("没有删除", e.message)); },
     ).finally(() => deleting.set(false));
   };
-  // 停止设备：顶栏「更多操作」、侧栏行的右键菜单、主区的按钮都走这里，先确认（正在运行的 App 会被关掉），
-  // 确认框里显示「停止中…」，停了才关；失败的原因留在框里
-  const stopAsk = signal<Avd | null>(null);
-  const stopError = signal<string | null>(null);
-  const stopping = signal<string | null>(null);
-  const beingStopped = (a: Avd) => stopping() === a.name;
-  const openStop = (a: Avd) => {
-    stopError.set(null);
-    stopAsk.set(a);
-  };
-  // 停不下来时不能一直「停止中」：画面上这台的 stop 网关立刻回复，要靠列表看它停没停（估的上限）
-  const STOP_WAIT_MS = 30_000;
-  let stopTimer: ReturnType<typeof setTimeout> | undefined;
-  cleanup(() => clearTimeout(stopTimer));
-  const stopDone = (a: Avd) => {
-    if (stopping() !== a.name) return;
-    clearTimeout(stopTimer);
-    stopping.set(null);
-    if (stopAsk()?.name === a.name) stopAsk.set(null);
-    showNotice({ text: `已停止 ${avdLabel(a)}` });
-  };
-  const stopFailed = (a: Avd, text: string) => {
-    if (stopping() !== a.name) return;
-    clearTimeout(stopTimer);
-    stopping.set(null);
-    if (stopAsk()?.name === a.name) stopError.set(text);
-    else showNotice({ text, error: true });
-  };
-  const confirmStop = () => {
-    const a = stopAsk();
-    if (!a || stopping()) return;
-    stopping.set(a.name);
-    stopError.set(null);
-    stopTimer = setTimeout(() => stopFailed(a, failText("没有停止", `等了 ${STOP_WAIT_MS / 1000} 秒它还在运行`)), STOP_WAIT_MS);
-    // 画面上这台用 stop（哪个版本的网关都认）；别的用 stopAvd（网关等它真的停了才回）
-    if (isCurrent(a)) {
-      (host.call("emu.stop", {}) as Promise<{ ok: boolean }>).then((r) => { if (!r.ok) stopFailed(a, GW_DOWN); });
-      return;
-    }
-    (host.call("emu.stopAvd", { name: a.name }) as Promise<{ ok: boolean; error?: string }>).then(
-      (r) => (r.ok ? stopDone(a) : stopFailed(a, failText("没有停止", r.error))),
-      (e: Error) => stopFailed(a, failText("没有停止", e.message)),
+  // 停止设备：顶栏「更多操作」（画面上这台）、侧栏行的右键菜单、主区的按钮都走这里，先确认（正在运行的 App 会被关掉），
+  // 确认框里显示「停止中…」，停了才关；失败的原因留在框里（流程在 ui/stop-flow.ts）
+  const stop = signal<StopFlow>(STOP_IDLE);
+  const beingStopped = (a: Avd) => isStopping(stop(), a.name);
+  const stopEvent = (e: StopEvent) => {
+    const r = stopStep(stop(), e);
+    stop.set(r.flow);
+    if (r.notice) showNotice(r.notice);
+    const name = r.send;
+    if (!name) return;
+    (host.call("emu.stopAvd", { name }) as Promise<{ ok: boolean; error?: string }>).then(
+      (res) => stopEvent(res.ok ? { kind: "done", name } : { kind: "failed", name, text: failText("没有停止", res.error) }),
+      (err: Error) => stopEvent({ kind: "failed", name, text: failText("没有停止", err.message) }),
     );
   };
-  // 列表里它不在运行了就算停完（画面上这台走的是 stop，靠这里收尾）
+  const openStop = (a: Avd) => stopEvent({ kind: "open", target: { name: a.name, label: avdLabel(a) } });
+  // 列表里已经看到它停了（回复之前）也算停完
   effect(() => {
-    const n = stopping();
-    const a = n ? (avds() ?? []).find((x) => x.name === n) : undefined;
-    if (a && !live(a)) stopDone(a);
+    const list = avds();
+    if (!list) return;
+    for (const t of stop().stopping) {
+      const a = list.find((x) => x.name === t.name);
+      if (!a || !live(a)) stopEvent({ kind: "gone", name: t.name });
+    }
   });
   // 许可证要用户回答，盖在别的对话框上会叠两层：先把别的关掉（正在保存、删除、停止的留着，许可证排在它们后面）
   effect(() => {
@@ -1929,7 +1918,7 @@ function App() {
     rebootAsk.set(false);
     if (!renaming()) renameTarget.set(null);
     if (!deleting()) deleteTarget.set(null);
-    if (!stopping()) stopAsk.set(null);
+    stopEvent({ kind: "cancel" });
   });
   // 回复晚了（页面 15 秒超时）或别的页面删掉了它：新列表里没有这台了，就当删完
   effect(() => {
@@ -1952,25 +1941,25 @@ function App() {
   });
   const DeviceRow = (props: { avd: () => Avd }) => {
     const a = props.avd;
-    let row: ViewRef | undefined;
     return (
       <ContextMenu offset={SPACE.part} popupStyle={menuPopup("top left")} popupStartingStyle={popOut("above")} popupEndingStyle={popOut("above")}
-        onOpenChange={focusOnOpen(() => row)} trigger={
+        onOpenChange={releaseOnOpen} trigger={
         <Button onPress={() => pickDevice(a())} selected={shown()?.name === a().name} accessibilityLabel={`${avdLabel(a())}，${avdStatus(a())}`}
-          ref={(r) => (row = r)} {...rowStates()}
+          {...rowStates()}
           style={rowStyle()}>
           <View style={avatarStyle()}>
             <Icon name="smartphone" size={ICON.md} tint={avdTint(a())} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: SPACE.hair }}>
             <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>{avdLabel(a())}</Text>
-            <Text style={{ color: a().running === "no-grpc" || isBooting(boots()[a().name]) ? token("warning") : token("muted-foreground"), ...TYPE.caption }}>{avdStatus(a())}</Text>
+            {/* 没连着网关时状态写的是「状态未知」，不用警告色（同 avdTint） */}
+            <Text style={{ color: !gatewayDown(state()) && (a().running === "no-grpc" || isBooting(boots()[a().name])) ? token("warning") : token("muted-foreground"), ...TYPE.caption }}>{avdStatus(a())}</Text>
           </View>
           <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{a().apiLevel ? ANDROID[a().apiLevel!] ?? `API ${a().apiLevel}` : ""}</Text>
         </Button>
       }>
         <Item label="重命名…" disabled={beingDeleted(a())} onSelect={() => openRename(a())} />
-        <Item label={beingStopped(a()) ? "停止中…" : "停止设备…"} disabled={gatewayDown(state()) || !live(a()) || beingStopped(a()) || beingDeleted(a())} onSelect={() => openStop(a())} />
+        <Item label={beingStopped(a()) ? "停止中…" : "停止设备…"} disabled={!stoppable(a())} onSelect={() => openStop(a())} />
         <MenuLine />
         <Item label="删除…" danger disabled={beingDeleted(a())} onSelect={() => openDelete(a())} />
       </ContextMenu>
@@ -2035,7 +2024,7 @@ function App() {
               <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>手机</Text>
               <If when={(phones() ?? []).length > 0} else={
                 <Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>
-                  {env()?.missing.some((m) => m.id === "platform-tools") ? "先在环境检查里安装 platform-tools（adb），才能看到手机。" : "插上手机，并在手机上打开 USB 调试。"}
+                  {env()?.missing.some((m) => m.id === "platform-tools") ? "先在环境检查里安装 platform-tools（adb），才能看到手机。" : "插上手机并打开 USB 调试。"}
                 </Text>
               }>
                 <Each of={phones() ?? []} key={(p) => p.id}>{(p) => <PhoneRow phone={p} />}</Each>
@@ -2057,10 +2046,10 @@ function App() {
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: SPACE.item }}>
               {/* 设备名先占够自己的宽度，包名只用剩下的；名字本身放不下时中间省略 */}
               <Text role="header" style={{ flexShrink: 1, color: token("foreground"), ...TYPE.heading, numberOfLines: 1 }}>
-                {fitMiddle(shown() ? avdLabel(shown()!) : currentPhone() ? phoneLabel(currentPhone()!) : "没有连接设备", titleWidth(), TYPE.heading.fontSize)}
+                {noBreak(fitMiddle(shown() ? avdLabel(shown()!) : currentPhone() ? phoneLabel(currentPhone()!) : "没有连接设备", titleWidth(), TYPE.heading.fontSize))}
               </Text>
-              <If when={h5Open() && foregroundPkg(pages() ?? [])}>
-                {(pkg) => <Text style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, color: token("muted-foreground"), ...TYPE.caption, fontFamily: "monospace", numberOfLines: 1 }}>{pkg()}</Text>}
+              <If when={h5Open() ? foregroundPkg(pages() ?? []) : null}>
+                {(pkg) => <Text style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, color: token("muted-foreground"), ...TYPE.caption, fontFamily: "monospace", numberOfLines: 1 }}>{noBreak(pkg())}</Text>}
               </If>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.part }}>
@@ -2104,18 +2093,19 @@ function App() {
             </If>
             <ToolGroup label="更多操作">
               <Menu align="end" offset={SPACE.item} popupStyle={menuPopup("top right")} popupStartingStyle={popOut("above")} popupEndingStyle={popOut("above")}
-                onOpenChange={focusOnOpen(() => moreTrigger)} trigger={
-                <IconButton variant="toolbar" icon="more" label="更多操作" ref={(r) => (moreTrigger = r)} />
+                onOpenChange={releaseOnOpen} trigger={
+                <IconButton variant="toolbar" icon="more" label="更多操作" />
               }>
                 {/* 和把文件拖到画面上走同一条路（host 的 emu.pickFiles 打开选择文件框） */}
                 <Item label="安装 APK 或发送文件…" disabled={!shownIsLive() || state() !== "connected"} onSelect={pickFiles} />
                 <If when={caps()?.reboot !== false}>
                   <Item label={state() === "rebooting" ? "重启中…" : `${rebootLabel(kind() === "phone")}…`} disabled={!shownIsLive() || state() !== "connected"} onSelect={() => rebootAsk.set(true)} />
                 </If>
-                {/* 停止的是主区选中的这台：在运行就能停，不必是画面上的那台（手机不能从页面停止） */}
-                <If when={shown() || caps()?.stop !== false}>
-                  <Item label={shown() && beingStopped(shown()!) ? "停止中…" : "停止设备…"} disabled={gatewayDown(state()) || !shown() || !live(shown()!) || !!stopping() || beingDeleted(shown()!)}
-                    onSelect={() => { const a = shown(); if (a) openStop(a); }} />
+                {/* 停止的是画面上这台（同原来的「关闭模拟器」）；别的在运行的设备从侧栏行的右键菜单或主区的按钮停。手机不能从页面停止 */}
+                <If when={caps()?.stop !== false}>
+                  <Item label={onScreen() && beingStopped(onScreen()!) ? "停止中…" : "停止设备…"}
+                    disabled={!stoppable(onScreen())}
+                    onSelect={() => { const a = onScreen(); if (a) openStop(a); }} />
                 </If>
                 <MenuLine />
                 <Item label="重命名…" disabled={!shown() || beingDeleted(shown()!)} onSelect={() => { const a = shown(); if (a) openRename(a); }} />
@@ -2147,7 +2137,8 @@ function App() {
                 )}
               </If>
               <If when={showSetup()}>
-                {(e) => <SetupCard env={e()} installs={installs()} onInstall={(c) => confirm.set(c)} onCreate={openCreate} onDismiss={() => { animateNext(); setupDismissed.set(true); setupWanted.set(false); }} />}
+                {(e) => <SetupCard env={e()} installs={installs()} onInstall={(c) => confirm.set(c)} onCreate={openCreate} onDismiss={() => { animateNext(); setupDismissed.set(true); setupWanted.set(false); }}
+                  sidebarShown={sidebarShown()} />}
               </If>
             </View>
           </If>
@@ -2155,8 +2146,8 @@ function App() {
             <View onLayout={({ bounds }) => deviceArea.set({ width: bounds.size.width, height: bounds.size.height })}
               style={{ flex: 1, minHeight: 0, alignSelf: "stretch", alignItems: "center", justifyContent: "center", position: "relative" }}>
                 {/* 键盘焦点在画面上时机身描一圈焦点环（画布自己不画焦点框） */}
-                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: keyboardOn() ? token("ring") : token("border-strong"), backgroundColor: token("device-bezel"),
-                  boxShadow: keyboardOn() ? [{ x: 0, y: 0, blur: 0, spread: 2, color: token("ring") }] : [], transform: motion.transform, pointerEvents: turning() ? "none" : "auto", ...ease() }}>
+                <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: keyboardShown() ? token("ring") : token("border-strong"), backgroundColor: token("device-bezel"),
+                  boxShadow: keyboardShown() ? [{ x: 0, y: 0, blur: 0, spread: 2, color: token("ring") }] : [], transform: motion.transform, pointerEvents: turning() ? "none" : "auto", ...ease() }}>
                   <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
                   <If when={drag().active}>
                     <View role="summary" style={{
@@ -2184,7 +2175,7 @@ function App() {
                     <If when={shown()?.running === "grpc"}>
                       <View style={{ flexDirection: "row", gap: SPACE.item }}>
                         <Btn label={pendingText(shown()!, "use") ?? "切换到这台"} kind="primary" disabled={!!pending()} onPress={() => { const a = shown(); if (a) switchTo(a); }} />
-                        <Btn label={beingStopped(shown()!) ? "停止中…" : "停止设备…"} disabled={!!stopping() || !!pending()} onPress={() => { const a = shown(); if (a) openStop(a); }} />
+                        <Btn label={beingStopped(shown()!) ? "停止中…" : "停止设备…"} disabled={!stoppable(shown()) || !!pending()} onPress={() => { const a = shown(); if (a) openStop(a); }} />
                       </View>
                     </If>
                     <If when={shown() && canStart(shown()!)}>
@@ -2203,15 +2194,16 @@ function App() {
               <IconButton variant="toolbar" icon="recents" label="最近" tip="点过屏幕后按 ⌘O" disabled={!!inputWhy()} why={inputWhy()} onPress={() => key("AppSwitch")} />
             </Toolbar>
             {/* 一直占着一行，焦点进出时画面不跳 */}
-            <Text role="summary" style={{ ...TYPE.caption, color: keyboardOn() ? token("foreground") : token("muted-foreground"), textAlign: "center", minHeight: TYPE.caption.lineHeight }}>
-              {keyboardOn() ? "已接管键盘 · Shift+Tab 离开" : shownIsLive() && caps()?.input !== false ? "点屏幕用键盘输入 · 也可以把 APK 或文件拖到画面上" : ""}
+            <Text role="summary" style={{ ...TYPE.caption, color: keyboardShown() ? token("foreground") : token("muted-foreground"), textAlign: "center", minHeight: TYPE.caption.lineHeight }}>
+              {keyboardShown() ? "已接管键盘 · Shift+Tab 离开" : shownIsLive() && caps()?.input !== false ? "点屏幕用键盘输入 · 也可以把 APK 或文件拖到画面上" : ""}
             </Text>
           </View>
-          {/* 画面上方的提示同一时间只显示一条（ui/banners.ts 的先后），盖住的地方少；后面排着几条写在卡片里 */}
-          <View style={{ position: "absolute", top: SPACE.item, left: 0, right: 0, alignItems: "center", pointerEvents: "box-none" }}>
+          {/* 画面上方的提示同一时间只显示一条（ui/banners.ts 的先后），盖住的地方少；后面排着几条写在能关掉的那条里。
+              传文件的进度单独一张卡片放在下面，一直看得见 */}
+          <View style={{ position: "absolute", top: SPACE.item, left: 0, right: 0, alignItems: "center", gap: SPACE.item, pointerEvents: "box-none" }}>
             <If when={banner().shown}>
               {(k) => (
-                <View style={{ gap: SPACE.item, backgroundColor: token("overlay"), borderRadius: token("radius-lg"), padding: SPACE.inset, borderWidth: 1, borderColor: bannerBorder(k()), width: k() === "uploads" ? 420 : undefined, maxWidth: "92%" }}>
+                <View style={{ ...bannerCard(), borderColor: bannerBorder(k()) }}>
                   <If when={k() === "gateway" ? gatewayShown() : null}>
                     {(b) => (
                       <View role="summary" style={{ gap: SPACE.item }}>
@@ -2240,46 +2232,48 @@ function App() {
                       <Btn label="关闭" onPress={() => adbStuck.set(false)} />
                     </View>
                   </If>
-                  <If when={k() === "uploads"}>
-                    {/* 进度一直在变，不放在实时播报区里；读屏只听开始和传完（summary） */}
-                    <View accessibilityLabel="发送文件" style={{ gap: SPACE.item }}>
-                      <Text role="summary" style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>
-                        {uploads().every(uploadEnded) ? "发送完了" : `正在发送 ${uploads().filter((u) => !uploadEnded(u)).length} 个文件…`}
-                      </Text>
-                      <Each of={uploads()} key={(u) => u.id}>
-                        {(u) => (
-                          <View style={{ gap: SPACE.hair }}>
-                            <Text style={{ color: token("foreground"), ...TYPE.body, numberOfLines: 1 }}>{u().name}</Text>
-                            <Text style={{ color: u().state === "failed" ? token("destructive") : u().state === "done" ? token("success") : token("muted-foreground"), ...TYPE.caption, userSelect: "text" }}>
-                              {uploadText(u())}
-                            </Text>
-                          </View>
-                        )}
-                      </Each>
-                      <If when={uploads().every(uploadEnded)}>
-                        <View style={{ flexDirection: "row" }}>
-                          <Btn label="关闭" onPress={() => host.call("emu.uploadsClear", {})} />
-                        </View>
-                      </If>
-                    </View>
-                  </If>
                   <If when={k() === "error" || k() === "info" ? notice() : null}>
                     {(n) => (
                       <View role={n().error ? "alert" : "summary"} style={{ gap: SPACE.item }}>
                         <Text style={{ color: n().error ? token("destructive") : token("foreground"), ...TYPE.body, userSelect: noticeTimeoutMs(n()) === null ? "text" : undefined }}>{n().text}</Text>
                         <If when={noticeTimeoutMs(n()) === null}>
                           <View style={{ flexDirection: "row" }}>
-                            <Btn label="关闭" onPress={() => notice.set(null)} />
+                            <Btn label="关闭" onPress={() => notices.set(dropNotice(notices(), n()))} />
                           </View>
                         </If>
                       </View>
                     )}
                   </If>
-                  <If when={banner().waiting > 0}>
+                  <If when={waitingShown(banner(), gatewayManual())}>
                     <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{`关掉这条后还有 ${banner().waiting} 条提示`}</Text>
                   </If>
                 </View>
               )}
+            </If>
+            <If when={uploads().length > 0}>
+              <View style={{ ...bannerCard(), borderColor: token("border"), width: 420 }}>
+                {/* 进度一直在变，不放在实时播报区里；读屏只听开始和传完（summary） */}
+                <View accessibilityLabel="发送文件" style={{ gap: SPACE.item }}>
+                  <Text role="summary" style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>
+                    {uploads().every(uploadEnded) ? "发送完了" : `正在发送 ${uploads().filter((u) => !uploadEnded(u)).length} 个文件…`}
+                  </Text>
+                  <Each of={uploads()} key={(u) => u.id}>
+                    {(u) => (
+                      <View style={{ gap: SPACE.hair }}>
+                        <Text style={{ color: token("foreground"), ...TYPE.body, numberOfLines: 1 }}>{noBreak(u().name)}</Text>
+                        <Text style={{ color: u().state === "failed" ? token("destructive") : u().state === "done" ? token("success") : token("muted-foreground"), ...TYPE.caption, userSelect: "text" }}>
+                          {uploadText(u())}
+                        </Text>
+                      </View>
+                    )}
+                  </Each>
+                  <If when={uploads().every(uploadEnded)}>
+                    <View style={{ flexDirection: "row" }}>
+                      <Btn label="关闭" onPress={() => host.call("emu.uploadsClear", {})} />
+                    </View>
+                  </If>
+                </View>
+              </View>
             </If>
           </View>
         </View>
@@ -2384,7 +2378,7 @@ function App() {
         </If>
       </AppDialog>
       <AppDialog open={license() !== null} size="lg">
-        <DialogContent title={`同意许可证 ${license()?.name ?? ""} 后继续安装`} scroll={false} alert
+        <DialogContent title={`同意许可证 ${license()?.name ?? ""} 后继续安装`} scroll={false}
           description="下面是 Google 的 SDK 仓库清单里这份许可证的全文。同意后会记在 SDK 的 licenses 目录里，Android Studio 也认；不同意的话，这一项不会安装。"
           footer={<>
             {/* 不同意没有损失（只是这一项不装），要提交的是同意，所以同意是主操作 */}
@@ -2416,7 +2410,7 @@ function App() {
       <AppDialog open={deleteTarget() !== null} size="sm" onClose={() => { if (!deleting()) deleteTarget.set(null); }}>
         <If when={deleteTarget()}>
           {(a) => (
-            <DialogContent title={`删除设备 ${avdLabel(a())}？`} alert footer={<>
+            <DialogContent title={`删除设备 ${avdLabel(a())}？`} footer={<>
               <Btn label="取消" disabled={deleting()} onPress={() => deleteTarget.set(null)} />
               <Btn label={deleting() ? "删除中…" : "删除"} kind="danger" disabled={deleting()} onPress={confirmDelete} />
             </>}>
@@ -2429,21 +2423,21 @@ function App() {
           )}
         </If>
       </AppDialog>
-      <AppDialog open={stopAsk() !== null} size="sm" onClose={() => { if (!stopping()) stopAsk.set(null); }}>
-        <If when={stopAsk()}>
+      <AppDialog open={stop().ask !== null} size="sm" onClose={() => stopEvent({ kind: "cancel" })}>
+        <If when={stop().ask}>
           {(a) => (
-            <DialogContent title={`停止设备 ${avdLabel(a())}？`} alert footer={<>
-              <Btn label="取消" disabled={beingStopped(a())} onPress={() => stopAsk.set(null)} />
-              <Btn label={beingStopped(a()) ? "停止中…" : "停止"} kind="danger" disabled={beingStopped(a())} onPress={confirmStop} />
+            <DialogContent title={`停止设备 ${a().label}？`} footer={<>
+              <Btn label="取消" disabled={isStopping(stop(), a().name)} onPress={() => stopEvent({ kind: "cancel" })} />
+              <Btn label={isStopping(stop(), a().name) ? "停止中…" : "停止"} kind="danger" disabled={isStopping(stop(), a().name)} onPress={() => stopEvent({ kind: "confirm" })} />
             </>}>
               <Text style={{ color: token("foreground"), ...TYPE.body }}>正在运行的 App 和未保存的内容会丢失。设备的数据还在，之后可以再启动。</Text>
-              <If when={stopError()}>{(e) => <Text role="alert" style={{ color: token("destructive"), ...TYPE.caption, userSelect: "text" }}>{e()}</Text>}</If>
+              <If when={stop().error}>{(e) => <Text role="alert" style={{ color: token("destructive"), ...TYPE.caption, userSelect: "text" }}>{e()}</Text>}</If>
             </DialogContent>
           )}
         </If>
       </AppDialog>
       <AppDialog open={rebootAsk()} size="sm" onClose={() => rebootAsk.set(false)}>
-        <DialogContent title={`${rebootLabel(kind() === "phone")}？`} alert footer={<>
+        <DialogContent title={`${rebootLabel(kind() === "phone")}？`} footer={<>
           <Btn label="取消" onPress={() => rebootAsk.set(false)} />
           <Btn label="重启" kind="danger" onPress={reboot} />
         </>}>

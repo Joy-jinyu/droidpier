@@ -16,7 +16,7 @@ import { parseZoom, ZOOM_STEPS } from "../../shared/zoom.ts";
 import { readPref, writePref } from "./prefs.ts";
 import { parseTheme, THEMES } from "../../shared/theme.ts";
 import { registerTools } from "./webmcp.ts";
-import { gatewayBanner, shouldRequestUpdate, timeoutText, type GatewayBanner, type GatewayInfo, type UpdateReport } from "./gateway-update.ts";
+import { gatewayBanner, gatewayBelow, shouldRequestUpdate, timeoutText, tooOldText, type GatewayBanner, type GatewayInfo, type UpdateReport } from "./gateway-update.ts";
 import type { LogFilter } from "../../shared/logcat.ts";
 import { GATEWAY_LEVEL, INSTALL_IDS, installCmd, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type HighlightBox, type InstallProgress, type DeviceCaps, type Licence, type Rotation } from "../../shared/protocol.ts";
 
@@ -258,6 +258,8 @@ export async function createHost(player: Player) {
       const prev = state;
       state = s;
       if (s !== "connected") setInspect(false);
+      // 设备没在画面上（停了、重启中、断开）：键盘不再交给画面，松开按着的键，页面收起焦点环
+      if (s !== "connected" && document.activeElement === ime) ime.blur();
       // 没连上本机网关时页面给出安装命令
       upgrade = s === "no-gateway" ? INSTALL : null;
       paint();
@@ -375,7 +377,8 @@ export async function createHost(player: Player) {
       catalog = c;
       player.hostEvent("emu.catalog", { catalog, rev: ++rev });
     },
-    onError: (message) => player.hostEvent("emu.notice", { text: message, error: true }),
+    // gateway：网关报的错（页面据此放开「启动中…」「切换中…」：网关不认这次操作时只回一条 error）
+    onError: (message) => player.hostEvent("emu.notice", { text: message, error: true, gateway: true }),
     onAdbStuck: (message) => player.hostEvent("emu.adbStuck", { message }),
     onReboot: (result, error) => player.hostEvent("emu.notice", result === "done"
       ? { text: kind === "phone" ? "手机已重启。设了锁屏密码的话，在画面上解锁" : "模拟器已重启" }
@@ -778,6 +781,32 @@ export async function createHost(player: Player) {
 
   const sent = (m: ClientMsg) => ({ ok: conn.send(m) });
   const ctl = (m: ClientMsg) => ({ ok: conn.control(m) });
+  // 旧网关（不认 stopAvd）只能用 stop 停画面上这台，它立刻回、停完不推列表：这里隔一秒要一次列表，看到它停了才算停完。
+  // 上限 STOP_OLD_MS（估的，和网关 stopAvd 等的 10 秒加上读列表的时间差不多）；列表 LIST_WAIT_MS 没回就当这次没看到
+  const STOP_OLD_MS = 15_000;
+  const LIST_WAIT_MS = 3000;
+  // "down"：和网关断了，要列表的请求发不出去；null：发出去了但 LIST_WAIT_MS 内没回
+  const nextAvds = () => new Promise<AvdInfo[] | null | "down">((res) => {
+    if (!refreshAvds()) return res("down");
+    const t = setTimeout(() => res(null), LIST_WAIT_MS);
+    avdWaiters.push((l) => {
+      clearTimeout(t);
+      res(l);
+    });
+  });
+  const stopOld = async (name: string): Promise<{ ok: boolean; error?: string }> => {
+    const onScreen = state === "connected" && avds?.some((a) => a.name === name && a.running === "grpc" && a.serial === serial);
+    if (!onScreen) return { ok: false, error: tooOldText("停止没连在画面上的设备", INSTALL) };
+    if (!conn.control({ t: "stop" })) return { ok: false, error: "没有连上网关，操作没有发出。等网关重新连上后再试。" };
+    const end = Date.now() + STOP_OLD_MS;
+    while (Date.now() < end) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const list = await nextAvds();
+      if (list === "down") return { ok: false, error: "和网关断开了，不知道设备停了没有。等网关重新连上后看设备列表。" };
+      if (list && !list.some((a) => a.name === name && a.running !== "no")) return { ok: true };
+    }
+    return { ok: false, error: `等了 ${STOP_OLD_MS / 1000} 秒它还在运行，稍后看设备列表` };
+  };
   const needName = (fn: string, args: unknown) => {
     const name = (args as { name?: unknown } | undefined)?.name;
     if (typeof name !== "string") throw new Error(`${fn} 需要 name`);
@@ -856,7 +885,7 @@ export async function createHost(player: Player) {
         if (typeof displayName !== "string") throw new Error("emu.renameAvd 需要 displayName");
         return conn.request({ t: "renameAvd", name: needName(name, args), displayName }).then(
           (r) => ({ ok: r.ok, error: r.error }),
-          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_EDIT_LEVEL, "改名", e.message) : e.message }),
+          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_EDIT_LEVEL, "改名", e.message, INSTALL) : e.message }),
         );
       }
       // 同上；删得慢（大目录、avdmanager 起 Java）时页面先超时，网关删完照样广播新列表
@@ -865,14 +894,16 @@ export async function createHost(player: Player) {
         const stop = (args as { stop?: unknown } | undefined)?.stop === true;
         return conn.request({ t: "deleteAvd", name: needName(name, args), ...(stop ? { stop: true as const } : {}) }).then(
           (r) => ({ ok: r.ok, error: r.error }),
-          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_EDIT_LEVEL, "删除设备", `${e.message}：可能还在删，稍后看设备列表`) : e.message }),
+          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_EDIT_LEVEL, "删除设备", `${e.message}：可能还在删，稍后看设备列表`, INSTALL) : e.message }),
         );
       }
-      // 网关等设备真的停了才回；旧网关不认这条消息，等满超时后同样走这里
+      // 网关等设备真的停了才回（画面上这台、开机中、重启中的都行）。已知是旧网关（级别 < 2）时不发这条，改用 stopOld
       if (name === "emu.stopAvd") {
-        return conn.request({ t: "stopAvd", name: needName(name, args) }).then(
+        const target = needName(name, args);
+        if (gateway !== undefined && gatewayBelow(gateway, AVD_STOP_LEVEL)) return stopOld(target);
+        return conn.request({ t: "stopAvd", name: target }).then(
           (r) => ({ ok: r.ok, error: r.error }),
-          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_STOP_LEVEL, "停止设备", `${e.message}：可能还在停，稍后看设备列表`) : e.message }),
+          (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_STOP_LEVEL, "停止设备", `${e.message}：可能还在停，稍后看设备列表`, INSTALL) : e.message }),
         );
       }
       if (name === "emu.status") {
@@ -896,6 +927,13 @@ export async function createHost(player: Player) {
         const why = dropBlocked();
         if (why) return { ok: false, error: why };
         picker.click();
+        return { ok: true };
+      }
+      // 页面的菜单打开时调用：键盘焦点在画面（隐藏的 textarea）或 DevTools 的 iframe 上时让出来，
+      // 接着按的 Escape 才到得了页面、关得掉菜单（从父页面 blur iframe 元素就能把焦点从里面拿出来，跨源的也行，2026-11-18 实测）
+      if (name === "emu.releaseFocus") {
+        const f = document.activeElement;
+        if (f === ime || f === devtools) (f as HTMLElement).blur();
         return { ok: true };
       }
       if (name === "emu.uploadsClear") {

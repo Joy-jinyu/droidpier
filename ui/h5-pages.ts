@@ -29,3 +29,11 @@ export function pickPage<T extends ListedPage>(list: T[]): T | undefined {
 export function activePage<T extends ListedPage>(list: T[]): T | undefined {
   return list.find((p) => p.visible && !isPreload(p));
 }
+
+// 零宽字符和普通空白：有的 H5 把 document.title 设成零宽空格来隐藏原生标题栏，trim() 去不掉它
+const INVISIBLE = /[\s\u200b-\u200d\u2060\ufeff]/g;
+
+/** 页面标题里有没有看得见的字；没有时界面上改用网址。 */
+export function visibleTitle(title: string): string {
+  return title.replace(INVISIBLE, "") === "" ? "" : title.trim();
+}

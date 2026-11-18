@@ -63,6 +63,14 @@ test("协议：catalog 和 createAvd", () => {
   assert.equal(parseClientMsg(JSON.stringify({ t: "createAvd", name: 1, device: "pixel_5", image: "x" })), null);
 });
 
+test("设备 ID 的原因不带主语：网关加上「设备名不对：」前缀后不会写成「设备名不对：设备 ID …」", () => {
+  for (const bad of ["Pixel 5", "-n"]) {
+    const why = avdNameError(bad, [])!;
+    assert.doesNotMatch(why, /^设备/, why);
+    assert.doesNotMatch(why, /设备 ID|设备名/, why);
+  }
+});
+
 test("displayNameError：空名字、控制字符、太长都给原因，正常的中文名能用", () => {
   assert.equal(displayNameError("测试机 (Pixel 7)"), null);
   assert.match(displayNameError("   ")!, /请输入显示名称/);

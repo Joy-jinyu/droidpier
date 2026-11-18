@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { fromDevice, toDevice, toVideo, keyToMsg, shortcutToMsg, textToMsgs, pasteToMsgs, inputToMsgs, wheelToSwipe } from "../input-map.ts";
+import { fromDevice, toDevice, toVideo, keyToMsg, leavesScreen, shortcutToMsg, textToMsgs, pasteToMsgs, inputToMsgs, wheelToSwipe } from "../input-map.ts";
 
 describe("toDevice", () => {
   it("正常换算", () => {
@@ -89,6 +89,31 @@ describe("keyToMsg", () => {
 
   it("isComposing → null", () => {
     assert.equal(keyToMsg({ key: "Process", ...base, isComposing: true }, "keydown"), null);
+  });
+});
+
+describe("离开画面的键", () => {
+  it("只按 Tab 仍然发给 Android（按下和松开都发）", () => {
+    assert.equal(leavesScreen({ key: "Tab", ...base, shiftKey: false }), false);
+    assert.deepEqual(keyToMsg({ key: "Tab", ...base, shiftKey: false }, "keydown"), { t: "key", key: "Tab", eventType: "keydown" });
+    assert.deepEqual(keyToMsg({ key: "Tab", ...base, shiftKey: false }, "keyup"), { t: "key", key: "Tab", eventType: "keyup" });
+  });
+
+  it("Shift+Tab 是离开画面的键，按下和松开都不发给 Android", () => {
+    assert.equal(leavesScreen({ key: "Tab", ...base, shiftKey: true }), true);
+    assert.equal(keyToMsg({ key: "Tab", ...base, shiftKey: true }, "keydown"), null);
+    assert.equal(keyToMsg({ key: "Tab", ...base, shiftKey: true }, "keyup"), null);
+  });
+
+  it("Escape 和 Shift+Escape 仍然发给 Android", () => {
+    assert.deepEqual(keyToMsg({ key: "Escape", ...base, shiftKey: true }, "keydown"), { t: "key", key: "Escape", eventType: "keydown" });
+    assert.equal(leavesScreen({ key: "Escape", ...base, shiftKey: true }), false);
+  });
+
+  it("带 Ctrl、Alt、Cmd 的 Shift+Tab 不算（Ctrl+Shift+Tab 是浏览器切标签页）", () => {
+    assert.equal(leavesScreen({ key: "Tab", ...base, shiftKey: true, ctrlKey: true }), false);
+    assert.equal(leavesScreen({ key: "Tab", ...base, shiftKey: true, altKey: true }), false);
+    assert.equal(leavesScreen({ key: "Tab", ...base, shiftKey: true, metaKey: true }), false);
   });
 });
 

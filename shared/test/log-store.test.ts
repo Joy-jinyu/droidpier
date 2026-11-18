@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyBatch, levelColor, MAX_LINES, type LogRow } from "../../ui/log-store.ts";
+import { applyBatch, levelColor, logEmptyText, MAX_LINES, type LogRow } from "../../ui/log-store.ts";
 import type { LogLine } from "../logcat.ts";
 
 const line = (n: number): LogLine => ({ n, time: "11-16 18:00:52.531", pid: 1, tid: 1, level: "I", tag: "T", msg: `m${n}` });
@@ -31,4 +31,20 @@ test("applyBatch：dropped 时先插一行「省略了 N 行」，key 不和网�
 
 test("levelColor：W 是 warn，E 和 F 是 danger，V 和 D 是 muted，I 是 text", () => {
   assert.deepEqual((["V", "D", "I", "W", "E", "F"] as const).map(levelColor), ["muted", "muted", "text", "warn", "danger", "danger"]);
+});
+
+test("logEmptyText：断开、暂停、被过滤、真的没有，四种说法不一样", () => {
+  const texts = new Set([
+    logEmptyText({ live: false, paused: false, filtered: true }),
+    logEmptyText({ live: true, paused: true, filtered: true }),
+    logEmptyText({ live: true, paused: false, filtered: true }),
+    logEmptyText({ live: true, paused: false, filtered: false }),
+  ]);
+  assert.equal(texts.size, 4);
+  assert.equal(logEmptyText({ live: true, paused: false, filtered: true }), "没有符合条件的日志。");
+  assert.equal(logEmptyText({ live: true, paused: false, filtered: false }), "还没有日志");
+});
+
+test("logEmptyText：断开时不管暂停和过滤都先说断开", () => {
+  assert.match(logEmptyText({ live: false, paused: true, filtered: false }), /设备已断开/);
 });

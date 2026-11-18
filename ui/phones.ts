@@ -15,7 +15,7 @@ const STATUS: Record<Exclude<PhoneInfo["state"], "device">, string> = {
 
 /** 行副标题：连接状态和用户该做什么；current 表示它就是主区正在显示的设备。 */
 export function phoneStatus(p: PhoneInfo, current: boolean): string {
-  if (p.state === "device") return current ? "当前画面" : "可用，点一下切换";
+  if (p.state === "device") return current ? "当前画面" : "可用";
   return STATUS[p.state];
 }
 

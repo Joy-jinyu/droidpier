@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fitMiddle, middleEllipsis } from "../../ui/ellipsis.ts";
+import { fitMiddle, middleEllipsis, noBreak } from "../../ui/ellipsis.ts";
 
 test("不超长时原样返回", () => {
   assert.equal(middleEllipsis("localhost:5173/a", 20), "localhost:5173/a");
@@ -38,4 +38,9 @@ test("fitMiddle 放不下时中间省略，开头和结尾都留着", () => {
 test("fitMiddle 中文按一个字号宽估，比同样字数的英文先省略", () => {
   assert.equal(fitMiddle("abcdefghij", 130, 18), "abcdefghij");
   assert.ok(fitMiddle("一二三四五六七八九十", 130, 18).includes("…"));
+});
+
+test("noBreak：空格都换成不断行空格，别的字不动", () => {
+  assert.equal(noBreak("Android 16 · 1080×2400"), "Android\u00a016\u00a0·\u00a01080×2400");
+  assert.equal(noBreak("API36"), "API36");
 });

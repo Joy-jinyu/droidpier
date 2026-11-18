@@ -22,3 +22,11 @@ export function fitMiddle(text: string, width: number, fontSize: number): string
   if (width <= 0 || em * fontSize <= width) return text;
   return middleEllipsis(text, Math.max(3, Math.floor((chars.length * width) / (em * fontSize))));
 }
+
+/**
+ * 空格换成不断行的空格。nsh 的单行文字放不下时在词边界断开再加「…」，一长段规格会只剩第一个词、后面空着
+ * （「Android 16 ·…」，2026-11-17 在 nsh 0.4.0 网页端实测）；换成不断行空格后按字截断，放得下多少显示多少。
+ */
+export function noBreak(text: string): string {
+  return text.replace(/ /g, " ");
+}

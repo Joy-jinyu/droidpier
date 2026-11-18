@@ -20,7 +20,7 @@ test("默认设备名：机型名的空格换成下划线，加 _API_<级别>", 
 
 test("设备名校验：只允许 [A-Za-z0-9._-]，不能空，不能和已有的重名（不分大小写）", () => {
   assert.equal(avdNameError("Pixel_5_API_34", ["emu_web_default"]), null);
-  assert.match(avdNameError("", [])!, /输入设备名/);
+  assert.match(avdNameError("", [])!, /请输入设备 ID/);
   assert.match(avdNameError("Pixel 5", [])!, /只能用/);
   assert.match(avdNameError("像素", [])!, /只能用/);
   assert.match(avdNameError("Pixel/5", [])!, /只能用/);
@@ -65,7 +65,7 @@ test("协议：catalog 和 createAvd", () => {
 
 test("displayNameError：空名字、控制字符、太长都给原因，正常的中文名能用", () => {
   assert.equal(displayNameError("测试机 (Pixel 7)"), null);
-  assert.match(displayNameError("   ")!, /请输入名称/);
+  assert.match(displayNameError("   ")!, /请输入显示名称/);
   assert.match(displayNameError("a\nb")!, /控制字符/);
   assert.match(displayNameError("x".repeat(DISPLAY_NAME_MAX + 1))!, /最多/);
   assert.equal(displayNameError("测".repeat(DISPLAY_NAME_MAX)), null);

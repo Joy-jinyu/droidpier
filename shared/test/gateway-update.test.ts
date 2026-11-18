@@ -40,8 +40,8 @@ test("自动更新没成（下载站还没新版本、失败）时改成给安�
 });
 
 test("timeoutText：网关级别不够时说太旧不支持；够或还不知道时用原来的说明", () => {
-  assert.equal(timeoutText(null, 1, "删除设备", "slow"), "网关版本太旧，不支持删除设备，请更新 droidpier");
-  assert.equal(timeoutText(svc(0), 1, "删除设备", "slow"), "网关版本太旧，不支持删除设备，请更新 droidpier");
+  assert.equal(timeoutText(null, 1, "删除设备", "slow"), "网关版本太旧，不支持删除设备，请运行安装命令更新网关");
+  assert.equal(timeoutText(svc(0), 1, "删除设备", "slow"), "网关版本太旧，不支持删除设备，请运行安装命令更新网关");
   assert.equal(timeoutText(svc(1), 1, "删除设备", "slow"), "slow");
   assert.equal(timeoutText(undefined, 1, "删除设备", "slow"), "slow");
 });

@@ -214,4 +214,12 @@ test("parseClientMsg：logcatRead 校验 rid、filter、limit", () => {
   assert.equal(parseClientMsg(JSON.stringify({ t: "logcatRead", rid: 1, filter: { pkg: "a b", level: "E", text: "" }, limit: 5 })), null);
 });
 
-test("GATEWAY_LEVEL 是 4（WebMCP 读日志）", () => assert.equal(GATEWAY_LEVEL, 4));
+test("GATEWAY_LEVEL 是 5（MuMu 列表和开关机）", () => assert.equal(GATEWAY_LEVEL, 5));
+
+test("parseClientMsg 解析 mumuOpen / mumuClose；index 不是非负整数时返回 null", () => {
+  assert.deepEqual(parseClientMsg('{"t":"mumuOpen","index":0,"extra":1}'), { t: "mumuOpen", index: 0 });
+  assert.deepEqual(parseClientMsg('{"t":"mumuClose","index":2}'), { t: "mumuClose", index: 2 });
+  for (const bad of ['{"t":"mumuOpen"}', '{"t":"mumuOpen","index":-1}', '{"t":"mumuOpen","index":1.5}', '{"t":"mumuClose","index":"0"}', '{"t":"mumuOpen","index":"all"}']) {
+    assert.equal(parseClientMsg(bad), null, bad);
+  }
+});

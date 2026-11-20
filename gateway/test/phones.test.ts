@@ -165,3 +165,11 @@ test("createPhones：adb 一直起不来时只记第一次，收到设备表后�
   await tick();
   assert.equal(logs.filter((l) => l.includes("track-devices")).length, 2);
 });
+
+test("parseDevices：MuMu 的 adb 地址标成 emulator: mumu，别的网络设备照旧算真机", () => {
+  const list = parseDevices("127.0.0.1:16384\tdevice product:REA-AN00 model:REA_AN00 device:REA-AN00\n192.168.1.5:5555\tdevice model:Pixel_7\n");
+  assert.deepEqual(list, [
+    { id: "127.0.0.1:16384", state: "device", trackModel: "REA-AN00", emulator: "mumu" },
+    { id: "192.168.1.5:5555", state: "device", trackModel: "Pixel-7" },
+  ]);
+});

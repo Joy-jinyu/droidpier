@@ -16,6 +16,7 @@ Droidpier replaces the Android Studio emulator window with a page in Chrome or E
 - Device list: start and stop AVDs, rename and delete them, create a device by picking a model and Android version
 - H5 debugging: inspect a WebView page in an embedded DevTools, see its network requests, point it at a local dev server
 - Phones: an Android phone plugged in over USB shows in the device list next to the AVDs; switch to it for the same screen, input, clipboard, H5 debugging and log panel (rotation follows the phone, and there is no stop key)
+- MuMu emulator: MuMu's devices are listed in their own group, where you can start one or shut it down; once one is running the gateway connects to it over adb and you drive it the same way as a phone
 - Log panel: the device's logcat beside the screen, filtered by app, level and text, with pause, clear and follow
 - AI assistants in the browser can drive the device through WebMCP tools: screenshots, taps, typing, keys, H5 pages, installing APKs and reading logcat
 - First-run guide in the page: checks the Android SDK pieces and installs what is missing, after you confirm and accept each licence yourself

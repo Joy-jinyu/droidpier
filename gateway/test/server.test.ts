@@ -2954,3 +2954,69 @@ test("真机重启：adb reboot 报错时手机多半已经在重启，照样等
   assert.deepEqual(c.msgs.find((m) => m.t === "reboot"), { t: "reboot", result: "done" });
   assert.deepEqual(uses, ["R5CR10WN52H"]);
 });
+
+// ─────────────── MuMu 模拟器 ───────────────
+
+import type { MumuInfo } from "../../shared/protocol.ts";
+
+const MUMU: MumuInfo = { index: 0, name: "我的安卓", state: "stopped" };
+
+function fakeMumu(initial: MumuInfo[] | null, opts: { fail?: string } = {}) {
+  const cbs: Array<(l: MumuInfo[]) => void> = [];
+  let list = initial;
+  const calls: string[] = [];
+  return {
+    calls,
+    ops: {
+      list: () => list,
+      onChange: (cb: (l: MumuInfo[]) => void) => void cbs.push(cb),
+      open: async (i: number) => { calls.push(`open ${i}`); if (opts.fail) throw new Error(opts.fail); },
+      close: async (i: number) => { calls.push(`close ${i}`); if (opts.fail) throw new Error(opts.fail); },
+    },
+    set(l: MumuInfo[]) { list = l; for (const cb of cbs) cb(l); },
+  };
+}
+
+test("装了 MuMu 时 hello 后收到一次 MuMu 列表，变化时广播", async (t) => {
+  const m = fakeMumu([MUMU]);
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { mumu: m.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "mumu"));
+  assert.deepEqual(c.msgs.find((x) => x.t === "mumu"), { t: "mumu", list: [MUMU] });
+  m.set([{ ...MUMU, state: "running", adbId: "127.0.0.1:16384" }]);
+  await until(() => c.msgs.filter((x) => x.t === "mumu").length === 2);
+  assert.deepEqual(c.msgs.filter((x) => x.t === "mumu").at(-1), { t: "mumu", list: [{ ...MUMU, state: "running", adbId: "127.0.0.1:16384" }] });
+});
+
+test("没装 MuMu（列表是 null）时不发 MuMu 列表", async (t) => {
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { mumu: fakeMumu(null).ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "ready"));
+  await sleep(50);
+  assert.ok(!c.msgs.some((x) => x.t === "mumu"));
+});
+
+test("mumuOpen / mumuClose 交给 MuMu 模块执行", async (t) => {
+  const m = fakeMumu([MUMU]);
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { mumu: m.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "mumu"));
+  c.ws.send(JSON.stringify({ t: "mumuOpen", index: 0 }));
+  c.ws.send(JSON.stringify({ t: "mumuClose", index: 0 }));
+  await until(() => m.calls.length === 2);
+  assert.deepEqual(m.calls, ["open 0", "close 0"]);
+});
+
+test("MuMu 开机失败：把原因发回发起的页面", async (t) => {
+  const m = fakeMumu([MUMU], { fail: "license expired" });
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { mumu: m.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "mumu"));
+  c.ws.send(JSON.stringify({ t: "mumuOpen", index: 0 }));
+  await until(() => c.msgs.some((x) => x.t === "error"));
+  assert.deepEqual(c.msgs.find((x) => x.t === "error"), { t: "error", message: "MuMu 开机失败：license expired" });
+});

@@ -41,7 +41,7 @@ import {
   type FrameHeader,
   type InstallProgress,
   type Licence,
-  type PhoneInfo,
+  type MumuInfo, type PhoneInfo,
   type ServerMsg,
   type UpdateState,
   type UploadState,
@@ -165,6 +165,8 @@ export async function startServer(opts: {
   avd?: AvdOps;
   /** 真机列表（gateway/src/phones.ts）；测试里不需要真机时不传。 */
   phones?: { list(): PhoneInfo[]; onChange(cb: (list: PhoneInfo[]) => void): void };
+  /** MuMu 模拟器（gateway/src/mumu.ts）：list() 为 null 表示没装 MuMu，不发列表。 */
+  mumu?: { list(): MumuInfo[] | null; onChange(cb: (list: MumuInfo[]) => void): void; open(index: number): Promise<void>; close(index: number): Promise<void> };
   debug?: DebugDeps;
   setup?: SetupOps;
   /** WebView 调试 socket → 本机转发端口；不传时用当前设备的 debug.webviews，都没有时 /devtools/ 连接一律 4404。 */
@@ -418,6 +420,7 @@ export async function startServer(opts: {
     broadcast({ t: "phones", list });
     reconnectPinned();
   });
+  opts.mumu?.onChange((list) => broadcast({ t: "mumu", list }));
   const booting = () => [...jobs].some((j) => j.progress === "spawning" || j.progress === "booting");
   const sendBoot = (j: StartJob) => broadcast({ t: "boot", name: j.name, progress: j.progress, ...(j.error ? { error: j.error } : {}) });
   const switchTo = (s: EmulatorSession) => {
@@ -1104,6 +1107,8 @@ export async function startServer(opts: {
           if (license !== null) send(ws, { t: "licenses", licence: license });
         }
         if (opts.phones) send(ws, { t: "phones", list: opts.phones.list() });
+        const mumuList = opts.mumu?.list();
+        if (mumuList) send(ws, { t: "mumu", list: mumuList });
         if (pinned) {
           // 掉线期间新开的页面不能被 getSession() 接到模拟器上
           const s = liveSession(pinned);
@@ -1312,6 +1317,19 @@ export async function startServer(opts: {
               (e: Error) => send(ws, { t: "logcatRead", rid: m.rid, lines: [], error: e instanceof AdbUnresponsive && s.kind === "phone" ? PHONE_ADB_UNRESPONSIVE : e.message }),
             );
           }
+          break;
+        }
+        case "mumuOpen":
+        case "mumuClose": {
+          if (!opts.mumu) break;
+          const verb = m.t === "mumuOpen" ? "开机" : "关机";
+          await (m.t === "mumuOpen" ? opts.mumu.open(m.index) : opts.mumu.close(m.index)).then(
+            () => log(`MuMu ${m.index} 已${verb === "开机" ? "开始开机" : "开始关机"}`),
+            (e: Error) => {
+              log(`MuMu ${m.index} ${verb}失败：${e.message}`);
+              send(ws, { t: "error", message: `MuMu ${verb}失败：${e.message}` });
+            },
+          );
           break;
         }
         case "stopAvd": {

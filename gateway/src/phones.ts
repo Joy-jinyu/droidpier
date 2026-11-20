@@ -1,8 +1,9 @@
 // 真机列表：adb track-devices -l 一有变化就输出整张设备表，这里解析出真机（排除模拟器），并给可用的手机补上厂商、型号和版本
 import type { PhoneInfo } from "../../shared/protocol.ts";
 import type { AdbStream, AdbStreamHandlers } from "./adb.ts";
+import { isMumuAddr } from "./mumu.ts";
 
-type TrackedDevice = { id: string; state: PhoneInfo["state"]; trackModel?: string };
+type TrackedDevice = { id: string; state: PhoneInfo["state"]; trackModel?: string; emulator?: "mumu" };
 
 /** track-devices 的输出是一帧帧的：4 位 16 进制长度 + 设备表。不够一帧的部分原样留到下次。 */
 export function takeFrames(buf: string): { frames: string[]; rest: string } {
@@ -27,6 +28,7 @@ export function parseDevices(payload: string): TrackedDevice[] {
     // track 行里型号的 - 被换成了 _（SM-G9910 → SM_G9910）
     const model = rest.find((f) => f.startsWith("model:"))?.slice("model:".length);
     if (model) d.trackModel = model.replace(/_/g, "-");
+    if (isMumuAddr(id)) d.emulator = "mumu";
     out.push(d);
   }
   return out;
@@ -58,7 +60,7 @@ export function createPhones(deps: {
 
   const emit = () => {
     const next = tracked.map((d): PhoneInfo => {
-      const p: PhoneInfo = { id: d.id, state: d.state };
+      const p: PhoneInfo = { id: d.id, state: d.state, ...(d.emulator ? { emulator: d.emulator } : {}) };
       const got = props.get(d.id);
       if (got) Object.assign(p, got);
       else if (d.trackModel) p.model = d.trackModel;

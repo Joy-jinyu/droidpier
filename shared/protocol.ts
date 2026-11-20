@@ -12,8 +12,9 @@ export const PROTOCOL_VERSION = 1;
  * 2：stopAvd；deleteAvd 的 stop（运行中先停止再删）。
  * 3：日志面板（logcatOpen / logcatFilter / logcatClose / logcatApps）。
  * 4：logcatRead（WebMCP 读日志）。
+ * 5：mumu 列表、mumuOpen / mumuClose（从页面开关 MuMu 模拟器）。
  */
-export const GATEWAY_LEVEL = 4;
+export const GATEWAY_LEVEL = 5;
 
 /** logcatRead 一次最多要多少行（WebMCP 的 droidpier_read_logcat）。 */
 export const LOGCAT_READ_MAX = 1000;
@@ -168,7 +169,14 @@ export type AvdInfo = {
 /** scroll：能收原生滚动（scroll 消息）；没有时页面用滑动模拟滚轮。 */
 export type DeviceCaps = { rotate: boolean; reboot: boolean; stop: boolean; clipboard: boolean; input: boolean; scroll: boolean };
 
-export type PhoneInfo = { id: string; state: "device" | "unauthorized" | "offline"; manufacturer?: string; model?: string; android?: string };
+/** emulator：第三方模拟器，mumu 是 MuMu 模拟器（侧栏单独一组）；真机没有这个字段，旧网关也不发。 */
+/**
+ * 一台 MuMu 模拟器（mumutool info 读到的）。index 是 MuMu 的设备编号；adbId 只在运行中且知道 adb 端口时有，
+ * 是它在 adb 里的设备 id（127.0.0.1:<端口>），和 PhoneInfo.id 对得上。
+ */
+export type MumuInfo = { index: number; name: string; state: "stopped" | "starting" | "running" | "stopping"; adbId?: string };
+
+export type PhoneInfo = { id: string; state: "device" | "unauthorized" | "offline"; manufacturer?: string; model?: string; android?: string; emulator?: "mumu" };
 
 /**
  * 环境检查的一个缺失项。command 只有旧网关会带（sdkmanager / avdmanager 的手动命令），sizeMb 是大致下载量，
@@ -319,6 +327,10 @@ export type ClientMsg =
   | { t: "deleteAvd"; rid: number; name: string; stop?: true }
   /** 用户点了“停止运行”：关掉这台 AVD（开机中的也算），不管是不是当前设备；等它真的停了才回复，回复同 rid 的 stopAvd，成功后网关给所有页面发新的 avds。 */
   | { t: "stopAvd"; rid: number; name: string }
+  /** 用户点了 MuMu 设备的“启动”：网关执行 mumutool open，状态变化随 mumu 列表推给所有页面；失败回 error。 */
+  | { t: "mumuOpen"; index: number }
+  /** 用户确认关机：网关执行 mumutool close，同上。 */
+  | { t: "mumuClose"; index: number }
   /** 打开日志面板：网关按 filter 先回放最近的日志（logcat 的 reset），之后合批推新行。 */
   | { t: "logcatOpen"; filter: LogFilter }
   | { t: "logcatFilter"; filter: LogFilter }
@@ -353,6 +365,8 @@ export type ServerMsg =
   | { t: "avds"; list: AvdInfo[] }
   /** 真机列表：hello 后发一次、之后有变化就发；没收到过就当网关不支持真机（旧网关）。 */
   | { t: "phones"; list: PhoneInfo[] }
+  /** MuMu 模拟器列表：本机装了 MuMu 时 hello 后发一次、之后有变化就发；没收到过就当没装或网关太旧。 */
+  | { t: "mumu"; list: MumuInfo[] }
   | { t: "boot"; name: string; progress: string; error?: string }
   | { t: "error"; message: string }
   /** 紧接着以 CLOSE_VERSION 关闭连接。upgrade 是升级网关的命令。 */
@@ -497,6 +511,10 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       // name 拼进文件路径和 avdmanager 参数：不合 AVD 名规则的（../、- 开头）整条丢掉
       if (!isNum(o.rid) || !isStr(o.name) || avdNameError(o.name, []) !== null) return null;
       return { t: "deleteAvd", rid: o.rid, name: o.name, ...(o.stop === true ? { stop: true as const } : {}) };
+    case "mumuOpen":
+    case "mumuClose":
+      if (!Number.isInteger(o.index) || (o.index as number) < 0) return null;
+      return { t: o.t, index: o.index as number };
     case "stopAvd":
       if (!isNum(o.rid) || !isStr(o.name) || avdNameError(o.name, []) !== null) return null;
       return { t: "stopAvd", rid: o.rid, name: o.name };

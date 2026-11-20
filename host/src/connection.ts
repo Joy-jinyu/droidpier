@@ -17,6 +17,7 @@ import {
   type Licence,
   type DeviceCaps,
   type FrameHeader,
+  type MumuInfo,
   type PhoneInfo,
   type Rotation,
   type ServerMsg,
@@ -99,6 +100,8 @@ export function createConnection(opts: {
   onAvds?: (list: AvdInfo[]) => void;
   /** 真机列表（旧网关不发）。 */
   onPhones?: (list: PhoneInfo[]) => void;
+  /** MuMu 模拟器列表（没装 MuMu 或旧网关不发）。 */
+  onMumu?: (list: MumuInfo[]) => void;
   /** 日志面板的一批行；reset 为 true 时先清空，dropped 是网关因积压没发的行数。 */
   onLogcat?: (lines: LogLine[], reset: boolean, dropped: number) => void;
   /** DevTools 进入、退出选择元素模式（shared/protocol.ts 的 inspectMode）。 */
@@ -236,6 +239,8 @@ export function createConnection(opts: {
         opts.onAvds?.(m.list);
       } else if (m.t === "phones") {
         opts.onPhones?.(m.list);
+      } else if (m.t === "mumu") {
+        opts.onMumu?.(m.list);
       } else if (m.t === "logcat") {
         opts.onLogcat?.(m.lines, m.reset, m.dropped ?? 0);
       } else if (m.t === "inspectMode") {

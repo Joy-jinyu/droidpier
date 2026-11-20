@@ -18,7 +18,7 @@ import { parseTheme, THEMES } from "../../shared/theme.ts";
 import { registerTools } from "./webmcp.ts";
 import { gatewayBanner, gatewayBelow, shouldRequestUpdate, timeoutText, tooOldText, type GatewayBanner, type GatewayInfo, type UpdateReport } from "./gateway-update.ts";
 import type { LogFilter } from "../../shared/logcat.ts";
-import { GATEWAY_LEVEL, INSTALL_IDS, installCmd, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type HighlightBox, type InstallProgress, type DeviceCaps, type Licence, type Rotation } from "../../shared/protocol.ts";
+import { type MumuInfo, GATEWAY_LEVEL, INSTALL_IDS, installCmd, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type HighlightBox, type InstallProgress, type DeviceCaps, type Licence, type Rotation } from "../../shared/protocol.ts";
 
 // 从这个功能级别起网关一定认 renameAvd、deleteAvd（shared/protocol.ts 的 GATEWAY_LEVEL）
 const AVD_EDIT_LEVEL = 1;
@@ -208,6 +208,7 @@ export async function createHost(player: Player) {
 
   let avds: AvdInfo[] | null = null;
   const phones = createPhoneList((list) => player.hostEvent("emu.phones", { list }));
+  const mumu = createPhoneList<MumuInfo>((list) => player.hostEvent("emu.mumu", { list }));
   let avdWaiters: Array<(l: AvdInfo[]) => void> = [];
   const boots = new Map<string, { since: number; last: Boot }>();
   const refreshAvds = () => conn.control({ t: "avds" });
@@ -327,6 +328,7 @@ export async function createHost(player: Player) {
       for (const f of w) f(list);
     },
     onPhones: (list) => phones.onPhones(list),
+    onMumu: (list) => mumu.onPhones(list),
     onLogcat: (lines, reset, dropped) => player.hostEvent("emu.logcat", { lines, reset, dropped }),
     onBoot: (b) => {
       const now = Date.now();
@@ -355,6 +357,7 @@ export async function createHost(player: Player) {
     onClose: () => {
       uploads.disconnected();
       phones.onDisconnect();
+      mumu.onDisconnect();
       // 网关在更新后重启：留着“正在自动更新”，等它重新连上报新的级别
       if (updateReport?.state === "restarting") return;
       gateway = undefined;
@@ -898,6 +901,12 @@ export async function createHost(player: Player) {
         );
       }
       // 网关等设备真的停了才回（画面上这台、开机中、重启中的都行）。已知是旧网关（级别 < 2）时不发这条，改用 stopOld
+      // 侧栏 MuMu 行上点了“启动”、确认了“关机”：状态变化随网关推来的 mumu 列表回来
+      if (name === "emu.mumuOpen" || name === "emu.mumuClose") {
+        const index = (args as { index?: unknown } | undefined)?.index;
+        if (!Number.isInteger(index) || (index as number) < 0) throw new Error(`${name} 需要 index`);
+        return ctl({ t: name === "emu.mumuOpen" ? "mumuOpen" : "mumuClose", index: index as number });
+      }
       if (name === "emu.stopAvd") {
         const target = needName(name, args);
         if (gateway !== undefined && gatewayBelow(gateway, AVD_STOP_LEVEL)) return stopOld(target);
@@ -908,7 +917,7 @@ export async function createHost(player: Player) {
       }
       if (name === "emu.status") {
         return {
-          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), boots: [...boots.values()].map((b) => b.last),
+          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), boots: [...boots.values()].map((b) => b.last),
           env, installs, license, uploads: uploads.list(),
         };
       }

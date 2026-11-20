@@ -10,13 +10,13 @@ import { logCells } from "./log-columns";
 import { isStaleStatus } from "./status-rev";
 import { gbText, spaceCheck } from "../shared/disk-space";
 import { AVD_DISK_MB, avdNameError, createItems, defaultAvdName, displayNameError, ramMbFor } from "../shared/avd-spec";
-import { ADB_UNRESPONSIVE, OFFICIAL_ORIGIN, type DeviceCaps, type PhoneInfo, type Rotation } from "../shared/protocol";
+import { ADB_UNRESPONSIVE, OFFICIAL_ORIGIN, type DeviceCaps, type MumuInfo, type PhoneInfo, type Rotation } from "../shared/protocol";
 import { parseTheme, type Theme } from "../shared/theme";
 import { deviceFrame } from "../shared/screen";
 import { glideFrames, poseAt, REST, startPose, turnAngle, type Glide } from "./device-motion";
 import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
 import { matchesAvd } from "./device-search";
-import { canPick, currentPhoneOf, phoneDetail, phoneLabel, phoneStatus, showPhones } from "./phones";
+import { canPick, currentPhoneOf, phoneDetail, phoneLabel, phoneStatus, showPhones, splitPhones, mumuRows, mumuRowStatus, mumuRowTitle, type MumuRow, phoneTitle } from "./phones";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
 import { activePage, foregroundPkg, h5KeyShown, pickPage, visibleTitle } from "./h5-pages";
@@ -1272,6 +1272,12 @@ function App() {
   const avds = signal<Avd[] | null>(null);
   // null：网关没发过真机列表（旧网关），不显示「真机」分组
   const phones = signal<PhoneInfo[] | null>(null);
+  // MuMu 自己的设备列表（网关用 mumutool 读的）；没装 MuMu 或旧网关时一直是 null
+  const mumu = signal<MumuInfo[] | null>(null);
+  // 等用户确认关机的那台 MuMu
+  const mumuCloseAsk = signal<MumuInfo | null>(null);
+  // 刚点了“启动”、列表还没变成启动中的那台：按钮先显示启动中并禁用，免得连点（网关每 5 秒读一次列表）
+  const mumuStarting = signal<number | null>(null);
   // 当前设备的身份和能力（ready 带来）：真机的 serial 是 0，按 deviceId 认设备；deviceSize 是 ready.device，真机不在 AVD 列表里，设备框比例靠它
   const deviceId = signal("");
   const kind = signal<"emulator" | "phone">("emulator");
@@ -1495,6 +1501,7 @@ function App() {
   });
   host.on("emu.avds", (p: { list: Avd[] }) => avds.set(p.list));
   host.on("emu.phones", (p: { list: PhoneInfo[] | null }) => phones.set(p.list));
+  host.on("emu.mumu", (p: { list: MumuInfo[] | null }) => mumu.set(p.list));
   host.on("emu.boot", (b: Boot) => {
     boots.set({ ...boots(), [b.name]: b });
     pendingEvent({ kind: "boot", name: b.name });
@@ -1522,7 +1529,7 @@ function App() {
       () => copyFailed.set(true),
     );
   };
-  host.call("emu.status", {}).then((s: { state: State; serial: number; rotation: number; fps: number; latencyMs: number; avds: Avd[] | null; phones?: PhoneInfo[] | null; boots: Boot[]; upgrade: string | null; rev: number; uploads?: Upload[]; gateway?: GatewayBanner | null } & DeviceStatus & Omit<Setup, "rev">) => {
+  host.call("emu.status", {}).then((s: { state: State; serial: number; rotation: number; fps: number; latencyMs: number; avds: Avd[] | null; phones?: PhoneInfo[] | null; mumu?: MumuInfo[] | null; boots: Boot[]; upgrade: string | null; rev: number; uploads?: Upload[]; gateway?: GatewayBanner | null } & DeviceStatus & Omit<Setup, "rev">) => {
     applySetup({ env: s.env, installs: s.installs, license: s.license, rev: s.rev });
     if (!isStaleStatus(s.rev, gatewayRev)) {
       gatewayRev = s.rev;
@@ -1542,6 +1549,7 @@ function App() {
     latency.set(s.latencyMs);
     if (s.avds) avds.set(s.avds);
     if (s.phones) phones.set(s.phones);
+    if (s.mumu) mumu.set(s.mumu);
     boots.set(Object.fromEntries(s.boots.map((b) => [b.name, b])));
   });
 
@@ -1991,6 +1999,58 @@ function App() {
     );
   };
 
+  // MuMu 一行：开着、adb 也连上了的点了切过去（同 PhoneRow）；没开机的行尾有“启动”；开着的右键能关机（先确认）
+  const MumuDeviceRow = (props: { row: () => MumuRow }) => {
+    const r = props.row;
+    const pickable = () => !!r().phone && canPick(r().phone!);
+    const current = () => !!r().phone && isCurrentPhone(r().phone!);
+    const ok = () => r().mumu ? r().mumu!.state === "running" && pickable() : pickable();
+    const startMumu = () => {
+      const m = r().mumu;
+      if (!m) return;
+      mumuStarting.set(m.index);
+      // 开机没成功（网关回了错误）时列表不会变：15 秒后（我定的，够网关读几次列表）让按钮回来
+      setTimeout(() => { if (mumuStarting() === m.index) mumuStarting.set(null); }, 15_000);
+      gw(host.call("emu.mumuOpen", { index: m.index }));
+    };
+    const starting = () => mumuStarting() === r().mumu?.index;
+    // “启动”放在右键菜单的触发区外面：在它上面右键不该弹出“关机”
+    return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.hair }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+      <ContextMenu offset={SPACE.part} popupStyle={menuPopup("top left")} popupStartingStyle={popOut("above")} popupEndingStyle={popOut("above")}
+        onOpenChange={releaseOnOpen} trigger={
+          <Button onPress={() => { const ph = r().phone; if (ph) pickPhone(ph); }} selected={!!r().phone && selected() === r().phone!.id}
+            accessibilityLabel={`${mumuRowTitle(r())}，${mumuRowStatus(r(), current())}`}
+            {...rowStates()} hoverStyle={pickable() ? { backgroundColor: token("accent") } : undefined} activeStyle={pickable() ? pressed() : undefined}
+            style={rowStyle()}>
+            <View style={avatarStyle()}>
+              <Icon name="smartphone" size={ICON.md} tint={ok() ? token("foreground") : token("muted-foreground")} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0, gap: SPACE.hair }}>
+              <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>{mumuRowTitle(r())}</Text>
+              <Text style={{ color: !r().mumu && r().phone && r().phone!.state !== "device" ? token("warning") : token("muted-foreground"), ...TYPE.caption }}>{mumuRowStatus(r(), current())}</Text>
+            </View>
+            <If when={!(r().mumu?.state === "stopped")}>
+              <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{r().phone ? phoneDetail(r().phone!) : ""}</Text>
+            </If>
+          </Button>
+      }>
+        <Item label="关机…" disabled={r().mumu?.state !== "running" || gatewayDown(state())} onSelect={() => { const m = r().mumu; if (m) mumuCloseAsk.set(m); }} />
+      </ContextMenu>
+      </View>
+      <If when={r().mumu?.state === "stopped" && !gatewayDown(state())}>
+        <Btn label={starting() ? "启动中…" : "启动"} disabled={starting()} onPress={startMumu} />
+      </If>
+      </View>
+    );
+  };
+  // 列表里那台已经不是“未运行”了（开始开机）：启动按钮的临时状态交还给列表
+  effect(() => {
+    const i = mumuStarting();
+    if (i !== null && (mumu() ?? []).find((m) => m.index === i)?.state !== "stopped") mumuStarting.set(null);
+  });
+
   return (
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: token("background"), ...ease("normal") }}>
       <If when={sidebarShown()}>
@@ -2027,13 +2087,17 @@ function App() {
             </If>
             <If when={showPhones(phones())}>
               <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>手机</Text>
-              <If when={(phones() ?? []).length > 0} else={
+              <If when={splitPhones(phones()).phones.length > 0} else={
                 <Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>
                   {env()?.missing.some((m) => m.id === "platform-tools") ? "先在环境检查里安装 platform-tools（adb），才能看到手机。" : "插上手机并打开 USB 调试。"}
                 </Text>
               }>
-                <Each of={phones() ?? []} key={(p) => p.id}>{(p) => <PhoneRow phone={p} />}</Each>
+                <Each of={splitPhones(phones()).phones} key={(p) => p.id}>{(p) => <PhoneRow phone={p} />}</Each>
               </If>
+            </If>
+            <If when={mumuRows(mumu(), phones()).length > 0}>
+              <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>MuMu 模拟器</Text>
+              <Each of={mumuRows(mumu(), phones())} key={(r) => r.key}>{(r) => <MumuDeviceRow row={r} />}</Each>
             </If>
           </Scroll>
           <View style={{ height: 1, marginHorizontal: ROW_X, backgroundColor: token("border-subtle") }} />
@@ -2051,7 +2115,7 @@ function App() {
             <View style={{ flexDirection: "row", alignItems: "baseline", gap: SPACE.item }}>
               {/* 设备名先占够自己的宽度，包名只用剩下的；名字本身放不下时中间省略 */}
               <Text role="header" style={{ flexShrink: 1, color: token("foreground"), ...TYPE.heading, numberOfLines: 1 }}>
-                {noBreak(fitMiddle(shown() ? avdLabel(shown()!) : currentPhone() ? phoneLabel(currentPhone()!) : "没有连接设备", titleWidth(), TYPE.heading.fontSize))}
+                {noBreak(fitMiddle(shown() ? avdLabel(shown()!) : currentPhone() ? phoneTitle(currentPhone()!, mumu()) : "没有连接设备", titleWidth(), TYPE.heading.fontSize))}
               </Text>
               <If when={h5Open() ? foregroundPkg(pages() ?? []) : null}>
                 {(pkg) => <Text style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, color: token("muted-foreground"), ...TYPE.caption, fontFamily: "monospace", numberOfLines: 1 }}>{noBreak(pkg())}</Text>}
@@ -2161,7 +2225,7 @@ function App() {
                       borderColor: drag().blocked ? token("destructive") : token("primary"), backgroundColor: token("drag-shade"),
                     }}>
                       <Text style={{ color: drag().blocked ? token("destructive") : token("foreground"), ...TYPE.title, textAlign: "center" }}>
-                        {drag().blocked ? `不能发送：${drag().blocked}` : `松开以发送到 ${currentAvd() ? avdLabel(currentAvd()!) : currentPhone() ? phoneLabel(currentPhone()!) : "这台设备"}`}
+                        {drag().blocked ? `不能发送：${drag().blocked}` : `松开以发送到 ${currentAvd() ? avdLabel(currentAvd()!) : currentPhone() ? phoneTitle(currentPhone()!, mumu()) : "这台设备"}`}
                       </Text>
                       <If when={!drag().blocked}>
                         <Text style={{ color: token("muted-foreground"), ...TYPE.caption, textAlign: "center" }}>APK 会直接安装，其他文件放进「下载」文件夹</Text>
@@ -2424,6 +2488,18 @@ function App() {
                 <Text style={{ color: token("warning"), ...TYPE.body }}>这台设备正在运行，删除前会先停止它。</Text>
               </If>
               <If when={deleteError()}>{(e) => <Text role="alert" style={{ color: token("destructive"), ...TYPE.caption, userSelect: "text" }}>{e()}</Text>}</If>
+            </DialogContent>
+          )}
+        </If>
+      </AppDialog>
+      <AppDialog open={mumuCloseAsk() !== null} size="sm" onClose={() => mumuCloseAsk.set(null)}>
+        <If when={mumuCloseAsk()}>
+          {(m) => (
+            <DialogContent title={`关掉 MuMu 模拟器「${m().name}」？`} footer={<>
+              <Btn label="取消" onPress={() => mumuCloseAsk.set(null)} />
+              <Btn label="关机" kind="danger" onPress={() => { gw(host.call("emu.mumuClose", { index: m().index })); mumuCloseAsk.set(null); }} />
+            </>}>
+              <Text style={{ color: token("foreground"), ...TYPE.body }}>正在运行的 App 和未保存的内容会丢失。之后可以在这里再启动。</Text>
             </DialogContent>
           )}
         </If>

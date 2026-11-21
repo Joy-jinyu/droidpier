@@ -179,3 +179,23 @@ export function inspectUrl(page: WebViewPage, gatewayPort: number, ticket: strin
   u.pathname = u.pathname.replace(/\/inspector\.html$/, "/devtools_app.html");
   return u.toString();
 }
+
+/** 网关代理 DevTools 前端的路径前缀：/devtools-frontend/<appspot 上的路径>。 */
+export const LOCAL_FRONTEND_PATH = "/devtools-frontend/";
+/** 只代理 appspot 上带版本号的前端文件（serve_rev / serve_file / serve_internal_file 下的 @<版本>/…）。 */
+const FRONTEND_FILE_RE = /^(serve_rev|serve_file|serve_internal_file)\/@[0-9a-f]{6,64}\/[A-Za-z0-9._\-/]+$/;
+
+/**
+ * 网关自己提供的页面（--local，http://127.0.0.1:<端口>/app/）里，appspot 的 iframe 连不上本机：顶层页面就是本机地址，
+ * Chrome 不会为它弹「本地网络」授权，iframe 连 127.0.0.1 一律被拦（2026-11-22 实测，公网页面不受影响）。
+ * 这时把前端换成经网关代理的同一份文件，iframe 和网关同源，就不算公网连本机了。
+ */
+export function localFrontendUrl(url: string, gatewayPort: number): string {
+  const u = new URL(url);
+  return `http://127.0.0.1:${gatewayPort}${LOCAL_FRONTEND_PATH}${u.pathname.replace(/^\//, "")}${u.search}`;
+}
+
+/** /devtools-frontend/ 下的相对路径 → appspot 上的地址；不是带版本号的前端文件时返回 null。 */
+export function frontendFileUrl(rel: string): string | null {
+  return FRONTEND_FILE_RE.test(rel) && !rel.split("/").includes("..") ? `${DEVTOOLS_FRONTEND_ORIGIN}/${rel}` : null;
+}

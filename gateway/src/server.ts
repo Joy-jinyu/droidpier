@@ -7,7 +7,7 @@ import { extname, join, resolve, sep } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { LatestFrame } from "./latest-frame.ts";
 import { createVideoSender } from "./video-sender.ts";
-import { CLOSE_UNKNOWN_SOCKET, DEVTOOLS_FRONTEND_ORIGIN, inspectUrl, parseDevtoolsPath, proxyDevtools, type DevtoolsSession } from "./devtools-proxy.ts";
+import { CLOSE_UNKNOWN_SOCKET, DEVTOOLS_FRONTEND_ORIGIN, frontendFileUrl, inspectUrl, LOCAL_FRONTEND_PATH, localFrontendUrl, parseDevtoolsPath, proxyDevtools, type DevtoolsSession } from "./devtools-proxy.ts";
 import { browserView, createInspectorSlot, liveValue, pickMapping, scaleRect, toPageCss, toPanel, type HighlightTarget, type InspectPointer } from "./inspect.ts";
 import { checkHost, checkUpgrade, createTickets, type Tickets } from "./auth.ts";
 import { createPeerCheck, type SocketsLookup } from "./peer.ts";
@@ -171,6 +171,8 @@ export async function startServer(opts: {
   setup?: SetupOps;
   /** WebView 调试 socket → 本机转发端口；不传时用当前设备的 debug.webviews，都没有时 /devtools/ 连接一律 4404。 */
   portOf?: (socket: string) => number | undefined;
+  /** 本地页面代理 DevTools 前端时取文件用；测试里换掉，不传时用全局 fetch。 */
+  fetchFrontend?: typeof fetch;
   files?: FileOps;
   /** 发出重启指令后等开机完成；不传时不等，直接按 adb-down 结束。 */
   rebootWait?: (id: string) => Promise<"done" | "adb-down">;
@@ -244,6 +246,35 @@ export async function startServer(opts: {
   // 同一设备的并发 list 共用一次：两次同时跑会给同一个 socket 各建一个转发
   const listPages = (h: Debug) => (h.listing ??= h.d.webviews.list().finally(() => (h.listing = undefined)));
 
+  /** 替本地页面取 DevTools 前端文件（gateway/src/devtools-proxy.ts 的 localFrontendUrl）：只取 appspot 上带版本号的文件，原样转回。 */
+  const serveFrontend = async (rel: string, res: import("node:http").ServerResponse) => {
+    const url = frontendFileUrl(rel);
+    if (!url) {
+      log(`DevTools 前端 ${rel}：不是带版本号的前端文件，不代理`);
+      return void res.writeHead(404).end();
+    }
+    try {
+      const r = await (opts.fetchFrontend ?? fetch)(url, { signal: AbortSignal.timeout(30_000) });
+      if (!r.ok) {
+        log(`DevTools 前端 ${rel}：appspot 回 ${r.status}`);
+        return void res.writeHead(r.status === 404 ? 404 : 502).end();
+      }
+      const headers: Record<string, string> = {
+        "content-type": r.headers.get("content-type") ?? "application/octet-stream",
+        // 前端跑在网关自己的源上（和页面同源，能连控制页面的 WebSocket）：只许它连回网关，只许网关自己的页面嵌它。
+        // 否则任何网站都能用 ?ws=<别处> 打开它，让别人的服务器给它喂数据
+        "content-security-policy": `connect-src 'self'; frame-ancestors http://127.0.0.1:${gatewayPort} http://localhost:${gatewayPort}`,
+      };
+      // 带版本号的文件不会变，按 appspot 给的缓存策略缓存
+      const cache = r.headers.get("cache-control");
+      if (cache) headers["cache-control"] = cache;
+      res.writeHead(200, headers).end(Buffer.from(await r.arrayBuffer()));
+    } catch (e) {
+      log(`取 DevTools 前端失败：${(e as Error).message}`);
+      res.writeHead(502).end();
+    }
+  };
+
   const http = createServer(async (req, res) => {
     if (!checkHost(req.headers.host, gatewayPort)) {
       log(`拒绝 HTTP 请求：Host 是 ${req.headers.host ?? "<无>"}`);
@@ -271,6 +302,10 @@ export async function startServer(opts: {
     }
     if (rel === "/" || rel === APP_PATH.slice(0, -1)) {
       res.writeHead(302, { location: APP_PATH }).end();
+      return;
+    }
+    if (rel.startsWith(LOCAL_FRONTEND_PATH)) {
+      await serveFrontend(rel.slice(LOCAL_FRONTEND_PATH.length), res);
       return;
     }
     if (!rel.startsWith(APP_PATH)) {
@@ -614,7 +649,9 @@ export async function startServer(opts: {
     }
   }, opts.pollMs ?? 1000);
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req?: IncomingMessage) => {
+    // 网关自己提供的页面（--local）：DevTools 前端要走网关代理（localFrontendUrl）
+    const localPage = req?.headers.origin === `http://127.0.0.1:${gatewayPort}` || req?.headers.origin === `http://localhost:${gatewayPort}`;
     const conn: Conn = {
       ws,
       helloSeen: false,
@@ -824,7 +861,8 @@ export async function startServer(opts: {
       // 没用掉的票据 60 秒后自己过期，这里只防表无限长
       if (ticketOwners.size > 32) ticketOwners.delete(ticketOwners.keys().next().value!);
       ticketOwners.set(ticket, conn);
-      const url = inspectUrl(page, gatewayPort, ticket);
+      const appspot = inspectUrl(page, gatewayPort, ticket);
+      const url = appspot && localPage ? localFrontendUrl(appspot, gatewayPort) : appspot;
       if (url) send(ws, { t: "inspect", rid, url });
       else send(ws, { t: "inspect", rid, hint: `在 chrome://inspect 里找：${page.pkg ?? page.socket} / ${page.title}` });
     };

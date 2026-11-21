@@ -1162,7 +1162,7 @@ test("navigate 外部地址不执行 adb reverse", async (t) => {
   assert.ok(f.calls.includes("navigate http://10.0.2.2:5173/"));
 });
 
-test("inspect：有 frontendUrl 回经网关代理的地址，没有时回 chrome://inspect 提示", async (t) => {
+test("inspect：有 frontendUrl 回经网关代理的地址（测试客户端是网关自己的页面，前端也走网关代理），没有时回 chrome://inspect 提示", async (t) => {
   const bare: WebViewPage = { ...PAGE, socket: "chrome_devtools_remote", pid: undefined, pkg: undefined, id: "p2", title: "Tab", frontendUrl: undefined };
   const { c, srv } = await debugSetup(t, fakeDebug([PAGE, bare]));
   c.ws.send(JSON.stringify({ t: "inspect", rid: 1, socket: PAGE.socket, id: "p1" }));
@@ -1170,7 +1170,7 @@ test("inspect：有 frontendUrl 回经网关代理的地址，没有时回 chrom
   c.ws.send(JSON.stringify({ t: "inspect", rid: 3, socket: PAGE.socket, id: "gone" }));
   await until(() => [1, 2, 3].every((rid) => !!reply(c, "inspect", rid)));
   const url = reply(c, "inspect", 1).url as string;
-  const prefix = `https://chrome-devtools-frontend.appspot.com/serve_rev/@abc/devtools_app.html?ws=127.0.0.1:${srv.port}/devtools/${PAGE.socket}/p1/`;
+  const prefix = `http://127.0.0.1:${srv.port}/devtools-frontend/serve_rev/@abc/devtools_app.html?ws=127.0.0.1:${srv.port}/devtools/${PAGE.socket}/p1/`;
   assert.ok(url.startsWith(prefix), url);
   assert.match(url.slice(prefix.length), /^[A-Za-z0-9_-]{22,}$/);
   assert.deepEqual(reply(c, "inspect", 2), { t: "inspect", rid: 2, hint: "在 chrome://inspect 里找：chrome_devtools_remote / Tab" });
@@ -3019,4 +3019,22 @@ test("MuMu 开机失败：把原因发回发起的页面", async (t) => {
   c.ws.send(JSON.stringify({ t: "mumuOpen", index: 0 }));
   await until(() => c.msgs.some((x) => x.t === "error"));
   assert.deepEqual(c.msgs.find((x) => x.t === "error"), { t: "error", message: "MuMu 开机失败：license expired" });
+});
+
+test("/devtools-frontend/：只代理 appspot 上带版本号的前端文件，带上只许连回网关的 CSP；别的路径 404，不去取", async (t) => {
+  const fetched: string[] = [];
+  const fetchFrontend = (async (url: string) => {
+    fetched.push(url);
+    return new Response("<html>devtools</html>", { headers: { "content-type": "text/html", "cache-control": "public, max-age=31536000" } });
+  }) as typeof fetch;
+  const { srv } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { fetchFrontend });
+  const r = await fetch(`http://127.0.0.1:${srv.port}/devtools-frontend/serve_rev/@0123abcd/devtools_app.html`);
+  assert.equal(await r.text(), "<html>devtools</html>");
+  assert.equal(r.headers.get("content-security-policy"), `connect-src 'self'; frame-ancestors http://127.0.0.1:${srv.port} http://localhost:${srv.port}`);
+  assert.equal(r.headers.get("cache-control"), "public, max-age=31536000");
+  assert.deepEqual(fetched, ["https://chrome-devtools-frontend.appspot.com/serve_rev/@0123abcd/devtools_app.html"]);
+  for (const bad of ["evil.com/x.js", "serve_rev/abc/x.js", "serve_rev/@0123abcd/..%2F..%2Fx", "serve_rev/@0123abcd/a%3Fb"]) {
+    assert.equal((await fetch(`http://127.0.0.1:${srv.port}/devtools-frontend/${bad}`)).status, 404, bad);
+  }
+  assert.equal(fetched.length, 1);
 });

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type { IncomingHttpHeaders } from "node:http";
 import WebSocket, { WebSocketServer } from "ws";
 import { startServer } from "../src/server.ts";
-import { CLOSE_UNKNOWN_SOCKET, DEVTOOLS_FRONTEND_ORIGIN, inspectUrl, parseDevtoolsPath, proxyDevtools, type DevtoolsSession } from "../src/devtools-proxy.ts";
+import { CLOSE_UNKNOWN_SOCKET, DEVTOOLS_FRONTEND_ORIGIN, frontendFileUrl, inspectUrl, localFrontendUrl, parseDevtoolsPath, proxyDevtools, type DevtoolsSession } from "../src/devtools-proxy.ts";
 import type { WebViewPage } from "../src/webviews.ts";
 import { createTickets, type Tickets } from "../src/auth.ts";
 import { CLOSE_BAD_TOKEN } from "../../shared/protocol.ts";
@@ -297,4 +297,16 @@ test("高亮：前端发 highlightNode 时报节点和配置，hideHighlight 时
   c.ws.send(JSON.stringify({ id: 9, method: "Overlay.hideHighlight", params: {} }));
   await until(() => highlights.length === 3 && up.got.length === 3);
   assert.deepEqual(highlights, [{ nodeId: 5, config }, { backendNodeId: 9, config }, null]);
+});
+
+test("localFrontendUrl：appspot 地址换成网关代理的同一路径，查询串（ws=）不变", () => {
+  const u = "https://chrome-devtools-frontend.appspot.com/serve_rev/@abc123/devtools_app.html?ws=127.0.0.1:7300/devtools/s/p/tk";
+  assert.equal(localFrontendUrl(u, 7300), "http://127.0.0.1:7300/devtools-frontend/serve_rev/@abc123/devtools_app.html?ws=127.0.0.1:7300/devtools/s/p/tk");
+});
+
+test("frontendFileUrl：只认 serve_rev / serve_file / serve_internal_file 下带版本号的文件", () => {
+  assert.equal(frontendFileUrl("serve_internal_file/@36220c8b/devtools-frontend/front_end/entrypoints/main/main.js"), "https://chrome-devtools-frontend.appspot.com/serve_internal_file/@36220c8b/devtools-frontend/front_end/entrypoints/main/main.js");
+  assert.equal(frontendFileUrl("serve_rev/@abc123/x/../../etc"), null);
+  assert.equal(frontendFileUrl("other/@abc123/x.js"), null);
+  assert.equal(frontendFileUrl("serve_rev/abc123/x.js"), null);
 });

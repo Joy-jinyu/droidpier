@@ -20,7 +20,7 @@ import { currentIosSimOf, iosSimRows, iosSimStatus } from "./ios-sims";
 import { canPick, currentPhoneOf, phoneDetail, phoneLabel, phoneStatus, showPhones, splitPhones, mumuRows, mumuRowStatus, mumuRowTitle, type MumuRow, phoneTitle } from "./phones";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
-import { activePage, foregroundPkg, h5KeyShown, pickPage, visibleTitle } from "./h5-pages";
+import { activePage, foregroundPkg, h5KeyShown, pickPage, visiblePkg, visibleTitle } from "./h5-pages";
 import { AUTO_START, autoOpen } from "./console-auto";
 import { addressEdit, addressShown, addressSubmit, type AddressDraft } from "./address-field";
 import { emulatorButtonShown, missingEmulatorItems, setupCardShown, setupNeeded } from "./setup-card";
@@ -2377,7 +2377,7 @@ function App() {
               <Text role="header" style={{ flexShrink: 1, color: token("foreground"), ...TYPE.heading, numberOfLines: 1 }}>
                 {noBreak(fitMiddle(shown() ? avdLabel(shown()!) : currentPhone() ? phoneTitle(currentPhone()!, mumu()) : currentIos() ? currentIos()!.name : "没有连接设备", titleWidth(), TYPE.heading.fontSize))}
               </Text>
-              <If when={h5Open() ? foregroundPkg(pages() ?? []) : null}>
+              <If when={h5Open() ? visiblePkg(pages() ?? []) : null}>
                 {(pkg) => <Text style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, color: token("muted-foreground"), ...TYPE.caption, fontFamily: "monospace", numberOfLines: 1 }}>{noBreak(pkg())}</Text>}
               </If>
             </View>

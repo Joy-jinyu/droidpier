@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activePage, foregroundPkg, h5KeyShown, pickPage, visibleTitle } from "../../ui/h5-pages.ts";
+import { activePage, foregroundPkg, h5KeyShown, pickPage, visiblePkg, visibleTitle } from "../../ui/h5-pages.ts";
 
 const page = (id: string, o: { pkg?: string; url?: string; visible?: boolean } = {}) => ({
   socket: "webview_devtools_remote_1", id, title: "", url: o.url ?? `https://example.com/${id}`, pkg: o.pkg ?? "com.example.app", visible: o.visible ?? false,
@@ -10,6 +10,12 @@ test("前台 App：取真正可见的页面的包名；没有可见页面时退�
   assert.equal(foregroundPkg([page("a", { pkg: "com.example.bg" }), page("b", { pkg: "com.example.app", visible: true })]), "com.example.app");
   assert.equal(foregroundPkg([page("a", { pkg: "com.example.bg" })]), "com.example.bg");
   assert.equal(foregroundPkg([]), null);
+});
+
+test("标题旁的包名：只取真正可见的页面的；没有可见页面（回到主屏）时没有", () => {
+  assert.equal(visiblePkg([page("a", { pkg: "com.example.bg" }), page("b", { pkg: "com.example.app", visible: true })]), "com.example.app");
+  assert.equal(visiblePkg([page("a", { pkg: "com.apple.mobilesafari" })]), null);
+  assert.equal(visiblePkg([]), null);
 });
 
 test("H5 键：连着设备、列表里有真正可见的页面才显示", () => {

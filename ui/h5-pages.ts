@@ -1,7 +1,12 @@
 /** H5 列表里判断用到的页面字段；visible 由网关按 description 算好（visible:true 且不是 never_attached / empty）。 */
 export type ListedPage = { pkg?: string; url: string; visible: boolean };
 
-/** 前台 App 的包名：真正可见的页面所在的 App；没有可见页面时取列表第一项的。 */
+/** 标题旁显示的包名：只认真正可见的页面；回到主屏等没有可见页面时为 null，不拿列表第一项充数（那是后台的）。 */
+export function visiblePkg(list: ListedPage[]): string | null {
+  return list.find((p) => p.visible)?.pkg ?? null;
+}
+
+/** H5 面板按哪个 App 列页面：真正可见的页面所在的 App；没有可见页面时取列表第一项的，面板里还能选后台页面。 */
 export function foregroundPkg(list: ListedPage[]): string | null {
   return (list.find((p) => p.visible) ?? list[0])?.pkg ?? null;
 }

@@ -1,7 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
-import { createIosInspector, createWirParser, legacyProtocolVersion, wirFrame } from "../src/ios-inspector.ts";
+import { appInForeground, createIosInspector, createWirParser, legacyProtocolVersion, wirFrame } from "../src/ios-inspector.ts";
+
+test("appInForeground：只有 2 是前台；刚回到主屏的 1、挂起的 0 都不是；没这个键的旧系统当前台", () => {
+  assert.equal(appInForeground({ WIRIsApplicationActiveKey: 2 }), true);
+  assert.equal(appInForeground({ WIRIsApplicationActiveKey: 1 }), false);
+  assert.equal(appInForeground({ WIRIsApplicationActiveKey: 0 }), false);
+  assert.equal(appInForeground({}), true);
+});
 
 test("legacyProtocolVersion：取不超过模拟器版本的最大命令表；比所有都旧时为 null", () => {
   const have = ["13.0", "17.4", "18.0", "18.2", "18.4", "26.0", "27.0"];

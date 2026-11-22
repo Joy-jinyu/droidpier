@@ -60,11 +60,11 @@ const PROBE_WAIT_MS = 1200;
 const str = (v: Plist | undefined) => (typeof v === "string" ? v : "");
 
 /**
- * 应用在不在前台：WIRIsApplicationActiveKey 0 是后台（2026-11-22 实测：回到主屏的 App 是 0，前台的 Safari、App 是 2）。
- * 没这个键的旧系统当前台。
+ * 应用在不在前台：WIRIsApplicationActiveKey 2 是前台（2026-11-22 实测：前台的 Safari、App 是 2，刚回到主屏的 Safari 是 1，
+ * 挂起了的 App 是 0）。没这个键的旧系统当前台。
  */
 export function appInForeground(app: Dict): boolean {
-  return app.WIRIsApplicationActiveKey !== 0;
+  return app.WIRIsApplicationActiveKey === undefined || app.WIRIsApplicationActiveKey === 2;
 }
 
 /**

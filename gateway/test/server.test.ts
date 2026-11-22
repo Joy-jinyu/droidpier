@@ -1072,8 +1072,8 @@ async function upstream(t: import("node:test").TestContext) {
   return { port: (up.address() as { port: number }).port, socks };
 }
 
-async function debugSetup(t: import("node:test").TestContext, f = fakeDebug(), session = new FakeSession(), avd?: AvdOps) {
-  const r = await setup(t, session, undefined, avd, f.deps);
+async function debugSetup(t: import("node:test").TestContext, f = fakeDebug(), session = new FakeSession(), avd?: AvdOps, more?: Partial<Parameters<typeof startServer>[0]>) {
+  const r = await setup(t, session, undefined, avd, f.deps, undefined, more);
   const c = await r.connect();
   hello(c);
   await until(() => c.msgs.some((m) => m.t === "ready"));
@@ -1327,6 +1327,29 @@ test("busy：H5 控制台连着时报“正在调试 H5”，关掉后恢复", a
   await until(() => up.socks.length === 1);
   assert.equal(srv.busy(), "正在调试 H5");
   dt.ws.close();
+  await until(() => srv.busy() === null);
+});
+
+test("busy：H5 控制台连着但一段时间没有操作时不再挡自动更新；有操作又挡", async (t) => {
+  const up = await upstream(t);
+  const f = fakeDebug();
+  f.port = up.port;
+  let clock = 1_000_000;
+  const { c, srv } = await debugSetup(t, f, undefined, undefined, { devtoolsIdleMs: 60_000, now: () => clock });
+  const dt = rawClient(t, await inspectWs(c, srv.port), APPSPOT);
+  await new Promise((r) => dt.ws.once("open", r));
+  await until(() => up.socks.length === 1);
+  assert.equal(srv.busy(), "正在调试 H5");
+  clock += 60_001;
+  assert.equal(srv.busy(), null, "控制台闲了一分钟");
+  dt.ws.send(JSON.stringify({ id: 1, method: "DOM.getDocument" }));
+  await until(() => srv.busy() === "正在调试 H5");
+  // 停在断点上：用户在读代码，过了空闲时间也一直等；继续运行后又按空闲算
+  up.socks[0].send(JSON.stringify({ method: "Debugger.paused", params: { reason: "other" } }));
+  await until(() => dt.msgs.some((m) => m.method === "Debugger.paused"));
+  clock += 60_001;
+  assert.equal(srv.busy(), "正在调试 H5");
+  up.socks[0].send(JSON.stringify({ method: "Debugger.resumed", params: {} }));
   await until(() => srv.busy() === null);
 });
 

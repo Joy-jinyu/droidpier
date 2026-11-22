@@ -176,6 +176,8 @@ const isPhone = (s: EmulatorSession) => s.kind === "phone" && viaAdb(s);
 /** 启动网关的 HTTP + WebSocket 服务，只监听 127.0.0.1。 */
 /** 页面连接的发送缓冲超过这么多，日志批次就先不发、只计数（plans/2026-11-16-real-device-pr5-logcat.md 取舍 7）。 */
 const LOG_BACKLOG_BYTES = 2 ** 20;
+/** H5 控制台闲了这么久就不再挡自动更新（我定的：离开一会儿再回来，控制台会自己重新打开）。 */
+const DEVTOOLS_IDLE_MS = 3 * 60_000;
 
 export async function startServer(opts: {
   port: number;
@@ -210,6 +212,10 @@ export async function startServer(opts: {
   pollMs?: number;
   /** 发出停止指令后最多等多久确认设备停了，默认 10000ms（页面的请求 15 秒超时）。 */
   stopWaitMs?: number;
+  /** H5 控制台多久没有操作就不再挡着自动更新；默认 DEVTOOLS_IDLE_MS，测试注入短值。 */
+  devtoolsIdleMs?: number;
+  /** 当前时间（毫秒），算控制台闲了多久；测试注入。 */
+  now?: () => number;
   log?: (s: string) => void;
   /** /healthz 报的网关版本；另一个 droidpier 启动时靠它判断谁更新（gateway/src/already-running.ts）。 */
   version?: string;
@@ -242,6 +248,26 @@ export async function startServer(opts: {
   const DELETING = "正在删除这台设备";
   // 收分片或正在 adb install / push 的传文件：重启会打断它们
   const transfers = new Set<object>();
+  const now = opts.now ?? Date.now;
+  // 控制台上次有操作（连上、前端发来消息）的时间：自动更新只在最近有操作时等它；停在断点上的控制台一直等
+  let devtoolsInputAt = 0;
+  const pausedDevtools = new Set<WebSocket>();
+  const trackDevtools = (ws: WebSocket) => {
+    devtoolsInputAt = now();
+    ws.on("message", () => (devtoolsInputAt = now()));
+    // 页面发给前端的消息里看断点：停住时用户在读代码，不发消息也不算闲着。iOS 的事件包在 Target.dispatchMessageFromTarget 里（转义过的 JSON），
+    // 所以按文字找，不解析
+    const send = ws.send.bind(ws) as (data: unknown, ...rest: unknown[]) => void;
+    ws.send = ((data: unknown, ...rest: unknown[]) => {
+      if (typeof data === "string" || Buffer.isBuffer(data)) {
+        const text = String(data);
+        if (text.includes("Debugger.paused")) pausedDevtools.add(ws);
+        else if (text.includes("Debugger.resumed")) pausedDevtools.delete(ws);
+      }
+      send(data, ...rest);
+    }) as typeof ws.send;
+    ws.on("close", () => pausedDevtools.delete(ws));
+  };
   let gatewayPort = opts.port;
   const tickets = opts.tickets ?? createTickets();
   // 票据是哪个页面要的：DevTools 连上后，选择元素模式的开关告诉那个页面
@@ -452,6 +478,7 @@ export async function startServer(opts: {
       return;
     }
     devtoolsWss.handleUpgrade(req, socket, head, (ws) => {
+      trackDevtools(ws);
       const owner = target.ticket ? ticketOwners.get(target.ticket) : undefined;
       if (target.ticket) ticketOwners.delete(target.ticket);
       if (!target.ticket || !tickets.take(target.ticket, target.socket, target.pageId)) {
@@ -491,6 +518,7 @@ export async function startServer(opts: {
       return;
     }
     devtoolsWss.handleUpgrade(req, socket, head, (ws) => {
+      trackDevtools(ws);
       const owner = ticketOwners.get(ticket);
       ticketOwners.delete(ticket);
       if (!tickets.take(ticket, appId, pageId)) return ws.close(CLOSE_BAD_TOKEN, "bad devtools ticket");
@@ -1713,8 +1741,9 @@ export async function startServer(opts: {
       : deleting.size ? "正在删除设备"
       : rebooting ? "设备正在重启"
       : transfers.size ? "正在传文件"
-      // 重启会断开 DevTools，而 iframe 里的票据只能用一次，前端自带的重连连不上
-      : devtoolsWss.clients.size ? "正在调试 H5"
+      // 重启会断开 DevTools，而 iframe 里的票据只能用一次，前端自带的重连连不上。只在最近有操作时等：
+      // 页面上有网页时控制台会自己打开，一直开着页面的话光凭“连着”更新就永远等不到（2026-11-22 实测）
+      : pausedDevtools.size || (devtoolsWss.clients.size && now() - devtoolsInputAt < (opts.devtoolsIdleMs ?? DEVTOOLS_IDLE_MS)) ? "正在调试 H5"
       : null,
     notifyUpdate: (r) => broadcast({ t: "update", ...r }),
     close: async () => {

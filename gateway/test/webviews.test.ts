@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseDevtoolsSockets, createWebViews, createFreePortAllocator, parseResumedPkg, browserPkgFromSocket, parseAppBounds } from "../src/webviews.ts";
+import { parseDevtoolsSockets, createWebViews, createFreePortAllocator, parseResumedPkg, browserPkgFromSocket, parseAppBounds, pickShownTab } from "../src/webviews.ts";
 
 // /proc/net/unix 的典型格式（abstract socket 名前缀 @）
 const PROC_NET_UNIX = `
@@ -584,4 +584,44 @@ test("forward --list 读失败时这一轮不核对，列表照常返回，转�
   const pages = await wv.list();
   assert.ok(pages.length > 0);
   assert.equal(wv.portOf("webview_devtools_remote_6642"), port);
+});
+
+test("浏览器在前台：按标签页自己回答的 visibilityState 定当前标签，不看 /json 的顺序；都不回话时还按第一个", async () => {
+  const d = browserDeps("com.android.chrome");
+  const asked: string[] = [];
+  const wv = createWebViews({ ...d, fetchVersion: async () => ({ "Android-Package": "com.android.chrome" }), tabVisibility: async (_port, id) => (asked.push(id), id === "4" ? "visible" : "hidden") });
+  const pages = await wv.list();
+  assert.deepEqual(pages.map((p) => [p.id, p.visible]), [["4", true], ["29", false]]);
+  assert.deepEqual(asked.sort(), ["29", "4"]);
+  await wv.close();
+
+  const silent = createWebViews({ ...browserDeps("com.android.chrome"), fetchVersion: async () => ({ "Android-Package": "com.android.chrome" }), tabVisibility: async () => null });
+  assert.deepEqual((await silent.list()).map((p) => [p.id, p.visible]), [["29", true], ["4", false]]);
+  await silent.close();
+});
+
+test("浏览器不在前台时不去问标签页", async () => {
+  const asked: string[] = [];
+  const wv = createWebViews({ ...browserDeps("com.example.app"), fetchVersion: async () => ({ "Android-Package": "com.android.chrome" }), tabVisibility: async (_p, id) => (asked.push(id), "visible") });
+  const pages = await wv.list();
+  assert.ok(pages.every((p) => !p.visible));
+  assert.deepEqual(asked, []);
+  await wv.close();
+});
+
+test("pickShownTab：有一个回答 visible 就不等别的；都 hidden 时没有；都不回话交给老办法；断点上不回话的上次那个还算", async () => {
+  const tabs = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const never = new Promise<null>(() => {});
+  assert.equal(await pickShownTab(tabs, (t) => (t.id === "b" ? Promise.resolve("visible") : never)), tabs[1]);
+  assert.equal(await pickShownTab(tabs, async () => "hidden"), null);
+  assert.equal(await pickShownTab(tabs, async () => null), undefined);
+  assert.equal(await pickShownTab(tabs, async (t) => (t.id === "a" ? "hidden" : null), "c"), tabs[2]);
+  assert.equal(await pickShownTab(tabs, async (t) => (t.id === "a" ? "hidden" : null)), tabs[1]);
+  assert.equal(await pickShownTab([], async () => "visible"), undefined);
+});
+
+test("浏览器在前台、标签页都回答 hidden（开着标签切换器）：没有标签页可见", async () => {
+  const wv = createWebViews({ ...browserDeps("com.android.chrome"), fetchVersion: async () => ({ "Android-Package": "com.android.chrome" }), tabVisibility: async () => "hidden" });
+  assert.ok((await wv.list()).every((p) => !p.visible));
+  await wv.close();
 });

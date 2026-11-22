@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
 import { cleanStaleInstallTmp, createInstaller, fetchWithIdle, realInstallerDeps, requireRepoUrl } from "./installer.ts";
 import { buildCatalog, realCatalogDeps } from "./catalog.ts";
-import { createWebViews, defaultFetchJson, defaultFetchVersion, findFreePort, FOREGROUND_CMD, makeAdbExec, parseAppBounds, parseResumedPkg, releasePort } from "./webviews.ts";
+import { createWebViews, defaultFetchJson, defaultFetchVersion, defaultTabVisibility, findFreePort, FOREGROUND_CMD, makeAdbExec, parseAppBounds, parseResumedPkg, releasePort } from "./webviews.ts";
 import { parseWmSize } from "./inspect.ts";
 import { createLogcatHub, dumpLogcat, parseApps, readLogcat } from "./logcat.ts";
 import type { LogFilter } from "../../shared/logcat.ts";
@@ -301,7 +301,7 @@ srv = await startServer({
     forDevice: (id) => {
       const exec = makeAdbExec(id);
       // freePort 保留的端口只有 releasePort 才放回，两个必须成对传
-      const webviews = createWebViews({ exec, fetchJson: defaultFetchJson, fetchVersion: defaultFetchVersion, freePort: findFreePort, releasePort });
+      const webviews = createWebViews({ exec, fetchJson: defaultFetchJson, fetchVersion: defaultFetchVersion, freePort: findFreePort, releasePort, tabVisibility: defaultTabVisibility });
       const reverses = createReverses(exec);
       // 网关自动重连过这台设备后，adb server 已经撤掉了它的 forward / reverse：忘掉旧记录，下次用到时重新建
       const off = adb.onReconnect(id, () => {

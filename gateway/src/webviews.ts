@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import net from "node:net";
 import type { WebViewPage } from "../../shared/protocol.ts";
 import { adb } from "./adb.ts";
@@ -69,6 +70,11 @@ type WebViewsDeps = {
    * 默认 [3000, 6000, 12000, 30000]。测试时注入短值。
    */
   backoffMs?: number[];
+  /**
+   * 问浏览器的一个标签页现在显示没有（document.visibilityState）；不回话（被系统回收的后台标签）返回 null。
+   * 不传时只能按 /json 的顺序猜。
+   */
+  tabVisibility?: (port: number, id: string) => Promise<"visible" | "hidden" | null>;
 };
 
 /** 从 socket 名提取 pid（webview_devtools_remote_<pid>；chrome_devtools_remote 无 pid）。 */
@@ -120,10 +126,12 @@ const FOREGROUND_TTL_MS = 10_000;
  * TODO: Phase 3 Task 1 — 在此处加口令和 Origin 校验，与 HTTP 代理层共用同一套机制。
  */
 export function createWebViews(deps: WebViewsDeps) {
-  const { exec, fetchJson, fetchVersion, freePort, releasePort } = deps;
+  const { exec, fetchJson, fetchVersion, freePort, releasePort, tabVisibility } = deps;
   const now = deps.now ?? Date.now;
   // 上次查到的前台 App；sig（socket 和各浏览器当前标签页）变了或过了 FOREGROUND_TTL_MS 再查
   let foreground: { pkg: string | null; at: number; sig: string } | null = null;
+  // 浏览器 socket → 上次问出来正在显示的标签页 id：它停在断点上时不回话，还当它是当前标签
+  const lastShown = new Map<string, string>();
   const BACKOFF_SCHEDULE = deps.backoffMs ?? [3000, 6000, 12000, 30000];
 
   // socket → 本机端口
@@ -258,8 +266,8 @@ export function createWebViews(deps: WebViewsDeps) {
       fetched.push({ socket, pid, pkg, items });
     }
 
-    // 浏览器：/json 按最近用过排序，在前台时第一个 page 就是正在看的标签页（Chrome 113 实测）。
-    // 浏览器的 socket 在后台也一直在、标签页的 /json 里没有 visible，所以有 page 标签页时才查前台 App
+    // 浏览器的 socket 在后台也一直在、标签页的 /json 里没有 visible，所以有 page 标签页时才查前台 App；
+    // 浏览器在前台时再逐个问标签页（下面的 shown）。sig 里的第一个标签页只是让列表变了时早点重查前台 App
     const firstTab = (items: any[]) => items.find((i) => (i.type ?? "page") === "page");
     const browsers = fetched.filter((f) => f.pid === undefined && firstTab(f.items));
     let fgPkg: string | null = null;
@@ -271,10 +279,25 @@ export function createWebViews(deps: WebViewsDeps) {
       fgPkg = foreground.pkg;
     }
 
+    // 在前台的浏览器：逐个标签页问显示没有。/json 的顺序不一定是最近用过的：Chrome 113 上实测第一个是很早打开的标签、
+    // 正在看的排在最后（2026-11-22，标签多、Chrome 重启过之后）。值是 null 表示问清楚了、没有标签在显示（比如开着标签切换器）
+    const shown = new Map<string, any | null>();
+    if (tabVisibility) {
+      await Promise.all(fetched.map(async ({ socket, pid, pkg, items }) => {
+        const port = socketToPort.get(socket);
+        if (pid !== undefined || pkg === undefined || pkg !== fgPkg || port === undefined) return;
+        const tabs = items.filter((i) => (i.type ?? "page") === "page");
+        const tab = await pickShownTab(tabs, (t) => tabVisibility(port, String(t.id ?? "")), lastShown.get(socket));
+        if (tab === undefined) return;
+        shown.set(socket, tab);
+        if (tab) lastShown.set(socket, String(tab.id ?? ""));
+      }));
+    }
+
     const pages: WebViewPage[] = [];
     for (const { socket, pid, pkg, items } of fetched) {
       const isBrowser = pid === undefined;
-      const activeTab = isBrowser && pkg !== undefined && pkg === fgPkg ? firstTab(items) : undefined;
+      const activeTab = isBrowser && pkg !== undefined && pkg === fgPkg ? (shown.has(socket) ? shown.get(socket) ?? undefined : firstTab(items)) : undefined;
       for (const item of items) {
         pages.push({
           socket,
@@ -411,6 +434,66 @@ export async function defaultFetchJson(port: number): Promise<any[]> {
   // 不设超时、不中途丢下：等多久由 list() 决定，连接留着等 App 回来或转发被移除（见 createWebViews 的 pendingJson）
   const res = await fetch(`http://127.0.0.1:${port}/json`);
   return await res.json();
+}
+
+/**
+ * 浏览器在前台时哪个标签页在显示：有一个回答 visible 就不等别的（被回收的标签要等满超时才算不回话）。
+ * 返回 null：都回答了 hidden，没有标签在显示。undefined：一个都没回话，交给调用方按老办法猜。
+ * 有的没回话、其余都是 hidden 时：上次在显示的那个没回话就还是它（停在断点上），否则取第一个没回话的
+ */
+export function pickShownTab<T extends { id?: unknown }>(tabs: T[], ask: (t: T) => Promise<"visible" | "hidden" | null>, last?: string): Promise<T | null | undefined> {
+  return new Promise((resolve) => {
+    if (!tabs.length) return resolve(undefined);
+    const answers: Array<"visible" | "hidden" | null> = new Array(tabs.length);
+    let left = tabs.length;
+    let settled = false;
+    tabs.forEach((t, i) => {
+      void ask(t).catch(() => null).then((v) => {
+        if (settled) return;
+        answers[i] = v;
+        if (v === "visible") {
+          settled = true;
+          return resolve(t);
+        }
+        if (--left) return;
+        settled = true;
+        const silent = tabs.filter((_, j) => answers[j] === null);
+        if (!silent.length) return resolve(null);
+        if (silent.length === tabs.length) return resolve(undefined);
+        resolve(silent.find((x) => String(x.id ?? "") === last) ?? silent[0]);
+      });
+    });
+  });
+}
+
+/** 问标签页可见性最多等多久：活着的标签几十毫秒就回，被回收的一直不回（2026-11-22 Chrome 113 实测）。 */
+const TAB_VISIBILITY_WAIT_MS = 800;
+
+/** 默认的 tabVisibility：连 ws://127.0.0.1:<port>/devtools/page/<id>，Runtime.evaluate document.visibilityState。 */
+export function defaultTabVisibility(port: number, id: string): Promise<"visible" | "hidden" | null> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/devtools/page/${encodeURIComponent(id)}`);
+    const done = (v: "visible" | "hidden" | null) => {
+      clearTimeout(timer);
+      ws.removeAllListeners();
+      ws.on("error", () => {});
+      ws.terminate();
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(null), TAB_VISIBILITY_WAIT_MS);
+    ws.on("open", () => ws.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression: "document.visibilityState", returnByValue: true } })));
+    ws.on("message", (data) => {
+      try {
+        const m = JSON.parse(String(data)) as { id?: number; result?: { result?: { value?: unknown } } };
+        if (m.id !== 1) return;
+        const v = m.result?.result?.value;
+        done(v === "visible" || v === "hidden" ? v : null);
+      } catch {
+        done(null);
+      }
+    });
+    ws.on("error", () => done(null));
+  });
 }
 
 /** 默认的 fetchVersion：GET http://127.0.0.1:<port>/json/version，超时 2 秒。 */

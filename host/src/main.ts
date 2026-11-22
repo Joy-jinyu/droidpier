@@ -18,7 +18,7 @@ import { parseTheme, THEMES } from "../../shared/theme.ts";
 import { registerTools } from "./webmcp.ts";
 import { gatewayBanner, gatewayBelow, shouldRequestUpdate, timeoutText, tooOldText, type GatewayBanner, type GatewayInfo, type UpdateReport } from "./gateway-update.ts";
 import type { LogFilter } from "../../shared/logcat.ts";
-import { type MumuInfo, GATEWAY_LEVEL, INSTALL_IDS, installCmd, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type HighlightBox, type InstallProgress, type DeviceCaps, type Licence, type Rotation } from "../../shared/protocol.ts";
+import { type IosSimInfo, isIosSimUdid, type MumuInfo, GATEWAY_LEVEL, INSTALL_IDS, installCmd, type AvdCatalog, type AvdInfo, type ClientMsg, type EnvItemId, type EnvReport, type HighlightBox, type InstallProgress, type DeviceCaps, type Licence, type Rotation } from "../../shared/protocol.ts";
 
 // 从这个功能级别起网关一定认 renameAvd、deleteAvd（shared/protocol.ts 的 GATEWAY_LEVEL）
 const AVD_EDIT_LEVEL = 1;
@@ -222,6 +222,7 @@ export async function createHost(player: Player) {
   // 装了 MuMu 但播放器没打开（网关的 mumu 消息带 appClosed）：页面给“打开 MuMu”
   let mumuAppClosed = false;
   const mumu = createPhoneList<MumuInfo>((list) => player.hostEvent("emu.mumu", { list, appClosed: list !== null && mumuAppClosed }));
+  const iosSims = createPhoneList<IosSimInfo>((list) => player.hostEvent("emu.iosSims", { list }));
   let avdWaiters: Array<(l: AvdInfo[]) => void> = [];
   const boots = new Map<string, { since: number; last: Boot }>();
   const refreshAvds = () => conn.control({ t: "avds" });
@@ -347,6 +348,7 @@ export async function createHost(player: Player) {
       mumuAppClosed = appClosed;
       mumu.onPhones(list);
     },
+    onIosSims: (list) => iosSims.onPhones(list),
     onLogcat: (lines, reset, dropped) => player.hostEvent("emu.logcat", { lines, reset, dropped }),
     onBoot: (b) => {
       const now = Date.now();
@@ -376,6 +378,7 @@ export async function createHost(player: Player) {
       uploads.disconnected();
       phones.onDisconnect();
       mumu.onDisconnect();
+      iosSims.onDisconnect();
       // 网关在更新后重启：留着“正在自动更新”，等它重新连上报新的级别
       if (updateReport?.state === "restarting") return;
       gateway = undefined;
@@ -926,6 +929,19 @@ export async function createHost(player: Player) {
         if (!Number.isInteger(index) || (index as number) < 0) throw new Error(`${name} 需要 index`);
         return ctl({ t: name === "emu.mumuOpen" ? "mumuOpen" : "mumuClose", index: index as number });
       }
+      // 侧栏 iOS 模拟器行上点了“启动”、确认了“关机”：状态变化随 iosSims 列表回来
+      if (name === "emu.iosSimOpen" || name === "emu.iosSimClose") {
+        const udid = (args as { udid?: unknown } | undefined)?.udid;
+        if (typeof udid !== "string" || !isIosSimUdid(udid)) throw new Error(`${name} 需要 udid`);
+        return ctl({ t: name === "emu.iosSimOpen" ? "iosSimOpen" : "iosSimClose", udid });
+      }
+      // 创建 iOS 模拟器对话框：目录、创建（参数网关再核一遍）。创建最久等 130 秒：网关里 simctl create 最多 60 秒，再加刷新列表
+      if (name === "emu.iosCatalog") return conn.request({ t: "iosCatalog" }, 30_000).then((r) => ({ catalog: r.catalog ?? null, error: r.error ?? null }));
+      if (name === "emu.createIosSim") {
+        const a = args as { name?: unknown; deviceType?: unknown; runtime?: unknown } | undefined;
+        if (typeof a?.name !== "string" || typeof a.deviceType !== "string" || typeof a.runtime !== "string") throw new Error("emu.createIosSim 需要 name、deviceType、runtime");
+        return conn.request({ t: "createIosSim", name: a.name, deviceType: a.deviceType, runtime: a.runtime }, 130_000).then((r) => ({ udid: r.udid ?? null, error: r.error ?? null }));
+      }
       if (name === "emu.stopAvd") {
         const target = needName(name, args);
         if (gateway !== undefined && gatewayBelow(gateway, AVD_STOP_LEVEL)) return stopOld(target);
@@ -936,7 +952,7 @@ export async function createHost(player: Player) {
       }
       if (name === "emu.status") {
         return {
-          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), painted, rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), mumuAppClosed: mumu.current() !== null && mumuAppClosed, boots: [...boots.values()].map((b) => b.last),
+          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), painted, rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), iosSims: iosSims.current(), mumuAppClosed: mumu.current() !== null && mumuAppClosed, boots: [...boots.values()].map((b) => b.last),
           env, installs, license, uploads: uploads.list(),
         };
       }

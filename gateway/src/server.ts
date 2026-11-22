@@ -14,6 +14,7 @@ import { createPeerCheck, type SocketsLookup } from "./peer.ts";
 import { DEV_SERVER_DOWN, navigateAndCheck, type CdpClient } from "./cdp.ts";
 import { normalizeTarget } from "../../shared/target-url.ts";
 import type { EmulatorSession } from "./emulator.ts";
+import type { IosInspector } from "./ios-inspector.ts";
 import type { LogcatSub } from "./logcat.ts";
 import type { LogFilter, LogLine } from "../../shared/logcat.ts";
 import type { StartJob } from "./lifecycle.ts";
@@ -41,6 +42,8 @@ import {
   type FrameHeader,
   type InstallProgress,
   type Licence,
+  type IosCatalog,
+  type IosSimInfo,
   type MumuInfo, type PhoneInfo,
   type ServerMsg,
   type UpdateState,
@@ -147,8 +150,28 @@ export type UpdateOps = {
 
 /** 网页模拟器所在路径，staticDir 的内容在这下面提供。 */
 const APP_PATH = "/app/";
+/** iOS 模拟器的 H5 调试界面（系统的 WebInspectorUI）在这下面提供，调试消息走它下面的 ws/<应用>/<页面>/<票据>。 */
+const WEBINSPECTOR_PATH = "/webinspector/";
+const WEBINSPECTOR_WS_RE = /^\/webinspector\/ws\/([^/]+)\/([^/]+)\/([^/]+)$/;
+/** 网关插进 Main.html 的替身（gateway/native/webinspector-host.js）对外的文件名。 */
+const WEBINSPECTOR_SHIM = "droidpier-host.js";
+
+/** iOS 页面的调试界面地址：网关自己提供的 WebInspectorUI，ws 连回网关，带命令表版本和系统版本（替身读这几个参数）。 */
+export function webInspectorUrl(port: number, page: { socket: string; id: string }, ticket: string, ios: { version: string | null; ios: string }): string {
+  const ws = `127.0.0.1:${port}${WEBINSPECTOR_PATH}ws/${encodeURIComponent(page.socket)}/${encodeURIComponent(page.id)}/${ticket}`;
+  const q = new URLSearchParams({ ws, ios: ios.ios });
+  if (ios.version) q.set("version", ios.version);
+  return `http://127.0.0.1:${port}${WEBINSPECTOR_PATH}Main.html?${q}`;
+}
 /** 手机上 adb 超时的说法：ADB_UNRESPONSIVE 是给模拟器的，会叫人去重启模拟器。 */
 const PHONE_ADB_UNRESPONSIVE = "手机的 adb 没有响应：重新插拔手机，或稍后再试";
+const NO_ADB = "iOS 模拟器暂不支持这个功能";
+/** 会话走不走 adb（H5 调试、日志、装 APK 都靠它）：只有 caps.adb 明确为 false 时不走（iOS 模拟器）。 */
+const viaAdb = (s: EmulatorSession) => s.caps.adb !== false;
+/** 有没有日志面板：走 adb 的设备都有，iOS 模拟器靠 caps.logs。 */
+const hasLogs = (s: EmulatorSession) => viaAdb(s) || s.caps.logs === true;
+/** 真机（走 adb 的 phone 会话）：断开后等它插回、自动重连。iOS 模拟器的 kind 也是 phone（同一条视频通路），但不算。 */
+const isPhone = (s: EmulatorSession) => s.kind === "phone" && viaAdb(s);
 
 /** 启动网关的 HTTP + WebSocket 服务，只监听 127.0.0.1。 */
 /** 页面连接的发送缓冲超过这么多，日志批次就先不发、只计数（plans/2026-11-16-real-device-pr5-logcat.md 取舍 7）。 */
@@ -167,6 +190,13 @@ export async function startServer(opts: {
   phones?: { list(): PhoneInfo[]; onChange(cb: (list: PhoneInfo[]) => void): void };
   /** MuMu 模拟器（gateway/src/mumu.ts）：list() 为 null 表示没装 MuMu，不发列表。 */
   mumu?: { list(): MumuInfo[] | null; appClosed(): boolean; onChange(cb: (list: MumuInfo[]) => void): void; open(index: number): Promise<void>; close(index: number): Promise<void>; launch(): Promise<void> };
+  /**
+   * iOS 模拟器的 H5 调试（gateway/src/ios-inspector.ts）：inspector 按 UDID 给出调试连接、命令表版本和系统版本；
+   * webInspectorDir 是系统 WebInspectorUI.framework 的 Resources，hostShim 是 gateway/native/webinspector-host.js。不传时 iOS 会话没有 H5 调试。
+   */
+  ios?: { inspector(udid: string): { inspector: IosInspector; version: string | null; ios: string } | null; webInspectorDir: string; hostShim: string };
+  /** iOS 模拟器（gateway/src/ios-sim.ts）：list() 为 null 表示没装 Xcode，不发列表；booted 认 use 里的 UDID。 */
+  iosSims?: { list(): IosSimInfo[] | null; onChange(cb: (list: IosSimInfo[]) => void): void; open(udid: string): Promise<void>; close(udid: string): Promise<void>; booted(udid: string): boolean; catalog?(): Promise<IosCatalog>; create?(name: string, deviceType: string, runtime: string): Promise<string> };
   debug?: DebugDeps;
   setup?: SetupOps;
   /** WebView 调试 socket → 本机转发端口；不传时用当前设备的 debug.webviews，都没有时 /devtools/ 连接一律 4404。 */
@@ -245,6 +275,44 @@ export async function startServer(opts: {
   };
   // 同一设备的并发 list 共用一次：两次同时跑会给同一个 socket 各建一个转发
   const listPages = (h: Debug) => (h.listing ??= h.d.webviews.list().finally(() => (h.listing = undefined)));
+  // iOS 模拟器会话的调试连接（不走 adb）；没配 opts.ios 或不是 iOS 会话时为 null
+  const iosFor = (s: EmulatorSession) => (!viaAdb(s) && opts.ios ? opts.ios.inspector(s.id) : null);
+  // 开着的 iOS 调试界面连接，按模拟器记：换设备、会话关掉时断开
+  const iosProxies = new Set<{ ws: WebSocket; udid: string }>();
+  const dropIosProxies = (keep?: string) => {
+    for (const p of [...iosProxies]) if (p.udid !== keep) p.ws.terminate();
+  };
+  // 可以嵌 iOS 调试界面的页面：Droidpier 的页面（公网页面和网关自己的页面），即 allowedOrigins
+  const webInspectorParents = () => opts.allowedOrigins;
+
+  /** 系统 WebInspectorUI 的文件：只在它的 Resources 目录里找；Main.html 里在 Main.js 前插入替身。 */
+  const serveWebInspector = async (rel: string, res: import("node:http").ServerResponse) => {
+    if (!opts.ios) return void res.writeHead(404).end();
+    try {
+      if (rel === WEBINSPECTOR_SHIM) {
+        res.writeHead(200, { "content-type": MIME[".js"], "cache-control": "no-store" }).end(await readFile(opts.ios.hostShim));
+        return;
+      }
+      const dir = resolve(opts.ios.webInspectorDir);
+      const file = resolve(join(dir, rel || "Main.html"));
+      if (!file.startsWith(dir + sep)) return void res.writeHead(404).end();
+      let body = await readFile(file);
+      if (file === join(dir, "Main.html")) {
+        const html = body.toString("utf8");
+        const anchor = '<script src="Main.js"></script>';
+        // 换了 macOS 版本 Main.html 的写法可能变：插不进去时界面打开也连不上，记下来好查
+        if (!html.includes(anchor)) log(`WebInspectorUI 的 Main.html 里没找到 ${anchor}，iOS 调试界面会连不上`);
+        body = Buffer.from(html.replace(anchor, `<script src="${WEBINSPECTOR_SHIM}"></script>\n    ${anchor}`));
+      }
+      res.writeHead(200, {
+        "content-type": MIME[extname(file)] ?? "application/octet-stream",
+        // 界面跑在网关自己的源上：只许它连回网关、只许 Droidpier 的页面嵌它
+        "content-security-policy": `connect-src 'self'; frame-ancestors ${webInspectorParents().join(" ")}`,
+      }).end(body);
+    } catch {
+      res.writeHead(404).end();
+    }
+  };
 
   /** 替本地页面取 DevTools 前端文件（gateway/src/devtools-proxy.ts 的 localFrontendUrl）：只取 appspot 上带版本号的文件，原样转回。 */
   const serveFrontend = async (rel: string, res: import("node:http").ServerResponse) => {
@@ -308,6 +376,10 @@ export async function startServer(opts: {
       await serveFrontend(rel.slice(LOCAL_FRONTEND_PATH.length), res);
       return;
     }
+    if (rel.startsWith(WEBINSPECTOR_PATH)) {
+      await serveWebInspector(rel.slice(WEBINSPECTOR_PATH.length), res);
+      return;
+    }
     if (!rel.startsWith(APP_PATH)) {
       res.writeHead(404).end();
       return;
@@ -366,6 +438,8 @@ export async function startServer(opts: {
       socket.destroy();
       return;
     }
+    const iosTarget = WEBINSPECTOR_WS_RE.exec(path);
+    if (iosTarget) return upgradeWebInspector(req, socket, head, iosTarget);
     const target = parseDevtoolsPath(path);
     const allowed = target ? [DEVTOOLS_FRONTEND_ORIGIN, ...opts.allowedOrigins] : opts.allowedOrigins;
     if (!checkUpgrade(req.headers.origin, allowed)) {
@@ -402,6 +476,46 @@ export async function startServer(opts: {
       if (owner && conns.has(owner)) dt = owner.devtoolsOpened(session, target.socket, target.pageId, ws);
     });
   };
+  // iOS 调试界面的消息通道：界面由网关自己提供，Origin 只能是网关本机地址；同样要一次性票据
+  const upgradeWebInspector = (req: IncomingMessage, socket: Duplex, head: Buffer, m: RegExpExecArray) => {
+    if (!checkUpgrade(req.headers.origin, [`http://127.0.0.1:${gatewayPort}`, `http://localhost:${gatewayPort}`])) {
+      log(`拒绝 Origin：${req.headers.origin ?? "<无>"}`);
+      wss.handleUpgrade(req, socket, head, (ws) => ws.close(CLOSE_ORIGIN, "origin not allowed"));
+      return;
+    }
+    let appId: string, pageId: string, ticket: string;
+    try {
+      [appId, pageId, ticket] = [decodeURIComponent(m[1]), decodeURIComponent(m[2]), decodeURIComponent(m[3])];
+    } catch {
+      socket.destroy();
+      return;
+    }
+    devtoolsWss.handleUpgrade(req, socket, head, (ws) => {
+      const owner = ticketOwners.get(ticket);
+      ticketOwners.delete(ticket);
+      if (!tickets.take(ticket, appId, pageId)) return ws.close(CLOSE_BAD_TOKEN, "bad devtools ticket");
+      const ios = owner?.session ? iosFor(owner.session) : null;
+      if (!ios) return ws.close(CLOSE_UNKNOWN_SOCKET, "no ios simulator");
+      const udid = owner!.session!.id;
+      ios.inspector.open(appId, pageId).then((ch) => {
+        if (ws.readyState !== ws.OPEN) return ch.close();
+        // 换设备、模拟器会话关掉时断开（同 Android 的 dropDebug）
+        iosProxies.add({ ws, udid });
+        ws.on("close", () => {
+          for (const p of iosProxies) if (p.ws === ws) iosProxies.delete(p);
+        });
+        ch.onMessage((msg) => {
+          if (ws.readyState === ws.OPEN) ws.send(msg);
+        });
+        ch.onClose(() => ws.close());
+        ws.on("message", (d) => ch.send(d.toString()));
+        ws.on("close", () => ch.close());
+      }, (e: Error) => {
+        log(`打开 iOS 调试通道失败：${e.message}`);
+        ws.close(CLOSE_UNKNOWN_SOCKET, "inspector unavailable");
+      });
+    });
+  };
   // adb 无响应统一成一句话并带 code，页面据此给出“重启模拟器”；其他失败照旧加前缀
   const adbFail = (prefix: string, e: unknown): { error: string; code?: "adb-unresponsive" } =>
     e instanceof AdbUnresponsive ? { error: e.message, code: "adb-unresponsive" } : { error: `${prefix}${(e as Error).message}` };
@@ -420,6 +534,7 @@ export async function startServer(opts: {
   // 用户再点模拟器、或开一台 AVD 时清掉
   let pinned: string | null = null;
   const usablePhone = (name: string) => opts.phones?.list().some((p) => p.id === name && p.state === "device") ?? false;
+  const usableIosSim = (name: string) => opts.iosSims?.booted(name) ?? false;
   const liveSession = (id: string) => [...conns].find((c) => c.session?.id === id)?.session;
   // 换设备一次只做一件：用户 use、开机后接管、真机插回自动重连都排在这条链上；pinned 也在链里改，
   // 否则自动重连可能在用户刚切到模拟器之后又连回真机，session-cache 会把用户的模拟器会话关掉
@@ -432,7 +547,8 @@ export async function startServer(opts: {
   /** 换到这台设备并更新 pinned（真机记下 id，模拟器清掉）。 */
   const useDevice = (name: string) => serially(async () => {
     const s = await opts.avd!.use(name);
-    if (s) pinned = s.kind === "phone" ? s.id : null;
+    // iOS 模拟器关机后不会自己回来，不按真机那样等它插回
+    if (s) pinned = isPhone(s) ? s.id : null;
     return s;
   });
   let reconnecting = false;
@@ -457,10 +573,12 @@ export async function startServer(opts: {
   });
   const mumuMsg = (list: MumuInfo[]): ServerMsg => ({ t: "mumu", list, ...(opts.mumu?.appClosed() ? { appClosed: true as const } : {}) });
   opts.mumu?.onChange((list) => broadcast(mumuMsg(list)));
+  opts.iosSims?.onChange((list) => broadcast({ t: "iosSims", list }));
   const booting = () => [...jobs].some((j) => j.progress === "spawning" || j.progress === "booting");
   const sendBoot = (j: StartJob) => broadcast({ t: "boot", name: j.name, progress: j.progress, ...(j.error ? { error: j.error } : {}) });
   const switchTo = (s: EmulatorSession) => {
     if (debug && debug.id !== s.id) dropDebug();
+    dropIosProxies(s.id);
     for (const c of live()) c.attach(s);
   };
   // 会话退出：解绑它的连接并告知页面，连接保持打开，等下一台出现
@@ -480,10 +598,11 @@ export async function startServer(opts: {
     });
     s.onClosed(() => {
       dropDebug(s.id);
+      for (const p of [...iosProxies]) if (p.udid === s.id) p.ws.terminate();
       for (const c of conns) {
         if (c.session !== s) continue;
         c.detach();
-        send(c.ws, { t: "status", state: isRebooting(s) ? "rebooting" : s.kind === "phone" ? "phone-closed" : "emulator-closed" });
+        send(c.ws, { t: "status", state: isRebooting(s) ? "rebooting" : isPhone(s) ? "phone-closed" : "emulator-closed" });
       }
     });
   };
@@ -798,7 +917,7 @@ export async function startServer(opts: {
       logSub?.close();
       logSub = undefined;
       const s = conn.session;
-      if (!logFilter || !s || !opts.logcat) return;
+      if (!logFilter || !s || !opts.logcat || !hasLogs(s)) return;
       logSub = opts.logcat.subscribe(s.id, logFilter, (lines, reset) => {
         // 页面跟不上时这批不发，下一批告诉它省略了多少行（plans/2026-11-16-real-device-pr5-logcat.md 取舍 7）
         if (!reset && ws.bufferedAmount > LOG_BACKLOG_BYTES) {
@@ -832,8 +951,17 @@ export async function startServer(opts: {
     // 调试请求不进输入队列、不阻塞消息处理：navigate 最长要 10 秒
     const webviews = async (rid: number) => {
       const s = conn.session;
+      // 没配 Android 的调试（debug）也可能有 iOS 的（ios）：先看会话是哪种
+      if (!s) return send(ws, { t: "webviews", rid, list: [], ...(opts.debug || opts.ios ? { error: "没有连接设备" } : {}) });
+      if (!viaAdb(s)) {
+        const ios = iosFor(s);
+        if (!ios) return send(ws, { t: "webviews", rid, list: [], error: NO_ADB });
+        return ios.inspector.list().then(
+          (list) => send(ws, { t: "webviews", rid, list }),
+          (e: Error) => send(ws, { t: "webviews", rid, list: [], error: `读取 iOS 页面列表失败：${e.message}` }),
+        );
+      }
       if (!opts.debug) return send(ws, { t: "webviews", rid, list: [] });
-      if (!s) return send(ws, { t: "webviews", rid, list: [], error: "没有连接设备" });
       if (isRebooting(s)) return send(ws, { t: "webviews", rid, list: [], error: REBOOTING });
       try {
         send(ws, { t: "webviews", rid, list: await listPages(debugFor(s.id)) });
@@ -843,7 +971,13 @@ export async function startServer(opts: {
     };
     const findPage = async (socket: string, id: string) => {
       const s = conn.session;
-      if (!opts.debug || !s) return null;
+      if (!s) return null;
+      const ios = iosFor(s);
+      if (ios) {
+        const page = (await ios.inspector.list()).find((p) => p.socket === socket && p.id === id);
+        return page ? { h: null, page, ios } : null;
+      }
+      if (!opts.debug || !viaAdb(s)) return null;
       const h = debugFor(s.id);
       const page = (await listPages(h)).find((p) => p.socket === socket && p.id === id);
       return page ? { h, page } : null;
@@ -863,8 +997,9 @@ export async function startServer(opts: {
       // 没用掉的票据 60 秒后自己过期，这里只防表无限长
       if (ticketOwners.size > 32) ticketOwners.delete(ticketOwners.keys().next().value!);
       ticketOwners.set(ticket, conn);
-      const appspot = inspectUrl(page, gatewayPort, ticket);
-      const url = appspot && localPage ? localFrontendUrl(appspot, gatewayPort) : appspot;
+      // iOS：网关自己提供的 WebKit 调试界面；Android：appspot 的前端，本地页面里换成网关代理的同一份
+      const appspot = "ios" in found ? undefined : inspectUrl(page, gatewayPort, ticket);
+      const url = "ios" in found ? webInspectorUrl(gatewayPort, page, ticket, found.ios) : appspot && localPage ? localFrontendUrl(appspot, gatewayPort) : appspot;
       if (url) send(ws, { t: "inspect", rid, url });
       else send(ws, { t: "inspect", rid, hint: `在 chrome://inspect 里找：${page.pkg ?? page.socket} / ${page.title}` });
     };
@@ -899,6 +1034,8 @@ export async function startServer(opts: {
         }
         if (!found) return fail("页面已关闭");
         const { h } = found;
+        // 「指向本地开发服务器」靠 adb reverse 和 CDP，iOS 模拟器没有
+        if (!h) return fail(NO_ADB);
         const port = h.d.webviews.portOf(socket);
         // 设备已切走：旧设备的 reverse 已收掉，不能再建
         if (h.disposed || port === undefined) return fail("页面已关闭");
@@ -976,6 +1113,7 @@ export async function startServer(opts: {
       if (!files) return fail("这个网关不支持传文件");
       const s = conn.session;
       if (!s) return fail("没有连接设备");
+      if (!viaAdb(s)) return fail(NO_ADB);
       if (isRebooting(s)) return fail(REBOOTING);
       const name = sanitizeFileName(m.name);
       if (!name) return fail("文件名不合法");
@@ -1114,7 +1252,7 @@ export async function startServer(opts: {
       }
       log(`${s.id} 重启结束：${result}${error ? `（${error}）` : ""}`);
       // 没接上的页面（包括重启期间新开的）都离开「重启中」；重启结果只发给点了重启时就在的页面
-      for (const c of live()) if (!c.session) send(c.ws, { t: "status", state: s.kind === "phone" ? "phone-closed" : "emulator-closed" });
+      for (const c of live()) if (!c.session) send(c.ws, { t: "status", state: isPhone(s) ? "phone-closed" : "emulator-closed" });
       for (const c of back) send(c.ws, { t: "reboot", result, ...(error ? { error } : {}) });
       // 没连回来的（失败、两分钟没开机完）交还给插回重连
       reconnectPinned();
@@ -1149,6 +1287,8 @@ export async function startServer(opts: {
         if (opts.phones) send(ws, { t: "phones", list: opts.phones.list() });
         const mumuList = opts.mumu?.list();
         if (mumuList) send(ws, mumuMsg(mumuList));
+        const iosList = opts.iosSims?.list();
+        if (iosList) send(ws, { t: "iosSims", list: iosList });
         if (pinned) {
           // 掉线期间新开的页面不能被 getSession() 接到模拟器上
           const s = liveSession(pinned);
@@ -1188,6 +1328,8 @@ export async function startServer(opts: {
           enqueue("touch", (s) => s.touch(m.x, m.y, m.down));
           break;
         case "key":
+          // 不收键盘的设备（iOS 模拟器）：页面点过画面后每个键都会发来，逐个报错只会刷屏，直接丢掉
+          if (conn.session?.caps.input === false) break;
           // 模拟器不接受按键时页面上看起来就是“点了没反应”：把原因告诉页面，日志照旧由 enqueue 写
           enqueue("key", (s) => s.key(m.key, m.eventType).catch((e: Error) => {
             send(ws, { t: "error", message: `按键没有发出：${e.message}` });
@@ -1195,6 +1337,7 @@ export async function startServer(opts: {
           }));
           break;
         case "text":
+          if (conn.session?.caps.input === false) break;
           enqueue("text", (s) => s.text(m.text));
           break;
         case "clip":
@@ -1265,8 +1408,8 @@ export async function startServer(opts: {
           break;
         case "use": {
           if (!opts.avd) break;
-          // 真机 id 是 adb 序列号，不按 AVD 名的规则检查（main.ts 的 discover 认得它）
-          const bad = usablePhone(m.name) ? null : avdNameError(m.name, []);
+          // 真机 id 是 adb 序列号、iOS 模拟器是 UDID，不按 AVD 名的规则检查（main.ts 的 discover 认得它们）
+          const bad = usablePhone(m.name) || usableIosSim(m.name) ? null : avdNameError(m.name, []);
           if (bad) {
             send(ws, { t: "error", message: `设备名不对：${bad}` });
             break;
@@ -1343,7 +1486,7 @@ export async function startServer(opts: {
           break;
         case "logcatApps": {
           const s = conn.session;
-          const r = s && opts.apps ? await opts.apps(s.id).catch(() => null) : null;
+          const r = s && hasLogs(s) && opts.apps ? await opts.apps(s.id).catch(() => null) : null;
           send(ws, { t: "logcatApps", rid: m.rid, foreground: r?.foreground ?? null, apps: r?.apps ?? [] });
           break;
         }
@@ -1351,6 +1494,7 @@ export async function startServer(opts: {
           const s = conn.session;
           if (!opts.logcatRead) send(ws, { t: "logcatRead", rid: m.rid, lines: [], error: "网关不支持读日志" });
           else if (!s) send(ws, { t: "logcatRead", rid: m.rid, lines: [], error: "没有连接设备" });
+          else if (!hasLogs(s)) send(ws, { t: "logcatRead", rid: m.rid, lines: [], error: NO_ADB });
           else {
             await opts.logcatRead(s.id, m.filter, m.limit).then(
               (lines) => send(ws, { t: "logcatRead", rid: m.rid, lines }),
@@ -1369,6 +1513,33 @@ export async function startServer(opts: {
             },
           );
           break;
+        case "iosCatalog":
+          if (!opts.iosSims?.catalog) send(ws, { t: "iosCatalog", rid: m.rid, error: "网关不支持创建 iOS 模拟器" });
+          else await opts.iosSims.catalog().then(
+            (catalog) => send(ws, { t: "iosCatalog", rid: m.rid, catalog }),
+            (e: Error) => send(ws, { t: "iosCatalog", rid: m.rid, error: `读不到 iOS 系统版本：${e.message.split("\n")[0]}` }),
+          );
+          break;
+        case "createIosSim":
+          if (!opts.iosSims?.create) send(ws, { t: "createIosSim", rid: m.rid, error: "网关不支持创建 iOS 模拟器" });
+          else await opts.iosSims.create(m.name, m.deviceType, m.runtime).then(
+            (udid) => send(ws, { t: "createIosSim", rid: m.rid, udid }),
+            (e: Error) => send(ws, { t: "createIosSim", rid: m.rid, error: `创建失败：${e.message.split("\n")[0]}` }),
+          );
+          break;
+        case "iosSimOpen":
+        case "iosSimClose": {
+          if (!opts.iosSims) break;
+          const verb = m.t === "iosSimOpen" ? "开机" : "关机";
+          await (m.t === "iosSimOpen" ? opts.iosSims.open(m.udid) : opts.iosSims.close(m.udid)).then(
+            () => log(`iOS 模拟器 ${m.udid} 已${verb}`),
+            (e: Error) => {
+              log(`iOS 模拟器 ${m.udid} ${verb}失败：${e.message}`);
+              send(ws, { t: "error", message: `iOS 模拟器${verb}失败：${e.message}` });
+            },
+          );
+          break;
+        }
         case "mumuOpen":
         case "mumuClose": {
           if (!opts.mumu) break;

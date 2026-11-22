@@ -10,6 +10,19 @@ export function sdkRoot(): string {
   return process.env.ANDROID_HOME ?? join(homedir(), "Library/Android/sdk");
 }
 
+/** iOS 模拟器画面程序（gateway/native/simhelper.m）编译后放这里，按源码哈希命名（gateway/src/ios-sim.ts）。 */
+export function iosHelperCacheDir(home = homedir()): string {
+  return join(home, "Library/Caches/Droidpier");
+}
+
+/** Safari 开发者工具的界面（WebKit 的 WebInspectorUI）：iOS 模拟器的 H5 调试直接用系统里这份，不随网关打包。 */
+export const WEB_INSPECTOR_DIR = "/System/Library/PrivateFrameworks/WebInspectorUI.framework/Resources";
+
+/** 默认设备集里一台 iOS 模拟器的 device.plist（simctl 不带 --set 时用的那套）。 */
+export function iosSimDevicePlist(udid: string, home = homedir()): string {
+  return join(home, "Library/Developer/CoreSimulator/Devices", udid, "device.plist");
+}
+
 /** 模拟器发现文件所在目录（macOS）。 */
 export function discoveryDir(): string {
   return join(homedir(), "Library/Caches/TemporaryItems/avd/running");

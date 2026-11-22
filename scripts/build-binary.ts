@@ -15,6 +15,8 @@ const dist = join(root, "dist");
 const stage = join(dist, "stage", basename(ui));
 // 随网关发布的 scrcpy-server（真机取画面用），运行时在 import.meta.dir/scrcpy 下（gateway/src/scrcpy-server.ts）
 const scrcpyStage = join(dist, "stage", "scrcpy");
+// iOS 模拟器画面程序的源码（第一次用时拿本机 Xcode 编译），运行时在 import.meta.dir/native 下（gateway/src/ios-sim.ts）
+const nativeStage = join(dist, "stage", "native");
 const name = "droidpier-darwin-arm64";
 const out = join(dist, name);
 // Cloudflare Pages 单个文件上限 25 MiB
@@ -34,12 +36,13 @@ await cp(ui, stage, { recursive: true, filter: (src) => !/\.(br|gz)$/.test(src) 
 // 页面产物（nsh 的 wasm）里编译进了本机 home 路径；先抹掉再嵌入，build-pages 也会对 /app/ 做同样处理
 for (const f of await scrubDir(stage, homedir())) console.log(`抹掉本机路径：${f}`);
 await cp(join(root, "gateway/vendor/scrcpy"), scrcpyStage, { recursive: true });
+await cp(join(root, "gateway/native"), nativeStage, { recursive: true });
 
 const version = new Date().toISOString();
 // --asset 嵌入的目录在运行时位于 import.meta.dir/<目录名>，main.ts 按这个路径找页面
 const r = await Bun.build({
   entrypoints: [join(root, "gateway/src/main.ts")],
-  compile: { target: "bun-darwin-arm64", outfile: out, assets: [stage, scrcpyStage] },
+  compile: { target: "bun-darwin-arm64", outfile: out, assets: [stage, scrcpyStage, nativeStage] },
   minify: true,
   // 网关版本 = 构建时间，/healthz 报出去，另一个 droidpier 启动时按它比新旧（gateway/src/already-running.ts）；
   // 也写进更新清单，后台网关只换比自己新的（gateway/src/updater.ts）。公网页面的来源见 gateway/src/auth.ts 的 PUBLIC_ORIGIN

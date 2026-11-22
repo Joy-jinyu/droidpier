@@ -33,3 +33,12 @@ test("isDevtoolsSrc：网关自己提供的页面里，也认经网关代理的�
   assert.equal(isDevtoolsSrc(local.replace("/devtools-frontend/", "/other/"), "7306"), false);
   assert.equal(isDevtoolsSrc(local.replace("http://127.0.0.1:7306", "http://evil.test"), "7306"), false);
 });
+
+test("isDevtoolsSrc：也认网关自己提供的 iOS WebKit 调试界面，ws 必须连回同一个网关的 /webinspector/ws/<应用>/<页面>/<票据>", () => {
+  const ok = "http://127.0.0.1:7300/webinspector/Main.html?ws=127.0.0.1%3A7300%2Fwebinspector%2Fws%2FPID%253A1%2F1%2Ftk&ios=27.0&version=27.0";
+  assert.equal(isDevtoolsSrc(ok, "7300"), true);
+  assert.equal(isDevtoolsSrc(ok, "7301"), false);
+  assert.equal(isDevtoolsSrc(ok.replace("Main.html", "Other.html"), "7300"), false);
+  assert.equal(isDevtoolsSrc("http://evil.test/webinspector/Main.html?ws=127.0.0.1:7300/webinspector/ws/a/b/c", "7300"), false);
+  assert.equal(isDevtoolsSrc("http://127.0.0.1:7300/webinspector/Main.html?ws=127.0.0.1:7300/devtools/a/b/c", "7300"), false);
+});

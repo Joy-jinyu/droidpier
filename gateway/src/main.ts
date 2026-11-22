@@ -6,8 +6,9 @@ import { startServer } from "./server.ts";
 import { deleteAvd, listAvds, renameAvd } from "./avd.ts";
 import { startAvd, stopAvd } from "./lifecycle.ts";
 import { cachedSession } from "./session-cache.ts";
-import { avdHome, serviceLogPath, discoveryDir, emulatorBin, openBrowser, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
-import { existsSync } from "node:fs";
+import { avdHome, serviceLogPath, discoveryDir, emulatorBin, iosHelperCacheDir, iosSimDevicePlist, openBrowser, WEB_INSPECTOR_DIR, sdkRoot, SYS_IMG_MANIFEST_URL } from "./platform.ts";
+import { existsSync, readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { checkEnv, realEnvDeps } from "./setup.ts";
 import { cleanStaleInstallTmp, createInstaller, fetchWithIdle, realInstallerDeps, requireRepoUrl } from "./installer.ts";
@@ -18,9 +19,13 @@ import { createLogcatHub, dumpLogcat, parseApps, readLogcat } from "./logcat.ts"
 import type { LogFilter } from "../../shared/logcat.ts";
 import { createReverses } from "./reverse.ts";
 import { connectCdp } from "./cdp.ts";
-import { adb, emulatorId, killAdbChildren } from "./adb.ts";
+import { adb, emulatorId, killAdbChildren, streamAdb } from "./adb.ts";
+import { iosLogLines, iosLogStream, parseLaunchctlApps } from "./ios-log.ts";
+import { isIosSimUdid } from "../../shared/protocol.ts";
 import { turnOffAutoPrivateDns } from "./private-dns.ts";
 import { createPhones } from "./phones.ts";
+import { connectIosSim, createHelperSpawner, createIosSims, hasHomeButton, helperSourcePath, nativeAssetPath, simctl, simctlDeviceOps } from "./ios-sim.ts";
+import { createIosInspector, legacyProtocolVersion, type IosInspector } from "./ios-inspector.ts";
 import { execFile } from "node:child_process";
 import { createMumu, MUMU_APP, MUMU_TOOL, mumuInstalled, probePort } from "./mumu.ts";
 import { connectPhone, type PhoneDeps } from "./phone-session.ts";
@@ -159,21 +164,28 @@ let last: EmulatorSession | null = null;
 // 真机列表：discover 要靠它认出真机 id，所以先建
 const phones = createPhones({ stream: adb.stream, exec: adb.device });
 
+// iOS 模拟器里运行中的 App（launchctl list），日志面板的 App 下拉和按 App 过滤都用它
+const iosApps = (udid: string) => simctl(["spawn", udid, "launchctl", "list"]).then(parseLaunchctlApps, () => []);
 // pidof 在 App 没运行时返回码非零，当作没有 pid
 const logcatPidof = (id: string, pkg: string) =>
-  adb.device(id)(["shell", "pidof", pkg]).then((out) => out.trim().split(/\s+/).filter(Boolean).map(Number), () => [] as number[]);
-// 日志面板：每台设备一个 adb logcat，有页面订阅才运行（gateway/src/logcat.ts）
+  isIosSimUdid(id)
+    ? iosApps(id).then((apps) => apps.filter((a) => a.bundle === pkg).map((a) => a.pid))
+    : adb.device(id)(["shell", "pidof", pkg]).then((out) => out.trim().split(/\s+/).filter(Boolean).map(Number), () => [] as number[]);
+// 日志面板：每台设备一个 adb logcat（iOS 模拟器是 log stream），有页面订阅才运行（gateway/src/logcat.ts）
 const logcat = createLogcatHub({
-  stream: (id, h) => adb.stream(["-s", id, "logcat", "-v", "threadtime", "-T", "500"], h),
+  stream: (id, h) => (isIosSimUdid(id) ? iosLogStream(streamAdb, id, h) : adb.stream(["-s", id, "logcat", "-v", "threadtime", "-T", "500"], h)),
   pidof: logcatPidof,
   log: note,
 });
+// iOS 模拟器读最近 30 秒：ndjson 很啰嗦，2 分钟就有约 96 MB，超过 simctl 的 64 MB 输出上限（2026-11-22 实测）
+const iosLogDump = (udid: string) =>
+  simctl(["spawn", udid, "log", "show", "--last", "30s", "--info", "--style", "ndjson"]).then((out) => out.split("\n").flatMap(iosLogLines).join("\n"));
 const logcatRead = async (id: string, f: LogFilter, limit: number) => {
-  const dump = await dumpLogcat((n) => adb.device(id)(["logcat", "-d", "-v", "threadtime", "-t", String(n)]));
+  const dump = isIosSimUdid(id) ? await iosLogDump(id) : await dumpLogcat((n) => adb.device(id)(["logcat", "-d", "-v", "threadtime", "-t", String(n)]));
   const pids = f.pkg === null ? [] : await logcatPidof(id, f.pkg);
   return readLogcat(dump, pids, f, limit);
 };
-const apps = async (id: string) => ({
+const apps = async (id: string) => isIosSimUdid(id) ? { foreground: null, apps: [...new Set((await iosApps(id)).map((a) => a.bundle))].sort() } : ({
   foreground: await adb.device(id)(FOREGROUND_CMD).then(parseResumedPkg, () => null),
   apps: await adb.device(id)(["shell", "ps", "-A", "-o", "USER,NAME"]).then(parseApps, () => []),
 });
@@ -192,6 +204,51 @@ const mumu = createMumu({
   log: note,
 });
 mumu.start();
+// iOS 模拟器：读设备列表、开关机（gateway/src/ios-sim.ts）；没装 Xcode 时列表一直读不到，页面不显示这一组
+const iosSims = createIosSims({ simctl, devicePlist: (udid) => readFile(iosSimDevicePlist(udid), "utf8"), log: note });
+// 画面程序不知道模拟器关没关机，停在最后一帧一直跑：列表里这台不再是开机状态时关掉会话，页面才知道它没了
+iosSims.onChange(() => {
+  if (last && last.caps.adb === false && !iosSims.booted(last.id)) last.close();
+  for (const [udid, e] of iosInspectors) {
+    if (iosSims.booted(udid)) continue;
+    e.inspector.close();
+    iosInspectors.delete(udid);
+  }
+});
+// iOS 模拟器的 H5 调试：每台开着的模拟器一条到 webinspectord_sim 的连接（gateway/src/ios-inspector.ts），用到时才建
+const iosInspectors = new Map<string, { inspector: IosInspector; version: string | null; ios: string }>();
+const legacyVersions = (() => {
+  try {
+    return readdirSync(join(WEB_INSPECTOR_DIR, "Protocol/Legacy/iOS"));
+  } catch {
+    return [];
+  }
+})();
+const iosInspectorFor = (udid: string) => {
+  if (!iosSims.booted(udid) || !existsSync(WEB_INSPECTOR_DIR)) return null;
+  let e = iosInspectors.get(udid);
+  if (!e) {
+    const runtime = iosSims.list()?.find((s) => s.udid === udid)?.runtime ?? "";
+    const inspector = createIosInspector({
+      // 每台模拟器的调试 socket 不同，路径只能问模拟器里的 launchd
+      connect: async () => {
+        const path = (await simctl(["spawn", udid, "launchctl", "getenv", "RWI_LISTEN_SOCKET"])).trim();
+        if (!path) throw new Error("模拟器里没有 webinspectord（RWI_LISTEN_SOCKET 为空）");
+        return await new Promise<net.Socket>((resolve, reject) => {
+          const s = net.connect(path);
+          s.once("connect", () => resolve(s));
+          s.once("error", reject);
+        });
+      },
+      log: note,
+    });
+    e = { inspector, version: legacyProtocolVersion(runtime, legacyVersions), ios: runtime.replace(/^iOS /, "") };
+    iosInspectors.set(udid, e);
+  }
+  return e;
+};
+iosSims.start();
+const spawnSimHelper = createHelperSpawner({ source: helperSourcePath(STANDALONE), cacheDir: iosHelperCacheDir(), log: note });
 
 /** 真机会话用到的 adb 操作，按设备 id 绑定。 */
 const phoneDeps = (id: string): PhoneDeps => ({
@@ -214,6 +271,15 @@ const phoneDeps = (id: string): PhoneDeps => ({
 });
 
 async function discover(avdName?: string): Promise<EmulatorSession | null> {
+  // iOS 模拟器：use 带来的是 UDID；连不上时原因抛给 use
+  if (avdName && iosSims.booted(avdName)) {
+    const name = iosSims.list()?.find((x) => x.udid === avdName)?.name ?? avdName;
+    const s = await connectIosSim(avdName, name, { spawnHelper: spawnSimHelper, ...simctlDeviceOps(avdName), homeButton: hasHomeButton(iosSims.deviceType(avdName)), log: note });
+    last = s;
+    note(`已连接 iOS 模拟器 ${name}（${s.device.width}x${s.device.height}）`);
+    s.onClosed(() => note(`iOS 模拟器 ${name} 已断开`));
+    return s;
+  }
   // 真机：连不上时把原因抛给 use，页面能看到（模拟器那边吞成 null 是因为 ticker 会反复发现）
   if (avdName && phones.list().some((p) => p.id === avdName && p.state === "device")) {
     const s = await connectPhone(avdName, phoneDeps(avdName));
@@ -271,6 +337,8 @@ srv = await startServer({
   port,
   phones,
   mumu,
+  iosSims,
+  ios: { inspector: iosInspectorFor, webInspectorDir: WEB_INSPECTOR_DIR, hostShim: nativeAssetPath(STANDALONE, "webinspector-host.js") },
   logcat,
   apps,
   logcatRead,
@@ -345,6 +413,7 @@ const cleanup = () => (cleaning ??= (async () => {
   // 结束 adb track-devices，不留孤儿进程
   phones.stop();
   mumu.stop();
+  iosSims.stop();
   await cleanupAll({
     // 中止进行中的下载，等它删掉临时目录
     stopUpdater: updater ? () => updater.stop() : undefined,

@@ -14,7 +14,7 @@ const SITE_CSP =
 /** 模拟器页面的 CSP：connect-src 的本机列表照抄 nsh 页面自己的 <meta>，其余是它在 Chrome 里实际需要的最小集合 */
 const LOCAL = "http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*";
 const APP_CSP =
-  `default-src 'self'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ${LOCAL}; frame-src https://chrome-devtools-frontend.appspot.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`;
+  `default-src 'self'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ${LOCAL}; frame-src https://chrome-devtools-frontend.appspot.com http://127.0.0.1:* http://localhost:*; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`;
 
 const rules = parseHeaders(readFileSync(join(siteDir, "public", "_headers"), "utf-8"));
 

@@ -26,6 +26,10 @@ gateway/src/     The gateway (runs on Node 22.6+ directly from TypeScript; bundl
   session-cache.ts The current session, rediscovered after it exits
   sdk.ts           gRPC client loaded from the SDK's emulator_controller.proto (no generated code is committed)
   adb.ts           adb calls with timeouts and a per-device queue; AdbUnresponsive
+  ios-sim.ts       iOS Simulator: simctl list / boot / shutdown, and a session whose screen and touch come from
+                   native/simhelper.m (compiled with the user's Xcode on first use, private CoreSimulator /
+                   SimulatorKit APIs); ios-inspector.ts + bplist.ts: H5 debugging through the simulator's
+                   webinspectord_sim, shown in the system's WebInspectorUI (served under /webinspector/)
   webviews.ts, cdp.ts, devtools-proxy.ts, reverse.ts   H5 debugging: list WebView pages, drive them over CDP,
                    proxy the DevTools frontend, adb reverse to a local dev server
   setup.ts, installer.ts, catalog.ts   First-run environment check, SDK installs, device models and system images

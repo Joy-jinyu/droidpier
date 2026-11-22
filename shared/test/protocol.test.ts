@@ -214,7 +214,16 @@ test("parseClientMsg：logcatRead 校验 rid、filter、limit", () => {
   assert.equal(parseClientMsg(JSON.stringify({ t: "logcatRead", rid: 1, filter: { pkg: "a b", level: "E", text: "" }, limit: 5 })), null);
 });
 
-test("GATEWAY_LEVEL 是 5（MuMu 列表和开关机）", () => assert.equal(GATEWAY_LEVEL, 5));
+test("GATEWAY_LEVEL 是 6（iOS 模拟器列表和开关机）", () => assert.equal(GATEWAY_LEVEL, 6));
+
+test("parseClientMsg 解析 iosSimOpen / iosSimClose；udid 不是 UUID 写法时返回 null（它会交给 simctl）", () => {
+  const u = "0A67FFC2-A5BD-43AB-9AA9-6E22B5511D40";
+  assert.deepEqual(parseClientMsg(`{"t":"iosSimOpen","udid":"${u}","extra":1}`), { t: "iosSimOpen", udid: u });
+  assert.deepEqual(parseClientMsg(`{"t":"iosSimClose","udid":"${u}"}`), { t: "iosSimClose", udid: u });
+  for (const bad of ['{"t":"iosSimOpen"}', '{"t":"iosSimOpen","udid":"booted"}', '{"t":"iosSimClose","udid":"--set /tmp"}', `{"t":"iosSimOpen","udid":"${u.toLowerCase()}"}`, '{"t":"iosSimOpen","udid":1}']) {
+    assert.equal(parseClientMsg(bad), null, bad);
+  }
+});
 
 test("parseClientMsg 解析 mumuLaunch（多余字段丢掉）", () => {
   assert.deepEqual(parseClientMsg('{"t":"mumuLaunch","app":"/bin/sh"}'), { t: "mumuLaunch" });
@@ -226,4 +235,19 @@ test("parseClientMsg 解析 mumuOpen / mumuClose；index 不是非负整数时�
   for (const bad of ['{"t":"mumuOpen"}', '{"t":"mumuOpen","index":-1}', '{"t":"mumuOpen","index":1.5}', '{"t":"mumuClose","index":"0"}', '{"t":"mumuOpen","index":"all"}']) {
     assert.equal(parseClientMsg(bad), null, bad);
   }
+});
+
+test("parseClientMsg 解析 iosCatalog / createIosSim；名字为空、太长、带换行，机型和版本不是 simctl 标识时返回 null", () => {
+  const dt = "com.apple.CoreSimulator.SimDeviceType.iPhone-16";
+  const rt = "com.apple.CoreSimulator.SimRuntime.iOS-18-3";
+  assert.deepEqual(parseClientMsg('{"t":"iosCatalog","rid":1}'), { t: "iosCatalog", rid: 1 });
+  assert.deepEqual(parseClientMsg(JSON.stringify({ t: "createIosSim", rid: 2, name: " 我的 iPhone ", deviceType: dt, runtime: rt })), { t: "createIosSim", rid: 2, name: "我的 iPhone", deviceType: dt, runtime: rt });
+  for (const bad of [
+    { name: "", deviceType: dt, runtime: rt },
+    { name: "a".repeat(65), deviceType: dt, runtime: rt },
+    { name: "a\nb", deviceType: dt, runtime: rt },
+    { name: "a", deviceType: "--set /tmp", runtime: rt },
+    { name: "a", deviceType: dt, runtime: "iOS 18.3" },
+    { name: "--help", deviceType: dt, runtime: rt },
+  ]) assert.equal(parseClientMsg(JSON.stringify({ t: "createIosSim", rid: 3, ...bad })), null, JSON.stringify(bad));
 });

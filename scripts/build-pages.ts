@@ -17,6 +17,8 @@ import { OFFICIAL_ORIGIN } from "../shared/protocol.ts";
 export const DOWNLOAD_NAME = "droidpier-darwin-arm64";
 const DEVTOOLS_ORIGIN = "https://chrome-devtools-frontend.appspot.com";
 const GATEWAY_WS = "ws://127.0.0.1:*";
+/** iOS 模拟器的 H5 调试界面由本机网关提供（gateway/src/server.ts 的 /webinspector/）。 */
+const GATEWAY_FRAME = "http://127.0.0.1:*";
 // Cloudflare Pages 单个文件上限 25 MiB
 const PAGES_FILE_LIMIT = 25 * 2 ** 20;
 
@@ -90,6 +92,7 @@ export function appCspProblems(csp: string): string[] {
   if (connect && !connect.includes(GATEWAY_WS)) problems.push(`connect-src 没有 ${GATEWAY_WS}：页面连不上本机网关`);
   const frame = sourcesFor(d, ["frame-src", "child-src", "default-src"]);
   if (frame && !frame.includes(DEVTOOLS_ORIGIN)) problems.push(`frame-src 没有 ${DEVTOOLS_ORIGIN}：嵌入的 DevTools 打不开`);
+  if (frame && !frame.includes(GATEWAY_FRAME)) problems.push(`frame-src 没有 ${GATEWAY_FRAME}：iOS 模拟器的调试界面打不开`);
   return problems;
 }
 

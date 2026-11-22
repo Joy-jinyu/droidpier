@@ -12,7 +12,8 @@ import { headersFor, parseHeaders } from "../../scripts/serve-pages.ts";
 
 const LOCAL = "http://127.0.0.1:* https://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*";
 const SITE_APP_CSP = `default-src 'self'; script-src 'self' 'unsafe-inline' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ${LOCAL}; frame-ancestors 'none'; base-uri 'self'; object-src 'none'`;
-const GOOD_APP_CSP = SITE_APP_CSP.replace("; frame-ancestors", "; frame-src https://chrome-devtools-frontend.appspot.com; frame-ancestors");
+const FRAMES = "https://chrome-devtools-frontend.appspot.com http://127.0.0.1:*";
+const GOOD_APP_CSP = SITE_APP_CSP.replace("; frame-ancestors", `; frame-src ${FRAMES}; frame-ancestors`);
 const headersText = (appCsp: string) =>
   `/*\n  Content-Security-Policy: default-src 'self'\n  X-Content-Type-Options: nosniff\n/app/\n  ! Content-Security-Policy\n  Content-Security-Policy: ${appCsp}\n/app/*\n  ! Content-Security-Policy\n  Content-Security-Policy: ${appCsp}\n`;
 
@@ -155,14 +156,15 @@ test("checkPages：官网 /app/ 的 CSP 不放行 DevTools iframe 时报出来",
   assert.match((await checkPages(f.out, f.origin)).join("\n"), /chrome-devtools-frontend\.appspot\.com/);
 });
 
-test("appCspProblems：要连本机网关、要嵌 appspot DevTools；frame-src 缺省时按 child-src、default-src 回退", () => {
+test("appCspProblems：要连本机网关、要嵌 appspot DevTools 和网关提供的 iOS 调试界面；frame-src 缺省时按 child-src、default-src 回退", () => {
   assert.deepEqual(appCspProblems(GOOD_APP_CSP), []);
-  assert.equal(appCspProblems(SITE_APP_CSP).length, 1);
-  assert.deepEqual(appCspProblems(SITE_APP_CSP.replace("default-src 'self'", "default-src 'self' https://chrome-devtools-frontend.appspot.com")), []);
-  assert.deepEqual(appCspProblems(SITE_APP_CSP.replace("default-src 'self'", "default-src 'self'; child-src https://chrome-devtools-frontend.appspot.com")), []);
+  assert.equal(appCspProblems(SITE_APP_CSP).length, 2);
+  assert.deepEqual(appCspProblems(SITE_APP_CSP.replace("default-src 'self'", `default-src 'self' ${FRAMES}`)), []);
+  assert.deepEqual(appCspProblems(SITE_APP_CSP.replace("default-src 'self'", `default-src 'self'; child-src ${FRAMES}`)), []);
   assert.match(appCspProblems(GOOD_APP_CSP.replace(" ws://127.0.0.1:*", "")).join(), /ws:\/\/127\.0\.0\.1/);
+  assert.match(appCspProblems(GOOD_APP_CSP.replace(" http://127.0.0.1:*;", ";")).join(), /iOS/);
   assert.equal(appCspProblems("").length, 0);
-  assert.equal(appCspProblems("default-src 'none'").length, 2);
+  assert.equal(appCspProblems("default-src 'none'").length, 3);
 });
 
 test("headersFor：按 Cloudflare Pages 语义，/app/ 的 ! 先删站点 CSP 再加自己的", () => {

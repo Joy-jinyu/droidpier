@@ -3062,3 +3062,210 @@ test("打开 MuMuPlayer 失败：把原因发回发起的页面", async (t) => {
   await until(() => c.msgs.some((x) => x.t === "error"));
   assert.deepEqual(c.msgs.find((x) => x.t === "error"), { t: "error", message: "打开 MuMu 失败：Unable to find application named 'MuMuPlayer'" });
 });
+
+// ─────────────── iOS 模拟器 ───────────────
+
+import type { IosSimInfo } from "../../shared/protocol.ts";
+
+const IOS_UDID = "0A67FFC2-A5BD-43AB-9AA9-6E22B5511D40";
+const IOS_SIM: IosSimInfo = { udid: IOS_UDID, name: "iPhone 11", runtime: "iOS 27.0", state: "booted" };
+
+function fakeIosSims(initial: IosSimInfo[] | null, opts: { fail?: string } = {}) {
+  const cbs: Array<(l: IosSimInfo[]) => void> = [];
+  let list = initial;
+  const calls: string[] = [];
+  return {
+    calls,
+    ops: {
+      list: () => list,
+      onChange: (cb: (l: IosSimInfo[]) => void) => void cbs.push(cb),
+      open: async (u: string) => { calls.push(`open ${u}`); if (opts.fail) throw new Error(opts.fail); },
+      close: async (u: string) => { calls.push(`close ${u}`); if (opts.fail) throw new Error(opts.fail); },
+      booted: (u: string) => (list ?? []).some((s) => s.udid === u && s.state === "booted"),
+    },
+    set(l: IosSimInfo[]) { list = l; for (const cb of cbs) cb(l); },
+  };
+}
+
+class FakeIosSim extends FakePhone {
+  constructor() {
+    super(IOS_UDID);
+    this.caps = { rotate: false, reboot: false, stop: false, clipboard: true, input: false, scroll: false, adb: false };
+    this.device = { width: 828, height: 1792 };
+  }
+}
+
+/** 先接上模拟器，再切到 iOS 模拟器。 */
+async function iosSetup(t: import("node:test").TestContext, more: Partial<Parameters<typeof startServer>[0]> = {}) {
+  const sim = new FakeIosSim();
+  const emu = new FakeSession();
+  const i = fakeIosSims([IOS_SIM]);
+  const fa = fakeAvd({ [IOS_UDID]: sim });
+  const s = await setup(t, emu, async () => emu, fa.ops, undefined, undefined, { iosSims: i.ops, ...more });
+  const c = await s.connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  c.ws.send(JSON.stringify({ t: "use", name: IOS_UDID }));
+  await until(() => c.msgs.some((m) => m.t === "ready" && m.deviceId === IOS_UDID));
+  return { ...s, c, i, sim, emu };
+}
+
+test("装了 Xcode 时 hello 后收到一次 iOS 模拟器列表，变化时广播；没装（null）时不发", async (t) => {
+  const i = fakeIosSims([IOS_SIM]);
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { iosSims: i.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "iosSims"));
+  assert.deepEqual(c.msgs.find((x) => x.t === "iosSims"), { t: "iosSims", list: [IOS_SIM] });
+  i.set([{ ...IOS_SIM, state: "shutdown" }]);
+  await until(() => c.msgs.filter((x) => x.t === "iosSims").length === 2);
+
+  const none = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { iosSims: fakeIosSims(null).ops });
+  const c2 = await none.connect();
+  hello(c2);
+  await until(() => c2.msgs.some((x) => x.t === "ready"));
+  await sleep(50);
+  assert.ok(!c2.msgs.some((x) => x.t === "iosSims"));
+});
+
+test("use 开着的 iOS 模拟器的 UDID：ready 带 caps.adb=false，画面走 BIN_VIDEO", async (t) => {
+  const { c, sim } = await iosSetup(t);
+  const ready = c.msgs.filter((m) => m.t === "ready").at(-1);
+  assert.deepEqual(ready, { t: "ready", version: PROTOCOL_VERSION, device: { width: 828, height: 1792 }, serial: 0, deviceId: IOS_UDID, kind: "phone", caps: sim.caps });
+  sim.pushPacket("config", 1);
+  sim.pushPacket("key", 2);
+  await until(() => videoTags(c).length === 2);
+});
+
+test("use 没开机的 iOS 模拟器 UDID：当普通设备名找，找不到就回没有在运行", async (t) => {
+  const i = fakeIosSims([{ ...IOS_SIM, state: "shutdown" }]);
+  const fa = fakeAvd({});
+  const { connect } = await setup(t, new FakeSession(), undefined, fa.ops, undefined, undefined, { iosSims: i.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((m) => m.t === "ready"));
+  c.ws.send(JSON.stringify({ t: "use", name: IOS_UDID }));
+  await until(() => c.msgs.some((m) => m.t === "error"));
+  assert.equal((c.msgs.find((m) => m.t === "error") as { message: string }).message, `${IOS_UDID} 没有在运行或没开 gRPC`);
+});
+
+test("iOS 模拟器会话关闭：页面收到 emulator-closed（不是等手机插回的 phone-closed），ticker 照常接管别的设备", async (t) => {
+  const { c, sim } = await iosSetup(t);
+  const readies = () => c.msgs.filter((m) => m.t === "ready").length;
+  const before = readies();
+  sim.fireClosed();
+  await until(() => c.msgs.some((m) => m.t === "status" && m.state === "emulator-closed"));
+  assert.ok(!c.msgs.some((m) => m.t === "status" && m.state === "phone-closed"));
+  await until(() => readies() > before);
+});
+
+test("iOS 模拟器（caps.adb=false）：H5 列表、日志、传文件直接回不支持，不碰 adb", async (t) => {
+  const debugCalls: string[] = [];
+  const debug = { forDevice: (id: string) => { debugCalls.push(id); throw new Error("不该调到"); }, connectCdp: async () => { throw new Error("no"); } } as unknown as DebugDeps;
+  const { c } = await iosSetup(t, { debug, logcatRead: async () => { throw new Error("不该调到"); }, files: { adb: async () => { throw new Error("不该调到"); } } });
+  c.ws.send(JSON.stringify({ t: "webviews", rid: 7 }));
+  await until(() => c.msgs.some((m) => m.t === "webviews" && m.rid === 7));
+  assert.equal((c.msgs.find((m) => m.t === "webviews") as { error?: string }).error, "iOS 模拟器暂不支持这个功能");
+  c.ws.send(JSON.stringify({ t: "logcatRead", rid: 8, filter: { level: "V", text: "", pkg: null }, limit: 10 }));
+  await until(() => c.msgs.some((m) => m.t === "logcatRead"));
+  assert.equal((c.msgs.find((m) => m.t === "logcatRead") as { error?: string }).error, "iOS 模拟器暂不支持这个功能");
+  c.ws.send(JSON.stringify({ t: "upload", id: 1, name: "a.apk", size: 10 }));
+  await until(() => c.msgs.some((m) => m.t === "upload" && m.state === "failed"));
+  assert.equal((c.msgs.find((m) => m.t === "upload" && m.state === "failed") as { error?: string }).error, "iOS 模拟器暂不支持这个功能");
+  assert.deepEqual(debugCalls, []);
+});
+
+test("iosSimOpen / iosSimClose 交给 iOS 模拟器模块；失败时把原因发回发起的页面", async (t) => {
+  const i = fakeIosSims([IOS_SIM], { fail: "Unable to boot device in current state: Booted" });
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { iosSims: i.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "iosSims"));
+  c.ws.send(JSON.stringify({ t: "iosSimOpen", udid: IOS_UDID }));
+  c.ws.send(JSON.stringify({ t: "iosSimClose", udid: IOS_UDID }));
+  await until(() => i.calls.length === 2);
+  assert.deepEqual(i.calls, [`open ${IOS_UDID}`, `close ${IOS_UDID}`]);
+  await until(() => c.msgs.filter((x) => x.t === "error").length === 2);
+  assert.deepEqual(c.msgs.find((x) => x.t === "error"), { t: "error", message: "iOS 模拟器开机失败：Unable to boot device in current state: Booted" });
+});
+
+test("iOS 模拟器（caps.input=false）：按键和文字直接丢掉，不逐个回错误", async (t) => {
+  const { c, sim } = await iosSetup(t);
+  c.ws.send(JSON.stringify({ t: "key", key: "a", eventType: "keydown" }));
+  c.ws.send(JSON.stringify({ t: "text", text: "hi" }));
+  c.ws.send(JSON.stringify({ t: "touch", x: 1, y: 2, down: true }));
+  await until(() => sim.calls.includes("touch"));
+  await sleep(50);
+  assert.ok(!c.msgs.some((m) => m.t === "error"));
+  assert.ok(!sim.calls.includes("key") && !sim.calls.includes("text"));
+});
+
+// ─────────────── iOS 模拟器的 H5 调试 ───────────────
+
+async function iosInspectorSetup(t: import("node:test").TestContext) {
+  const dir = await mkdtemp(join(tmpdir(), "webinspector-"));
+  await writeFile(join(dir, "Main.html"), '<html><head><script src="Main.js"></script></head></html>');
+  await writeFile(join(dir, "Main.js"), "/* frontend */");
+  const shim = join(dir, "..", `shim-${Date.now()}.js`);
+  await writeFile(shim, "/* shim */");
+  const sent: string[] = [];
+  let toFrontend: ((m: string) => void) | null = null;
+  let closed = 0;
+  const inspector = {
+    list: async () => [{ socket: "PID:1", id: "1", title: "Example", url: "https://example.com/", pkg: "com.apple.mobilesafari", visible: true }],
+    open: async () => ({
+      send: (m: string) => void sent.push(m),
+      onMessage: (cb: (m: string) => void) => void (toFrontend = cb),
+      onClose: () => {},
+      close: () => void closed++,
+    }),
+    close: () => {},
+  } as unknown as import("../src/ios-inspector.ts").IosInspector;
+  const s = await iosSetup(t, { ios: { inspector: () => ({ inspector, version: "27.0", ios: "27.0" }), webInspectorDir: dir, hostShim: shim } });
+  return { ...s, port: s.srv.port, sent, push: (m: string) => toFrontend?.(m), closed: () => closed };
+}
+
+test("iOS 会话：webviews 列出 WebKit 页面；inspect 给出网关自己提供的 WebKit 调试界面地址", async (t) => {
+  const { c, port } = await iosInspectorSetup(t);
+  c.ws.send(JSON.stringify({ t: "webviews", rid: 1 }));
+  await until(() => c.msgs.some((m) => m.t === "webviews"));
+  assert.deepEqual((c.msgs.find((m) => m.t === "webviews") as { list: unknown[] }).list.length, 1);
+  c.ws.send(JSON.stringify({ t: "inspect", rid: 2, socket: "PID:1", id: "1" }));
+  await until(() => c.msgs.some((m) => m.t === "inspect"));
+  const url = new URL((c.msgs.find((m) => m.t === "inspect") as { url: string }).url);
+  assert.equal(url.origin, `http://127.0.0.1:${port}`);
+  assert.equal(url.pathname, "/webinspector/Main.html");
+  assert.match(url.searchParams.get("ws")!, new RegExp(`^127\\.0\\.0\\.1:${port}/webinspector/ws/PID%3A1/1/[^/]+$`));
+  assert.equal(url.searchParams.get("version"), "27.0");
+});
+
+test("/webinspector/：Main.html 在 Main.js 前插入替身，替身单独提供；目录外的文件 404", async (t) => {
+  const { port } = await iosInspectorSetup(t);
+  const mainRes = await fetch(`http://127.0.0.1:${port}/webinspector/Main.html`);
+  assert.match(mainRes.headers.get("content-security-policy") ?? "", /^connect-src 'self'; frame-ancestors .*http:\/\/127\.0\.0\.1:\d+/);
+  const main = await mainRes.text();
+  assert.match(main, /<script src="droidpier-host\.js"><\/script>\s*<script src="Main\.js"><\/script>/);
+  assert.equal(await (await fetch(`http://127.0.0.1:${port}/webinspector/droidpier-host.js`)).text(), "/* shim */");
+  assert.equal((await fetch(`http://127.0.0.1:${port}/webinspector/..%2F..%2Fetc%2Fpasswd`)).status, 404);
+});
+
+test("iOS 调试通道：带票据从网关本机地址连上后双向转发；票据只能用一次，别的 Origin 拒绝", async (t) => {
+  const { c, port, sent, push } = await iosInspectorSetup(t);
+  c.ws.send(JSON.stringify({ t: "inspect", rid: 2, socket: "PID:1", id: "1" }));
+  await until(() => c.msgs.some((m) => m.t === "inspect"));
+  const wsPath = new URL((c.msgs.find((m) => m.t === "inspect") as { url: string }).url).searchParams.get("ws")!;
+  const evil = new WebSocket(`ws://${wsPath}`, { headers: { Origin: "https://evil.test" } });
+  assert.equal(await new Promise((r) => evil.on("close", (code) => r(code))), CLOSE_ORIGIN);
+  const fe = new WebSocket(`ws://${wsPath}`, { headers: { Origin: `http://127.0.0.1:${port}` } });
+  const got: string[] = [];
+  fe.on("message", (d) => got.push(d.toString()));
+  await new Promise((r) => fe.on("open", r));
+  fe.send('{"id":1,"method":"Runtime.evaluate"}');
+  await until(() => sent.length === 1);
+  push('{"id":1,"result":{}}');
+  await until(() => got.length === 1);
+  assert.equal(got[0], '{"id":1,"result":{}}');
+  fe.close();
+  const again = new WebSocket(`ws://${wsPath}`, { headers: { Origin: `http://127.0.0.1:${port}` } });
+  assert.equal(await new Promise((r) => again.on("close", (code) => r(code))), CLOSE_BAD_TOKEN);
+});

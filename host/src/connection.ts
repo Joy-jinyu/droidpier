@@ -140,7 +140,8 @@ export function createConnection(opts: {
   /** 发二进制消息（传文件的分片）：连接打开就发。 */
   sendBinary(b: Uint8Array): boolean;
   /** 发带 rid 的请求，等同 rid 的回复；没连上、15 秒没回、连接断开都以失败结束。 */
-  request<T extends Reply["t"]>(m: Request & { t: T }): Promise<Extract<Reply, { t: T }>>;
+  /** waitMs：这条请求等回复的上限，不给时 REQUEST_TIMEOUT_MS。 */
+  request<T extends Reply["t"]>(m: Request & { t: T }, waitMs?: number): Promise<Extract<Reply, { t: T }>>;
   /** 标签页回到前台时调用：后台期间停下的重连马上接着做。 */
   wake(): void;
 } {
@@ -340,7 +341,7 @@ export function createConnection(opts: {
       ws.send(b);
       return true;
     },
-    request: (m) => pending.request((rid) => raw({ ...m, rid } as ClientMsg)) as never,
+    request: (m, waitMs) => pending.request((rid) => raw({ ...m, rid } as ClientMsg), waitMs) as never,
     wake: () => {
       if (!waitingVisible) return;
       waitingVisible = false;

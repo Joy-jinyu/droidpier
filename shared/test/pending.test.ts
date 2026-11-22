@@ -48,3 +48,20 @@ test("连接断开时所有等待中的请求立即失败", async () => {
   p.failAll("x");
   await assert.rejects(c, /x/);
 });
+
+test("单条请求可以指定更长的等待（停止设备等 75 秒）：过了默认的 15 秒不超时，到点才超时", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const p = createPending<string>(15000);
+    const r = p.request(() => true, 75000);
+    let done = false;
+    r.catch(() => {}).finally(() => (done = true));
+    mock.timers.tick(15000);
+    await Promise.resolve();
+    assert.equal(done, false);
+    mock.timers.tick(60000);
+    await assert.rejects(r, /75 秒没有回应/);
+  } finally {
+    mock.timers.reset();
+  }
+});

@@ -6,10 +6,15 @@ export const AVD_DISK_MB = 12288;
 /** 没有已安装的镜像时默认选的级别。 */
 const FALLBACK_API = "34";
 
-/** 机型名 + 级别拼出的默认设备名，如 Pixel_5_API_34。 */
-export function defaultAvdName(modelName: string, api: string): string {
-  const base = modelName.trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9._-]/g, "").replace(/_+/g, "_").replace(/^[^A-Za-z0-9]+/, "");
-  return `${base}_API_${api}`;
+/**
+ * 机型名 + 级别拼出的默认设备名，如 Pixel_5_API_34；已有同名设备（不分大小写，同 avdNameError）时依次加 _2、_3……，
+ * 免得对话框一打开就报「已有同名设备」。
+ */
+export function defaultAvdName(modelName: string, api: string, existing: string[] = []): string {
+  const base = `${modelName.trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9._-]/g, "").replace(/_+/g, "_").replace(/^[^A-Za-z0-9]+/, "")}_API_${api}`;
+  const taken = new Set(existing.map((n) => n.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`.toLowerCase())) return `${base}_${i}`;
 }
 
 /**

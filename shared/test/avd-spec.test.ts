@@ -18,6 +18,14 @@ test("默认设备名：机型名的空格换成下划线，加 _API_<级别>", 
   assert.equal(defaultAvdName("(-Test) phone", "30"), "Test_phone_API_30");
 });
 
+test("默认设备名：已有同名设备（不分大小写）时加 _2、_3，结果总能通过 avdNameError", () => {
+  assert.equal(defaultAvdName("Pixel 5", "34", ["Pixel_5_API_34"]), "Pixel_5_API_34_2");
+  assert.equal(defaultAvdName("Pixel 5", "34", ["pixel_5_api_34", "Pixel_5_API_34_2"]), "Pixel_5_API_34_3");
+  assert.equal(defaultAvdName("Pixel 5", "34", ["Pixel_6_API_34"]), "Pixel_5_API_34");
+  const existing = ["Pixel_5_API_34", "Pixel_5_API_34_2"];
+  assert.equal(avdNameError(defaultAvdName("Pixel 5", "34", existing), existing), null);
+});
+
 test("设备名校验：只允许 [A-Za-z0-9._-]，不能空，不能和已有的重名（不分大小写）", () => {
   assert.equal(avdNameError("Pixel_5_API_34", ["emu_web_default"]), null);
   assert.match(avdNameError("", [])!, /请输入设备 ID/);

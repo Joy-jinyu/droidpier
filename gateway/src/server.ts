@@ -491,7 +491,8 @@ export async function startServer(opts: {
   // announce：停完给所有页面发新列表；删除流程里不发，删完统一发一次
   const stopByName = async (name: string, announce = true): Promise<string | null> => {
     const avd = opts.avd!;
-    const deadline = Date.now() + (opts.stopWaitMs ?? 10_000);
+    // 模拟器退出前要存快速启动快照，几台一起跑时要十几二十秒（2026-11-22 实测超过 10 秒）；页面那边等 75 秒（host/src/main.ts 的 STOP_REPLY_MS）
+    const deadline = Date.now() + (opts.stopWaitMs ?? 60_000);
     const wait = () => new Promise((r) => setTimeout(r, opts.pollMs ?? 1000));
     const jobOf = () => [...jobs].find((j) => j.name === name);
     const info = (await avd.list()).find((a) => a.name === name);

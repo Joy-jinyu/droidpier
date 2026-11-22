@@ -3,15 +3,15 @@ export function createPending<R>(timeoutMs: number) {
   let nextRid = 1;
   const waiting = new Map<number, { resolve: (r: R) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   return {
-    /** send 收到新 rid，返回 false 表示没发出去。 */
-    request(send: (rid: number) => boolean): Promise<R> {
+    /** send 收到新 rid，返回 false 表示没发出去；waitMs 不给时用建它时的 timeoutMs。 */
+    request(send: (rid: number) => boolean, waitMs = timeoutMs): Promise<R> {
       const rid = nextRid++;
       return new Promise<R>((resolve, reject) => {
         if (!send(rid)) return reject(new Error("没有连上网关"));
         const timer = setTimeout(() => {
           waiting.delete(rid);
-          reject(new Error(`网关 ${Math.round(timeoutMs / 1000)} 秒没有回应`));
-        }, timeoutMs);
+          reject(new Error(`网关 ${Math.round(waitMs / 1000)} 秒没有回应`));
+        }, waitMs);
         waiting.set(rid, { resolve, reject, timer });
       });
     },

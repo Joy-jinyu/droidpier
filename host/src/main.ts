@@ -22,6 +22,11 @@ import { type MumuInfo, GATEWAY_LEVEL, INSTALL_IDS, installCmd, type AvdCatalog,
 
 // 从这个功能级别起网关一定认 renameAvd、deleteAvd（shared/protocol.ts 的 GATEWAY_LEVEL）
 const AVD_EDIT_LEVEL = 1;
+/**
+ * 停止设备（和先停再删）等网关回复的上限：网关最多等设备停 60 秒（gateway/src/server.ts 的 stopByName），再留出读列表的时间。
+ * 别的请求是 15 秒，停止要更久：模拟器退出前要存快速启动快照，几台一起跑时 10 秒常常不够（2026-11-22 实测）
+ */
+const STOP_REPLY_MS = 75_000;
 // 从这个级别起网关认 stopAvd 和 deleteAvd 的 stop
 const AVD_STOP_LEVEL = 2;
 // 从这个级别起网关有日志面板（logcatOpen 等）；更旧的网关不显示「日志」按钮
@@ -169,11 +174,17 @@ export async function createHost(player: Player) {
   });
 
   let draws = 0;
+  // 这台设备连上后画出过画面没有：真机、MuMu 刚开机时要等好几秒才有第一帧，页面这期间说「正在等待画面」
+  let painted = false;
   let latencyMs = 0;
   let stats = { fps: 0, latencyMs: 0 };
 
   const renderer = createRenderer(canvas, (tsMs) => {
     draws++;
+    if (!painted) {
+      painted = true;
+      statusEvent();
+    }
     // 真机帧没有时间戳（手机时钟和电脑不同），只数帧率
     if (tsMs !== null) latencyMs = frameLatencyMs(Date.now(), tsMs);
   });
@@ -225,7 +236,7 @@ export async function createHost(player: Player) {
   const supported = isSupportedBrowser((navigator as { userAgentData?: { brands: { brand: string }[] } }).userAgentData?.brands);
   if (!supported) state = "unsupported-browser";
   const logcatOn = () => (gateway?.level ?? 0) >= LOGCAT_LEVEL;
-  const statusEvent = () => player.hostEvent("emu.status", { state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), rev: ++rev });
+  const statusEvent = () => player.hostEvent("emu.status", { state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), painted, rev: ++rev });
   const gatewayEvent = () => {
     gatewayNote = gateway === undefined ? null : gatewayBanner(gateway, GATEWAY_LEVEL, updateReport, INSTALL);
     player.hostEvent("emu.gateway", { banner: gatewayNote, rev: ++rev });
@@ -276,6 +287,8 @@ export async function createHost(player: Player) {
       if (prev !== s && s !== "connecting" && s !== "disconnected") refreshAvds();
     },
     onReady: (d, sn, extra) => {
+      // 换了设备（或重连）：旧画面不算这台的
+      if (extra.deviceId !== deviceId) painted = false;
       // 换了设备：旧的解码器和它的配置包都不能再用
       if (extra.deviceId !== deviceId || extra.kind !== "phone") video.close();
       device = d;
@@ -785,7 +798,7 @@ export async function createHost(player: Player) {
   const sent = (m: ClientMsg) => ({ ok: conn.send(m) });
   const ctl = (m: ClientMsg) => ({ ok: conn.control(m) });
   // 旧网关（不认 stopAvd）只能用 stop 停画面上这台，它立刻回、停完不推列表：这里隔一秒要一次列表，看到它停了才算停完。
-  // 上限 STOP_OLD_MS（估的，和网关 stopAvd 等的 10 秒加上读列表的时间差不多）；列表 LIST_WAIT_MS 没回就当这次没看到
+  // 上限 STOP_OLD_MS（估的，和当时的网关 stopAvd 等的 10 秒加上读列表的时间差不多）；列表 LIST_WAIT_MS 没回就当这次没看到
   const STOP_OLD_MS = 15_000;
   const LIST_WAIT_MS = 3000;
   // "down"：和网关断了，要列表的请求发不出去；null：发出去了但 LIST_WAIT_MS 内没回
@@ -895,7 +908,7 @@ export async function createHost(player: Player) {
       // stop：运行中先停止再删。旧网关不认 stop，照旧回“先关闭这台设备再删除”
       if (name === "emu.deleteAvd") {
         const stop = (args as { stop?: unknown } | undefined)?.stop === true;
-        return conn.request({ t: "deleteAvd", name: needName(name, args), ...(stop ? { stop: true as const } : {}) }).then(
+        return conn.request({ t: "deleteAvd", name: needName(name, args), ...(stop ? { stop: true as const } : {}) }, stop ? STOP_REPLY_MS : undefined).then(
           (r) => ({ ok: r.ok, error: r.error }),
           (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_EDIT_LEVEL, "删除设备", `${e.message}：可能还在删，稍后看设备列表`, INSTALL) : e.message }),
         );
@@ -910,14 +923,14 @@ export async function createHost(player: Player) {
       if (name === "emu.stopAvd") {
         const target = needName(name, args);
         if (gateway !== undefined && gatewayBelow(gateway, AVD_STOP_LEVEL)) return stopOld(target);
-        return conn.request({ t: "stopAvd", name: target }).then(
+        return conn.request({ t: "stopAvd", name: target }, STOP_REPLY_MS).then(
           (r) => ({ ok: r.ok, error: r.error }),
           (e: Error) => ({ ok: false, error: e.message.endsWith("没有回应") ? timeoutText(gateway, AVD_STOP_LEVEL, "停止设备", `${e.message}：可能还在停，稍后看设备列表`, INSTALL) : e.message }),
         );
       }
       if (name === "emu.status") {
         return {
-          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), boots: [...boots.values()].map((b) => b.last),
+          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), painted, rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), boots: [...boots.values()].map((b) => b.last),
           env, installs, license, uploads: uploads.list(),
         };
       }

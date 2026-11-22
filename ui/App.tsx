@@ -15,7 +15,7 @@ import { parseTheme, type Theme } from "../shared/theme";
 import { deviceFrame } from "../shared/screen";
 import { glideFrames, poseAt, REST, startPose, turnAngle, type Glide } from "./device-motion";
 import { parseZoom, stepZoom, ZOOM_STEPS } from "../shared/zoom";
-import { matchesAvd } from "./device-search";
+import { searchSidebar } from "./device-search";
 import { canPick, currentPhoneOf, phoneDetail, phoneLabel, phoneStatus, showPhones, splitPhones, mumuRows, mumuRowStatus, mumuRowTitle, type MumuRow, phoneTitle } from "./phones";
 import { h5PollMs } from "./h5-poll";
 import { shouldCloseConsole, type ConsoleEvent } from "./console-gone";
@@ -312,10 +312,11 @@ const withWhy = (label: string, disabled: boolean | undefined, why: string | und
 const EXPANDED = "aria-expanded:bg-accent";
 
 /** 文字按钮：默认是次要按钮；primary 是一屏一个的主操作（品牌青），danger 是破坏性操作。why：禁用时说明原因。 */
-function Btn(props: { label: string; onPress: () => void; kind?: "danger" | "primary"; disabled?: boolean; why?: string }) {
+/** a11y：读屏读的名字，不给时读 label（行尾的“启动”要带上是哪台，否则一排都叫“启动”）。 */
+function Btn(props: { label: string; onPress: () => void; kind?: "danger" | "primary"; disabled?: boolean; why?: string; a11y?: string }) {
   const primary = () => props.kind === "primary";
   return (
-    <Button onPress={props.onPress} accessibilityLabel={withWhy(props.label, props.disabled, props.why)} disabled={props.disabled}
+    <Button onPress={props.onPress} accessibilityLabel={withWhy(props.a11y ?? props.label, props.disabled, props.why)} disabled={props.disabled}
       tooltip={whyTip(props.disabled, props.why)}
       hoverStyle={{ backgroundColor: primary() ? token("primary-hover") : token("accent") }} focusStyle={{ borderColor: token("ring") }}
       activeStyle={pressed()} disabledStyle={{ opacity: DISABLED }}
@@ -1162,7 +1163,7 @@ function CreateAvd(props: { catalog: Catalog | null; loadError: string | null; o
   const name = () => {
     const d = pickedDevice();
     const i = pickedImage();
-    return customName() ?? (d && i ? defaultAvdName(d.name, i.api) : "");
+    return customName() ?? (d && i ? defaultAvdName(d.name, i.api, catalog()?.existing) : "");
   };
   // 目录第一次到达（每次打开对话框一次）：把默认选中的机型和版本滚进可见处，焦点放在机型上
   const deviceRefs = new Map<string, ViewRef>();
@@ -1282,6 +1283,8 @@ function App() {
   const deviceId = signal("");
   const kind = signal<"emulator" | "phone">("emulator");
   const caps = signal<DeviceCaps | null>(null);
+  // 连上后画出过第一帧没有（host 的 painted）
+  const painted = signal(true);
   const deviceSize = signal({ width: 0, height: 0 });
   const boots = signal<Record<string, Boot>>({});
   // 画面上方的通知（ui/banners.ts 的 Notices）：错误留着等用户关，一般消息显示出来后几秒收起
@@ -1478,13 +1481,15 @@ function App() {
   });
 
   let statusRev = -1;
-  type DeviceStatus = { deviceId?: string; kind?: "emulator" | "phone"; caps?: DeviceCaps | null; device?: { width: number; height: number }; logcat?: boolean };
+  type DeviceStatus = { deviceId?: string; kind?: "emulator" | "phone"; caps?: DeviceCaps | null; device?: { width: number; height: number }; logcat?: boolean; painted?: boolean };
   const applyDevice = (p: DeviceStatus) => {
     deviceId.set(p.deviceId ?? "");
     kind.set(p.kind ?? "emulator");
     caps.set(p.caps ?? null);
     if (p.device) deviceSize.set(p.device);
     logcatOk.set(p.logcat === true);
+    // 旧宿主模块不报，当作已有画面
+    painted.set(p.painted !== false);
   };
   host.on("emu.status", (p: { state: State; serial: number; upgrade: string | null; rev: number } & DeviceStatus) => {
     if (isStaleStatus(p.rev, statusRev)) return;
@@ -1685,7 +1690,17 @@ function App() {
   // 页面标题（当前设备名）可用的宽度，按它中间省略
   const titleWidth = signal(0);
   const query = signal("");
-  const listed = () => (avds() ?? []).filter((a) => matchesAvd(a, query()));
+  // 搜索对每一组都生效；搜索时没有匹配的组整个不显示（不留空标题、不显示「插上手机」这类提示）
+  const search = () => searchSidebar(query(), { avds: avds() ?? [], phones: splitPhones(phones()).phones, mumu: mumuRows(mumu(), phones()) }, {
+    avd: (a) => [a.name, a.displayName],
+    phone: (p) => [phoneLabel(p), p.id, p.model],
+    mumu: (r) => [mumuRowTitle(r)],
+  });
+  const listed = () => search().avds;
+  const searching = () => search().searching;
+  const listedPhones = () => search().phones;
+  const listedMumu = () => search().mumu;
+  const noMatch = () => search().noMatch;
   // 选中的设备：主区显示它。连上的设备换了（启动、切换）就选中那一台；用户点选没在运行的设备时只是选中，不启动
   const selected = signal<string | null>(null);
   let lastCurrent: string | null = null;
@@ -1952,9 +1967,15 @@ function App() {
     hoverStyle: { backgroundColor: token("accent") }, selectedStyle: { backgroundColor: token("accent"), borderColor: token("border-strong") },
     focusStyle: { borderColor: token("ring") }, activeStyle: pressed(),
   });
+  // 行尾“启动”和右键菜单的“启动”同主区那个按钮（canStart、begin），和 MuMu、iOS 行一样不用先选中再到主区点
   const DeviceRow = (props: { avd: () => Avd }) => {
     const a = props.avd;
+    const startable = () => !gatewayDown(state()) && canStart(a()) && !beingDeleted(a());
+    const start = () => begin(a().name, "start");
+    // “启动”放在右键菜单的触发区外面：在它上面右键不该弹出菜单（同 MumuDeviceRow）
     return (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.hair }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
       <ContextMenu offset={SPACE.part} popupStyle={menuPopup("top left")} popupStartingStyle={popOut("above")} popupEndingStyle={popOut("above")}
         onOpenChange={releaseOnOpen} trigger={
         <Button onPress={() => pickDevice(a())} selected={shown()?.name === a().name} accessibilityLabel={`${avdLabel(a())}，${avdStatus(a())}`}
@@ -1964,18 +1985,28 @@ function App() {
             <Icon name="smartphone" size={ICON.md} tint={avdTint(a())} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: SPACE.hair }}>
-            <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>{avdLabel(a())}</Text>
+            {/* 行尾有“启动”时名字可能放不下：单行省略，不在短横线处折行 */}
+            <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong, numberOfLines: 1 }}>{noBreak(avdLabel(a()))}</Text>
             {/* 没连着网关时状态写的是「状态未知」，不用警告色（同 avdTint） */}
             <Text style={{ color: !gatewayDown(state()) && (a().running === "no-grpc" || isBooting(boots()[a().name])) ? token("warning") : token("muted-foreground"), ...TYPE.caption }}>{avdStatus(a())}</Text>
           </View>
-          <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{a().apiLevel ? ANDROID[a().apiLevel!] ?? `API ${a().apiLevel}` : ""}</Text>
+          {/* 没运行的行尾是“启动”，版本号让位（同 MuMu 行） */}
+          <If when={!startable()}>
+            <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{a().apiLevel ? ANDROID[a().apiLevel!] ?? `API ${a().apiLevel}` : ""}</Text>
+          </If>
         </Button>
       }>
+        <Item label={pendingText(a(), "start") ?? "启动"} disabled={!startable() || !!pending()} onSelect={start} />
         <Item label="重命名…" disabled={beingDeleted(a())} onSelect={() => openRename(a())} />
         <Item label={beingStopped(a()) ? "停止中…" : "停止设备…"} disabled={!stoppable(a())} onSelect={() => openStop(a())} />
         <MenuLine />
         <Item label="删除…" danger disabled={beingDeleted(a())} onSelect={() => openDelete(a())} />
       </ContextMenu>
+      </View>
+      <If when={startable()}>
+        <Btn label={pendingText(a(), "start") ?? "启动"} a11y={`${pendingText(a(), "start") ?? "启动"} ${avdLabel(a())}`} disabled={!!pending()} onPress={start} />
+      </If>
+      </View>
     );
   };
 
@@ -1988,7 +2019,7 @@ function App() {
         {...rowStates()} hoverStyle={canPick(p()) ? { backgroundColor: token("accent") } : undefined} activeStyle={canPick(p()) ? pressed() : undefined}
         style={rowStyle()}>
         <View style={avatarStyle()}>
-          <Icon name="smartphone" size={ICON.md} tint={p().state === "device" ? token("foreground") : token("muted-foreground")} />
+          <Icon name="smartphone" size={ICON.md} tint={!gatewayDown(state()) && p().state === "device" ? token("success") : token("muted-foreground")} />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: SPACE.hair }}>
           <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>{phoneLabel(p())}</Text>
@@ -2014,6 +2045,10 @@ function App() {
       gw(host.call("emu.mumuOpen", { index: m.index }));
     };
     const starting = () => mumuStarting() === r().mumu?.index;
+    // 图标颜色同模拟器行（avdTint）：能用的绿、开关机中黄、其余灰
+    const mumuTint = () =>
+      gatewayDown(state()) ? token("muted-foreground") : ok() ? token("success")
+        : starting() || r().mumu?.state === "starting" || r().mumu?.state === "stopping" ? token("warning") : token("muted-foreground");
     // “启动”放在右键菜单的触发区外面：在它上面右键不该弹出“关机”
     return (
       <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.hair }}>
@@ -2025,7 +2060,7 @@ function App() {
             {...rowStates()} hoverStyle={pickable() ? { backgroundColor: token("accent") } : undefined} activeStyle={pickable() ? pressed() : undefined}
             style={rowStyle()}>
             <View style={avatarStyle()}>
-              <Icon name="smartphone" size={ICON.md} tint={ok() ? token("foreground") : token("muted-foreground")} />
+              <Icon name="smartphone" size={ICON.md} tint={mumuTint()} />
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: SPACE.hair }}>
               <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>{mumuRowTitle(r())}</Text>
@@ -2040,7 +2075,7 @@ function App() {
       </ContextMenu>
       </View>
       <If when={r().mumu?.state === "stopped" && !gatewayDown(state())}>
-        <Btn label={starting() ? "启动中…" : "启动"} disabled={starting()} onPress={startMumu} />
+        <Btn label={starting() ? "启动中…" : "启动"} a11y={`${starting() ? "启动中…" : "启动"} ${mumuRowTitle(r())}`} disabled={starting()} onPress={startMumu} />
       </If>
       </View>
     );
@@ -2064,7 +2099,10 @@ function App() {
             <Input value={query()} onChange={({ value }) => query.set(value)} placeholder="搜索设备" accessibilityLabel="搜索设备" autoCapitalize="none" autoCorrect={false}
               style={fieldText()} />
           </FieldBox>
-          <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.item, paddingBottom: SPACE.hair }}>设备</Text>
+          {/* 搜索时只有手机或 MuMu 匹配：模拟器这组的标题也不留 */}
+          <If when={!searching() || listed().length > 0 || noMatch()}>
+            <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.item, paddingBottom: SPACE.hair }}>设备</Text>
+          </If>
           <Scroll style={{ flex: 1 }} contentStyle={{ gap: SPACE.hair }}>
             {/* 没连着网关时读不到列表：不说「正在读取」；有断开前的旧列表时说明它可能不是最新的 */}
             <If when={avds() !== null} else={<Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>{gatewayDown(state()) ? "连上网关后显示设备" : "正在读取设备列表…"}</Text>}>
@@ -2080,24 +2118,24 @@ function App() {
                   </If>
                 </View>
               }>
-                <If when={listed().length > 0} else={<Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>{`没有名字含「${query().trim()}」的设备`}</Text>}>
+                <If when={listed().length > 0} else={noMatch() ? <Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>{`没有名字含「${query().trim()}」的设备`}</Text> : null}>
                   <Each of={listed()} key={(a) => a.name}>{(a) => <DeviceRow avd={a} />}</Each>
                 </If>
               </If>
             </If>
-            <If when={showPhones(phones())}>
+            <If when={showPhones(phones()) && (!searching() || listedPhones().length > 0)}>
               <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>手机</Text>
-              <If when={splitPhones(phones()).phones.length > 0} else={
+              <If when={listedPhones().length > 0} else={
                 <Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>
                   {env()?.missing.some((m) => m.id === "platform-tools") ? "先在环境检查里安装 platform-tools（adb），才能看到手机。" : "插上手机并打开 USB 调试。"}
                 </Text>
               }>
-                <Each of={splitPhones(phones()).phones} key={(p) => p.id}>{(p) => <PhoneRow phone={p} />}</Each>
+                <Each of={listedPhones()} key={(p) => p.id}>{(p) => <PhoneRow phone={p} />}</Each>
               </If>
             </If>
-            <If when={mumuRows(mumu(), phones()).length > 0}>
+            <If when={listedMumu().length > 0}>
               <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>MuMu 模拟器</Text>
-              <Each of={mumuRows(mumu(), phones())} key={(r) => r.key}>{(r) => <MumuDeviceRow row={r} />}</Each>
+              <Each of={listedMumu()} key={(r) => r.key}>{(r) => <MumuDeviceRow row={r} />}</Each>
             </If>
           </Scroll>
           <View style={{ height: 1, marginHorizontal: ROW_X, backgroundColor: token("border-subtle") }} />
@@ -2218,6 +2256,13 @@ function App() {
                 <View style={{ width: frame().width, height: frame().height, flexShrink: 0, padding: BEZEL - 1, borderRadius: 44, borderWidth: 1, borderColor: keyboardShown() ? token("ring") : token("border-strong"), backgroundColor: token("device-bezel"),
                   boxShadow: keyboardShown() ? [{ x: 0, y: 0, blur: 0, spread: 2, color: token("ring") }] : [], transform: motion.transform, pointerEvents: turning() ? "none" : "auto", ...ease("fast", "colors") }}>
                   <View testID="screen" style={{ flex: 1, minHeight: 0, position: "relative", borderRadius: 34, overflow: "hidden" }} />
+                  {/* 连上了但第一帧还没到（真机、MuMu 刚开机时要好几秒）：黑屏上说明在等，不挡点按 */}
+                  <If when={state() === "connected" && shownIsLive() && !painted()}>
+                    {/* 有底色：直接换设备时画布上还留着上一台的最后一帧 */}
+                    <View role="status" style={{ position: "absolute", top: BEZEL - 1, left: BEZEL - 1, right: BEZEL - 1, bottom: BEZEL - 1, pointerEvents: "none", alignItems: "center", justifyContent: "center", padding: SPACE.section, borderRadius: 34, backgroundColor: token("device-bezel") }}>
+                      <Text style={{ color: token("muted-foreground"), ...TYPE.body, textAlign: "center" }}>正在等待画面…</Text>
+                    </View>
+                  </If>
                   <If when={drag().active}>
                     <View role="summary" style={{
                       position: "absolute", top: BEZEL - 1, left: BEZEL - 1, right: BEZEL - 1, bottom: BEZEL - 1, pointerEvents: "none",

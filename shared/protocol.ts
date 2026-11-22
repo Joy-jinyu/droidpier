@@ -331,6 +331,8 @@ export type ClientMsg =
   | { t: "mumuOpen"; index: number }
   /** 用户确认关机：网关执行 mumutool close，同上。 */
   | { t: "mumuClose"; index: number }
+  /** MuMuPlayer 没打开（mumu 消息带 appClosed）时用户点了“打开 MuMu”：网关打开播放器，之后的列表随 mumu 消息来；失败回 error。 */
+  | { t: "mumuLaunch" }
   /** 打开日志面板：网关按 filter 先回放最近的日志（logcat 的 reset），之后合批推新行。 */
   | { t: "logcatOpen"; filter: LogFilter }
   | { t: "logcatFilter"; filter: LogFilter }
@@ -365,8 +367,11 @@ export type ServerMsg =
   | { t: "avds"; list: AvdInfo[] }
   /** 真机列表：hello 后发一次、之后有变化就发；没收到过就当网关不支持真机（旧网关）。 */
   | { t: "phones"; list: PhoneInfo[] }
-  /** MuMu 模拟器列表：本机装了 MuMu 时 hello 后发一次、之后有变化就发；没收到过就当没装或网关太旧。 */
-  | { t: "mumu"; list: MumuInfo[] }
+  /**
+   * MuMu 模拟器列表：本机装了 MuMu 时 hello 后发一次、之后有变化就发；没收到过就当没装或网关太旧。
+   * appClosed：装了但 MuMuPlayer 没打开（列表为空），页面给“打开 MuMu”；不带这个字段的旧网关不支持 mumuLaunch。
+   */
+  | { t: "mumu"; list: MumuInfo[]; appClosed?: true }
   | { t: "boot"; name: string; progress: string; error?: string }
   | { t: "error"; message: string }
   /** 紧接着以 CLOSE_VERSION 关闭连接。upgrade 是升级网关的命令。 */
@@ -511,6 +516,8 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       // name 拼进文件路径和 avdmanager 参数：不合 AVD 名规则的（../、- 开头）整条丢掉
       if (!isNum(o.rid) || !isStr(o.name) || avdNameError(o.name, []) !== null) return null;
       return { t: "deleteAvd", rid: o.rid, name: o.name, ...(o.stop === true ? { stop: true as const } : {}) };
+    case "mumuLaunch":
+      return { t: "mumuLaunch" };
     case "mumuOpen":
     case "mumuClose":
       if (!Number.isInteger(o.index) || (o.index as number) < 0) return null;

@@ -2961,7 +2961,7 @@ import type { MumuInfo } from "../../shared/protocol.ts";
 
 const MUMU: MumuInfo = { index: 0, name: "我的安卓", state: "stopped" };
 
-function fakeMumu(initial: MumuInfo[] | null, opts: { fail?: string } = {}) {
+function fakeMumu(initial: MumuInfo[] | null, opts: { fail?: string; appClosed?: boolean } = {}) {
   const cbs: Array<(l: MumuInfo[]) => void> = [];
   let list = initial;
   const calls: string[] = [];
@@ -2969,6 +2969,8 @@ function fakeMumu(initial: MumuInfo[] | null, opts: { fail?: string } = {}) {
     calls,
     ops: {
       list: () => list,
+      appClosed: () => opts.appClosed === true,
+      launch: async () => { calls.push("launch"); if (opts.fail) throw new Error(opts.fail); },
       onChange: (cb: (l: MumuInfo[]) => void) => void cbs.push(cb),
       open: async (i: number) => { calls.push(`open ${i}`); if (opts.fail) throw new Error(opts.fail); },
       close: async (i: number) => { calls.push(`close ${i}`); if (opts.fail) throw new Error(opts.fail); },
@@ -3037,4 +3039,26 @@ test("/devtools-frontend/：只代理 appspot 上带版本号的前端文件，�
     assert.equal((await fetch(`http://127.0.0.1:${srv.port}/devtools-frontend/${bad}`)).status, 404, bad);
   }
   assert.equal(fetched.length, 1);
+});
+
+test("装了 MuMu 但播放器没打开：mumu 消息带 appClosed；mumuLaunch 交给 MuMu 模块打开播放器", async (t) => {
+  const m = fakeMumu([], { appClosed: true });
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { mumu: m.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "mumu"));
+  assert.deepEqual(c.msgs.find((x) => x.t === "mumu"), { t: "mumu", list: [], appClosed: true });
+  c.ws.send(JSON.stringify({ t: "mumuLaunch" }));
+  await until(() => m.calls.includes("launch"));
+});
+
+test("打开 MuMuPlayer 失败：把原因发回发起的页面", async (t) => {
+  const m = fakeMumu([], { appClosed: true, fail: "Unable to find application named 'MuMuPlayer'" });
+  const { connect } = await setup(t, new FakeSession(), undefined, undefined, undefined, undefined, { mumu: m.ops });
+  const c = await connect();
+  hello(c);
+  await until(() => c.msgs.some((x) => x.t === "mumu"));
+  c.ws.send(JSON.stringify({ t: "mumuLaunch" }));
+  await until(() => c.msgs.some((x) => x.t === "error"));
+  assert.deepEqual(c.msgs.find((x) => x.t === "error"), { t: "error", message: "打开 MuMu 失败：Unable to find application named 'MuMuPlayer'" });
 });

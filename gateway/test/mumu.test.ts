@@ -193,3 +193,36 @@ test("adb 里已经在线的 MuMu 不再重复 adb connect", async () => {
   await c.tick();
   assert.deepEqual(connects, []);
 });
+
+const CLOSED = "Command failed: /Applications/MuMuPlayer.app/Contents/MacOS/mumutool info all\nError: invalidPort\n";
+
+test("MuMuPlayer 没打开（mumutool 报 invalidPort）：列表变成空、appClosed 为真并通知；同样的状态不重复通知", async () => {
+  let closed = true;
+  const { h, c } = withTool(() => { if (closed) throw new Error(CLOSED); return INFO_ALL; });
+  await c.tick();
+  await c.tick();
+  assert.deepEqual(c.list(), []);
+  assert.equal(c.appClosed(), true);
+  assert.equal(h.lists.length, 1);
+  closed = false;
+  await c.tick();
+  assert.equal(c.appClosed(), false);
+  assert.equal(c.list()!.length, 2);
+  assert.equal(h.lists.length, 2);
+});
+
+test("读列表失败（不是没打开）时按默认端口找已经开着的 MuMu", async () => {
+  const { h, c } = withTool(() => { throw new Error("timeout"); }, { open: [16384] });
+  await c.tick();
+  assert.deepEqual(h.connects, ["127.0.0.1:16384"]);
+  assert.equal(c.appClosed(), false);
+});
+
+test("launch：装了 MuMu 时打开播放器；没装（没有 launch）时拒绝", async () => {
+  let launched = 0;
+  const c = createMumu({ tool: async () => INFO_ALL, launch: async () => void launched++, probe: async () => false, connect: async () => "", connected: () => [], log: () => {} });
+  await c.launch();
+  assert.equal(launched, 1);
+  const none = createMumu({ probe: async () => false, connect: async () => "", connected: () => [], log: () => {} });
+  await assert.rejects(none.launch(), /没有安装/);
+});

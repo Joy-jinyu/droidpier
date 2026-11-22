@@ -216,6 +216,10 @@ test("parseClientMsg：logcatRead 校验 rid、filter、limit", () => {
 
 test("GATEWAY_LEVEL 是 5（MuMu 列表和开关机）", () => assert.equal(GATEWAY_LEVEL, 5));
 
+test("parseClientMsg 解析 mumuLaunch（多余字段丢掉）", () => {
+  assert.deepEqual(parseClientMsg('{"t":"mumuLaunch","app":"/bin/sh"}'), { t: "mumuLaunch" });
+});
+
 test("parseClientMsg 解析 mumuOpen / mumuClose；index 不是非负整数时返回 null", () => {
   assert.deepEqual(parseClientMsg('{"t":"mumuOpen","index":0,"extra":1}'), { t: "mumuOpen", index: 0 });
   assert.deepEqual(parseClientMsg('{"t":"mumuClose","index":2}'), { t: "mumuClose", index: 2 });

@@ -1279,6 +1279,9 @@ function App() {
   const mumuCloseAsk = signal<MumuInfo | null>(null);
   // 刚点了“启动”、列表还没变成启动中的那台：按钮先显示启动中并禁用，免得连点（网关每 5 秒读一次列表）
   const mumuStarting = signal<number | null>(null);
+  // 装了 MuMu 但播放器没打开：MuMu 分组里给“打开 MuMu”；mumuLaunching 是点了之后、列表回来之前的临时状态
+  const mumuAppClosed = signal(false);
+  const mumuLaunching = signal(false);
   // 当前设备的身份和能力（ready 带来）：真机的 serial 是 0，按 deviceId 认设备；deviceSize 是 ready.device，真机不在 AVD 列表里，设备框比例靠它
   const deviceId = signal("");
   const kind = signal<"emulator" | "phone">("emulator");
@@ -1506,7 +1509,11 @@ function App() {
   });
   host.on("emu.avds", (p: { list: Avd[] }) => avds.set(p.list));
   host.on("emu.phones", (p: { list: PhoneInfo[] | null }) => phones.set(p.list));
-  host.on("emu.mumu", (p: { list: MumuInfo[] | null }) => mumu.set(p.list));
+  host.on("emu.mumu", (p: { list: MumuInfo[] | null; appClosed?: boolean }) => {
+    mumu.set(p.list);
+    mumuAppClosed.set(p.appClosed === true);
+    if (!p.appClosed) mumuLaunching.set(false);
+  });
   host.on("emu.boot", (b: Boot) => {
     boots.set({ ...boots(), [b.name]: b });
     pendingEvent({ kind: "boot", name: b.name });
@@ -1534,7 +1541,7 @@ function App() {
       () => copyFailed.set(true),
     );
   };
-  host.call("emu.status", {}).then((s: { state: State; serial: number; rotation: number; fps: number; latencyMs: number; avds: Avd[] | null; phones?: PhoneInfo[] | null; mumu?: MumuInfo[] | null; boots: Boot[]; upgrade: string | null; rev: number; uploads?: Upload[]; gateway?: GatewayBanner | null } & DeviceStatus & Omit<Setup, "rev">) => {
+  host.call("emu.status", {}).then((s: { state: State; serial: number; rotation: number; fps: number; latencyMs: number; avds: Avd[] | null; phones?: PhoneInfo[] | null; mumu?: MumuInfo[] | null; mumuAppClosed?: boolean; boots: Boot[]; upgrade: string | null; rev: number; uploads?: Upload[]; gateway?: GatewayBanner | null } & DeviceStatus & Omit<Setup, "rev">) => {
     applySetup({ env: s.env, installs: s.installs, license: s.license, rev: s.rev });
     if (!isStaleStatus(s.rev, gatewayRev)) {
       gatewayRev = s.rev;
@@ -1555,6 +1562,7 @@ function App() {
     if (s.avds) avds.set(s.avds);
     if (s.phones) phones.set(s.phones);
     if (s.mumu) mumu.set(s.mumu);
+    mumuAppClosed.set(s.mumuAppClosed === true);
     boots.set(Object.fromEntries(s.boots.map((b) => [b.name, b])));
   });
 
@@ -2080,6 +2088,12 @@ function App() {
       </View>
     );
   };
+  const launchMumu = () => {
+    mumuLaunching.set(true);
+    // 打开失败（网关回了错误）或打开得慢：30 秒后让按钮回来（我定的，MuMuPlayer 冷启动一般十几秒）
+    setTimeout(() => mumuLaunching.set(false), 30_000);
+    gw(host.call("emu.mumuLaunch", {}));
+  };
   // 列表里那台已经不是“未运行”了（开始开机）：启动按钮的临时状态交还给列表
   effect(() => {
     const i = mumuStarting();
@@ -2133,9 +2147,16 @@ function App() {
                 <Each of={listedPhones()} key={(p) => p.id}>{(p) => <PhoneRow phone={p} />}</Each>
               </If>
             </If>
-            <If when={listedMumu().length > 0}>
+            <If when={listedMumu().length > 0 || (mumuAppClosed() && !searching())}>
               <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>MuMu 模拟器</Text>
               <Each of={listedMumu()} key={(r) => r.key}>{(r) => <MumuDeviceRow row={r} />}</Each>
+              {/* 只有装了 MuMu 的网关才会报 appClosed：没装的电脑上这一组不出现 */}
+              <If when={mumuAppClosed() && !searching()}>
+                <View style={{ gap: SPACE.item, paddingHorizontal: ROW_X, alignItems: "flex-start" }}>
+                  <Text style={{ color: token("muted-foreground"), ...TYPE.body }}>MuMu 没有运行，打开后这里会列出它的设备。</Text>
+                  <Btn label={mumuLaunching() ? "正在打开…" : "打开 MuMu"} disabled={mumuLaunching() || gatewayDown(state())} onPress={launchMumu} />
+                </View>
+              </If>
             </If>
           </Scroll>
           <View style={{ height: 1, marginHorizontal: ROW_X, backgroundColor: token("border-subtle") }} />

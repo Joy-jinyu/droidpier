@@ -22,7 +22,7 @@ import { adb, emulatorId, killAdbChildren } from "./adb.ts";
 import { turnOffAutoPrivateDns } from "./private-dns.ts";
 import { createPhones } from "./phones.ts";
 import { execFile } from "node:child_process";
-import { createMumu, MUMU_TOOL, mumuInstalled, probePort } from "./mumu.ts";
+import { createMumu, MUMU_APP, MUMU_TOOL, mumuInstalled, probePort } from "./mumu.ts";
 import { connectPhone, type PhoneDeps } from "./phone-session.ts";
 import { materializeScrcpyServer, scrcpyServerPath } from "./scrcpy-server.ts";
 import net from "node:net";
@@ -186,6 +186,9 @@ const mumu = createMumu({
   probe: probePort,
   connect: (addr) => adb.run(["connect", addr]),
   connected: () => phones.list().filter((p) => p.state === "device").map((p) => p.id),
+  launch: mumuInstalled()
+    ? () => new Promise((resolve, reject) => execFile("/usr/bin/open", ["-a", MUMU_APP], { timeout: 15_000 }, (e) => (e ? reject(e) : resolve())))
+    : undefined,
   log: note,
 });
 mumu.start();

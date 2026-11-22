@@ -219,7 +219,9 @@ export async function createHost(player: Player) {
 
   let avds: AvdInfo[] | null = null;
   const phones = createPhoneList((list) => player.hostEvent("emu.phones", { list }));
-  const mumu = createPhoneList<MumuInfo>((list) => player.hostEvent("emu.mumu", { list }));
+  // 装了 MuMu 但播放器没打开（网关的 mumu 消息带 appClosed）：页面给“打开 MuMu”
+  let mumuAppClosed = false;
+  const mumu = createPhoneList<MumuInfo>((list) => player.hostEvent("emu.mumu", { list, appClosed: list !== null && mumuAppClosed }));
   let avdWaiters: Array<(l: AvdInfo[]) => void> = [];
   const boots = new Map<string, { since: number; last: Boot }>();
   const refreshAvds = () => conn.control({ t: "avds" });
@@ -341,7 +343,10 @@ export async function createHost(player: Player) {
       for (const f of w) f(list);
     },
     onPhones: (list) => phones.onPhones(list),
-    onMumu: (list) => mumu.onPhones(list),
+    onMumu: (list, appClosed) => {
+      mumuAppClosed = appClosed;
+      mumu.onPhones(list);
+    },
     onLogcat: (lines, reset, dropped) => player.hostEvent("emu.logcat", { lines, reset, dropped }),
     onBoot: (b) => {
       const now = Date.now();
@@ -915,6 +920,7 @@ export async function createHost(player: Player) {
       }
       // 网关等设备真的停了才回（画面上这台、开机中、重启中的都行）。已知是旧网关（级别 < 2）时不发这条，改用 stopOld
       // 侧栏 MuMu 行上点了“启动”、确认了“关机”：状态变化随网关推来的 mumu 列表回来
+      if (name === "emu.mumuLaunch") return ctl({ t: "mumuLaunch" });
       if (name === "emu.mumuOpen" || name === "emu.mumuClose") {
         const index = (args as { index?: unknown } | undefined)?.index;
         if (!Number.isInteger(index) || (index as number) < 0) throw new Error(`${name} 需要 index`);
@@ -930,7 +936,7 @@ export async function createHost(player: Player) {
       }
       if (name === "emu.status") {
         return {
-          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), painted, rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), boots: [...boots.values()].map((b) => b.last),
+          state, serial, deviceId, kind, caps, device, upgrade, logcat: logcatOn(), painted, rev, rotation, gateway: gatewayNote, ...stats, avds, phones: phones.current(), mumu: mumu.current(), mumuAppClosed: mumu.current() !== null && mumuAppClosed, boots: [...boots.values()].map((b) => b.last),
           env, installs, license, uploads: uploads.list(),
         };
       }

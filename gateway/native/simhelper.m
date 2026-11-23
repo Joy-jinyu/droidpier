@@ -1,6 +1,6 @@
 // iOS 模拟器的画面和触摸：网关为每台连上的模拟器起一个这个进程（gateway/src/ios-sim.ts），不开 Simulator.app。
 // 画面：CoreSimulator 的帧缓冲每画一帧回调一次，交给 VideoToolbox 硬件编码成 H.264（Annex B）；画面不动时不编码。
-// 输入：SimulatorKit 的 IndigoHIDMessageForMouseNSEvent 构造触摸消息。两者都是 Xcode 里的私有框架，
+// 输入：优先发给模拟器里的 dtuhidd（XPC，见 dtuConnect）；连不上才用 SimulatorKit 的 Indigo 消息。都是 Xcode 里的私有接口，
 // 只在 Xcode 27.1 上验证过（2026-11-21 实测），Xcode 升级后可能要跟着改。
 //
 // 用法：simhelper <Xcode Developer 目录> <模拟器 UDID>
@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <xpc/xpc.h>
 
 #define CALL(o, s) ((id(*)(id, SEL))objc_msgSend)(o, sel_registerName(s))
 
@@ -195,8 +196,94 @@ static void hidSend(void *msg) {
   dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC));
 }
 
+// Xcode 27 的 CoreSimulator 起，模拟器里的 dtuhidd 收输入：XPC 字典，格式照 idb 的 DTUHID 传输（FBSimulatorControl/HID，MIT）。
+// 旧的 Indigo 消息在 Xcode 27 上不可靠：按键、键盘被丢掉，触摸时灵时不灵（2026-11-23 iOS 18.3 实测重启后点按全部失效，
+// idb 也是这个结论）。连不上 dtuhidd（没有这个服务的旧 Xcode / 旧系统）才用 Indigo
+static NSString *const DTU_SERVICE = @"com.apple.coredevice.feature.remote.hid.digitizer";
+typedef xpc_object_t (*EndpointFromPortFn)(mach_port_t, uint64_t, uint64_t) __attribute__((ns_returns_retained));
+typedef xpc_connection_t (*ConnectionFromEndpointFn)(xpc_object_t) __attribute__((ns_returns_retained));
+typedef void (*EnableSim2HostFn)(xpc_connection_t);
+static xpc_connection_t dtu;
+static BOOL dtuTouching;
+static uint64_t dtuRetryAt;
+static int dtuSilent;
+
+static xpc_object_t dtuMessage(const char *type, xpc_object_t payload, bool barrier) {
+  xpc_object_t m = xpc_dictionary_create(NULL, NULL, 0);
+  xpc_dictionary_set_string(m, "messageType", type);
+  xpc_dictionary_set_bool(m, "isBarrier", barrier);
+  xpc_dictionary_set_string(m, "featureIdentifier", DTU_SERVICE.UTF8String);
+  xpc_dictionary_set_value(m, "payload", payload);
+  return m;
+}
+
+static xpc_object_t keyPayload(uint32_t usage, BOOL down) {
+  xpc_object_t p = xpc_dictionary_create(NULL, NULL, 0);
+  xpc_dictionary_set_uint64(p, "usageCode", usage);
+  xpc_dictionary_set_uint64(p, "state", down ? 1 : 2);
+  return p;
+}
+
+// 在 inputQ 上调。连上后用一条 barrier 消息确认 dtuhidd 在应答（同 idb 的存活探测）；不应答就当没有
+static void dtuConnect(void) {
+  if (dtu) return;
+  // 刚开机时 dtuhidd 可能还没起来：失败后过 5 秒再试，不是每个触摸都去连。
+  // 有端口却连续 5 次不应答（idb 说的 dtuhidd 崩溃后被 launchd 限流）就不再试，免得每次都卡住输入队列 4 秒
+  if (dtuSilent >= 5 || clock_gettime_nsec_np(CLOCK_UPTIME_RAW) < dtuRetryAt) return;
+  EndpointFromPortFn endpointFromPort = (EndpointFromPortFn)dlsym(RTLD_DEFAULT, "xpc_endpoint_create_mach_port_4sim");
+  ConnectionFromEndpointFn fromEndpoint = (ConnectionFromEndpointFn)dlsym(RTLD_DEFAULT, "xpc_connection_create_from_endpoint");
+  EnableSim2HostFn sim2host = (EnableSim2HostFn)dlsym(RTLD_DEFAULT, "xpc_connection_enable_sim2host_4sim");
+  if (!endpointFromPort || !fromEndpoint || !sim2host || ![device respondsToSelector:sel_registerName("lookup:error:")]) return;
+  NSError *e = nil;
+  mach_port_t port = ((mach_port_t (*)(id, SEL, id, NSError **))objc_msgSend)(device, sel_registerName("lookup:error:"), DTU_SERVICE, &e);
+  if (port == MACH_PORT_NULL) { dtuRetryAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) + 5 * NSEC_PER_SEC; return; }
+  xpc_object_t endpoint = endpointFromPort(port, 0, 0);
+  xpc_connection_t c = endpoint ? fromEndpoint(endpoint) : nil;
+  if (!c) { dtuRetryAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) + 5 * NSEC_PER_SEC; return; }
+  sim2host(c);
+  xpc_connection_set_event_handler(c, ^(xpc_object_t ev) {
+    if (ev == XPC_ERROR_CONNECTION_INTERRUPTED) dispatch_async(inputQ, ^{ dtuTouching = NO; });
+    else if (ev == XPC_ERROR_CONNECTION_INVALID) dispatch_async(inputQ, ^{ if (dtu == c) { dtu = nil; dtuTouching = NO; } });
+  });
+  xpc_connection_resume(c);
+  dispatch_semaphore_t answered = dispatch_semaphore_create(0);
+  __block BOOL alive = NO;
+  xpc_connection_send_message_with_reply(c, dtuMessage("IndigoKeyboardButtonEvent", keyPayload(0, NO), true), dispatch_get_global_queue(0, 0), ^(xpc_object_t r) {
+    alive = xpc_get_type(r) == XPC_TYPE_DICTIONARY;
+    dispatch_semaphore_signal(answered);
+  });
+  if (dispatch_semaphore_wait(answered, dispatch_time(DISPATCH_TIME_NOW, 4 * NSEC_PER_SEC)) || !alive) {
+    xpc_connection_cancel(c);
+    dtuSilent++;
+    dtuRetryAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW) + 5 * NSEC_PER_SEC;
+    return;
+  }
+  dtu = c;
+}
+
+static void dtuSend(const char *type, xpc_object_t payload) {
+  xpc_connection_send_message(dtu, dtuMessage(type, payload, false));
+}
+
 static void touch(double x, double y, BOOL down, uint64_t edge) {
   if (!fbWidth || !fbHeight) return;
+  // 只在没有手指按着时换路：一次滑动中途换过去，旧路上的手指就永远抬不起来
+  if (!touching && !dtuTouching) dtuConnect();
+  if (dtu && !touching) {
+    if (!down && !dtuTouching) return;
+    xpc_object_t point = xpc_dictionary_create(NULL, NULL, 0);
+    xpc_dictionary_set_double(point, "x", fmin(fmax(x / fbWidth, 0), 1));
+    xpc_dictionary_set_double(point, "y", fmin(fmax(y / fbHeight, 0), 1));
+    xpc_object_t p = xpc_dictionary_create(NULL, NULL, 0);
+    xpc_dictionary_set_value(p, "pointOne", point);
+    // 0 开始、1 移动、2 结束
+    xpc_dictionary_set_uint64(p, "eventType", !down ? 2 : dtuTouching ? 1 : 0);
+    xpc_dictionary_set_uint64(p, "edge", edge);
+    xpc_dictionary_set_uint64(p, "target", 0);
+    dtuTouching = down;
+    dtuSend("IndigoDigitizerEvent", p);
+    return;
+  }
   uint64_t type = !down ? EV_UP : touching ? EV_DRAG : EV_DOWN;
   if (!down && !touching) return;
   touching = down;
@@ -208,11 +295,26 @@ static void touch(double x, double y, BOOL down, uint64_t edge) {
 }
 
 static void button(uint32_t source, BOOL down) {
+  dtuConnect();
+  if (dtu) {
+    // dtuhidd 按 Consumer 页的用法码认硬件按键（idb 的 SimulatorHIDButtonIdentity）：Home 是 Menu 0x40，锁屏是 Power 0x30
+    uint64_t code = source == 0 ? 0x40 : source == 0x3e8 ? 0x30 : 0;
+    if (code) {
+      xpc_object_t p = xpc_dictionary_create(NULL, NULL, 0);
+      xpc_dictionary_set_uint64(p, "usagePage", 0x0C);
+      xpc_dictionary_set_uint64(p, "usageCode", code);
+      xpc_dictionary_set_uint64(p, "state", down ? 1 : 2);
+      dtuSend("IndigoButtonEvent", p);
+      return;
+    }
+  }
   void *msg = buttonMessage(source, down ? 1 : 2, TARGET_HARDWARE);
   if (msg) hidSend(msg);
 }
 
 static void hidKey(uint32_t usage, BOOL down) {
+  dtuConnect();
+  if (dtu) { dtuSend("IndigoKeyboardButtonEvent", keyPayload(usage, down)); return; }
   void *msg = keyboardMessage(usage, down ? 1 : 2);
   if (msg) hidSend(msg);
 }
@@ -274,6 +376,8 @@ int main(int argc, char **argv) {
                                                        [NSUUID UUID], encodeQ, frame, frame, ^{});
     // 先出一帧：画面静止时帧回调不来，页面也要能看到当前画面
     dispatch_async(encodeQ, ^{ encodeFresh(); });
+    // 先连好 dtuhidd，第一下点按不用等存活探测
+    dispatch_async(inputQ, ^{ dtuConnect(); });
 
     // 读 stdin 会一直阻塞，放在自己的线程上，不占 GCD 的工作线程
     [NSThread detachNewThreadWithBlock:^{
@@ -300,6 +404,9 @@ int main(int argc, char **argv) {
         }
       }
       dispatch_sync(outQ, ^{});
+      // 最后一条抬起可能还在路上：等输入队列发完，dtuhidd 再留 80 ms（同 idb 的 drain），不然模拟器里会留一根按着的手指
+      dispatch_sync(inputQ, ^{});
+      if (dtu) usleep(80000);
       exit(0);
     }];
     // 主线程跑 CFRunLoop，不用 dispatch_main（dispatch_main 会让主线程 pthread_exit）

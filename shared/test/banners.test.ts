@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeBanners, addNotice, currentNotice, dropNotice, NO_NOTICES, noticeTimeoutMs, pickBanner, timedNotice, waitingShown, type Notices } from "../../ui/banners.ts";
+import { activeBanners, addNotice, bannerShot, currentNotice, dropNotice, NO_NOTICES, noticeTimeoutMs, pickBanner, sameBanner, timedNotice, waitingShown, type Notices } from "../../ui/banners.ts";
 
 const err = (text: string) => ({ text, error: true });
 const info = (text: string) => ({ text });
@@ -80,4 +80,24 @@ test("「关掉这条后还有 N 条」只写在能关掉的提示下面", () =>
   assert.equal(waitingShown(pickBanner(banners({ notices: q, gateway: true })), false), false);
   assert.equal(waitingShown(pickBanner(banners({ clip: true, gateway: true })), false), true);
   assert.equal(waitingShown({ shown: "error", waiting: 0 }, false), false);
+});
+
+test("提示条的快照：只记这一种用得着的内容", () => {
+  const n = { text: "连不上", error: true };
+  const g = { text: "网关要更新" };
+  assert.equal(bannerShot(null, n, g), null);
+  assert.deepEqual(bannerShot("error", n, g), { kind: "error", notice: n, gateway: null });
+  assert.deepEqual(bannerShot("gateway", n, g), { kind: "gateway", notice: null, gateway: g });
+  assert.deepEqual(bannerShot("clip", n, g), { kind: "clip", notice: null, gateway: null });
+});
+
+test("同一条提示不重新进场；换了通知（哪怕文字一样）、换了种类、出现或消失都算换了一条", () => {
+  const a = { text: "已复制" };
+  const same = bannerShot("info", a, null);
+  assert.equal(sameBanner(bannerShot("info", a, null), same), true);
+  assert.equal(sameBanner(bannerShot("info", { text: "已复制" }, null), same), false);
+  assert.equal(sameBanner(bannerShot("clip", null, null), same), false);
+  assert.equal(sameBanner(null, same), false);
+  assert.equal(sameBanner(same, null), false);
+  assert.equal(sameBanner(null, null), true);
 });

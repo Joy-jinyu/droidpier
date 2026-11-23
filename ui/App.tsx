@@ -1,8 +1,8 @@
-import { type ViewRef, cleanup, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, token, View, windowSize } from "nsh";
+import { type ViewRef, cleanup, createMotion, effect, host, Image, type JSX, keymap, LayoutAnimation, List, type ListRef, mount, openUrl, reduceMotion, Scroll, setColorScheme, signal, Text, token, untracked, View, windowSize } from "nsh";
 import { Button, Collapsible, ContextMenu, Dialog, Input, Menu, MenuItem, MenuSeparator, Radio, RadioGroup, Select, Tab, Tabs, Toggle, Toolbar, ToolbarGroup, Tooltip } from "nsh/base";
 import { fitMiddle, middleEllipsis, noBreak } from "./ellipsis";
 import { gatewayDown } from "./gateway-state";
-import { activeBanners, addNotice, currentNotice, dropNotice, NO_NOTICES, noticeTimeoutMs, pickBanner, timedNotice, waitingShown, type BannerKind, type Notice, type Notices } from "./banners";
+import { activeBanners, addNotice, bannerShot, currentNotice, dropNotice, NO_NOTICES, noticeTimeoutMs, pickBanner, sameBanner, timedNotice, waitingShown, type BannerShot, type Notice, type Notices } from "./banners";
 import { isStopping, STOP_IDLE, stopStep, type StopEvent, type StopFlow } from "./stop-flow";
 import { PENDING_MS, pendingAfter, type Pending, type PendingEvent } from "./start-pending";
 import { failText } from "../shared/fail-text";
@@ -1961,8 +1961,27 @@ function App() {
   // 画面上方现在显示哪条提示（ui/banners.ts）
   const banner = () => pickBanner(activeBanners({ adbStuck: adbStuck(), state: state(), notices: notices(), gateway: !!gatewayShown(), clip: clip() !== null }));
   const gatewayManual = () => gatewayShown()?.kind === "manual";
-  const bannerBorder = (k: BannerKind) =>
-    k === "adb" || (k === "error" && notice()?.error) ? token("destructive") : k === "gateway" && gatewayManual() ? token("warning") : token("border");
+  const bannerBorder = (b: BannerShot<GatewayBanner>) =>
+    b.kind === "adb" || (b.kind === "error" && b.notice?.error) ? token("destructive") : b.kind === "gateway" && b.gateway?.kind === "manual" ? token("warning") : token("border");
+  // 提示条的进出场：换一条（关掉、到时间、被下一条顶替）时旧的先往上淡出，播完再换上新的从上面落下来；淡出时画的是记下来的
+  // 旧内容（shownBanner），不是已经变成下一条的状态。连着变几次只认最后一次。减少动态效果时 nsh 直接跳到终点
+  const bannerMotion = createMotion({ initial: { opacity: 0 } });
+  const shownBanner = signal<BannerShot<GatewayBanner> | null>(null);
+  let bannerTurn = 0;
+  let bannerLeaving: Promise<unknown> | null = null;
+  effect(() => {
+    const want = bannerShot(banner().shown, notice(), gatewayShown());
+    const turn = ++bannerTurn;
+    void (async () => {
+      const cur = untracked(shownBanner);
+      if (sameBanner(cur, want) && !bannerLeaving) return;
+      if (cur && !bannerLeaving) bannerLeaving = bannerMotion.play("fadeOutUp", { duration: MOTION.fast }).finally(() => { bannerLeaving = null; });
+      await bannerLeaving;
+      if (turn !== bannerTurn) return;
+      shownBanner.set(want);
+      if (want) void bannerMotion.play("fadeInDown", { duration: MOTION.normal });
+    })();
+  });
   // 一般消息只在真的显示出来时倒计时：被前面的提示挡着时停下，再露出来时重新计（ui/banners.ts 的 timedNotice）
   let timed: Notice | null = null;
   let noticeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -2542,10 +2561,10 @@ function App() {
           {/* 画面上方的提示同一时间只显示一条（ui/banners.ts 的先后），盖住的地方少；后面排着几条写在能关掉的那条里。
               传文件的进度单独一张卡片放在下面，一直看得见 */}
           <View style={{ position: "absolute", top: SPACE.item, left: 0, right: 0, alignItems: "center", gap: SPACE.item, pointerEvents: "box-none" }}>
-            <If when={banner().shown}>
-              {(k) => (
-                <View style={{ ...bannerCard(), borderColor: bannerBorder(k()) }}>
-                  <If when={k() === "gateway" ? gatewayShown() : null}>
+            <If when={shownBanner()}>
+              {(shot) => (
+                <View style={{ ...bannerCard(), borderColor: bannerBorder(shot()), ...bannerMotion.style }}>
+                  <If when={shot().gateway}>
                     {(b) => (
                       <View role="summary" style={{ gap: SPACE.item }}>
                         <Text style={{ color: b().kind === "manual" ? token("warning") : token("foreground"), ...TYPE.body }}>{b().text}</Text>
@@ -2558,7 +2577,7 @@ function App() {
                       </View>
                     )}
                   </If>
-                  <If when={k() === "clip"}>
+                  <If when={shot().kind === "clip"}>
                     <View role="summary" style={{ flexDirection: "row", alignItems: "center", gap: SPACE.item }}>
                       <Text style={{ color: copyFailed() ? token("destructive") : token("foreground"), ...TYPE.body }}>
                         {copyFailed() ? "复制失败，请再点一次。" : `${kind() === "phone" ? "手机" : "模拟器"}里复制了新内容`}
@@ -2567,13 +2586,13 @@ function App() {
                       <Btn label="关闭" onPress={() => clip.set(null)} />
                     </View>
                   </If>
-                  <If when={k() === "adb"}>
+                  <If when={shot().kind === "adb"}>
                     <AdbStuck onReboot={() => rebootAsk.set(true)} phone={kind() === "phone"} />
                     <View style={{ flexDirection: "row" }}>
                       <Btn label="关闭" onPress={() => adbStuck.set(false)} />
                     </View>
                   </If>
-                  <If when={k() === "error" || k() === "info" ? notice() : null}>
+                  <If when={shot().notice}>
                     {(n) => (
                       <View role={n().error ? "alert" : "summary"} style={{ gap: SPACE.item }}>
                         <Text style={{ color: n().error ? token("destructive") : token("foreground"), ...TYPE.body, userSelect: noticeTimeoutMs(n()) === null ? "text" : undefined }}>{n().text}</Text>
@@ -2585,7 +2604,7 @@ function App() {
                       </View>
                     )}
                   </If>
-                  <If when={waitingShown(banner(), gatewayManual())}>
+                  <If when={banner().shown === shot().kind && waitingShown(banner(), gatewayManual())}>
                     <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{`关掉这条后还有 ${banner().waiting} 条提示`}</Text>
                   </If>
                 </View>

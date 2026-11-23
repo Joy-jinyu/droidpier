@@ -214,7 +214,15 @@ test("parseClientMsg：logcatRead 校验 rid、filter、limit", () => {
   assert.equal(parseClientMsg(JSON.stringify({ t: "logcatRead", rid: 1, filter: { pkg: "a b", level: "E", text: "" }, limit: 5 })), null);
 });
 
-test("GATEWAY_LEVEL 是 6（iOS 模拟器列表和开关机）", () => assert.equal(GATEWAY_LEVEL, 6));
+test("GATEWAY_LEVEL 是 7（检测、清除模拟器的代理）", () => assert.equal(GATEWAY_LEVEL, 7));
+
+test("parseClientMsg 解析 proxyCheck / proxyClear；没有数字 rid、proxyClear 没带 proxy 时返回 null", () => {
+  assert.deepEqual(parseClientMsg('{"t":"proxyCheck","rid":1}'), { t: "proxyCheck", rid: 1 });
+  assert.deepEqual(parseClientMsg('{"t":"proxyClear","rid":2,"proxy":"10.0.2.2:9091"}'), { t: "proxyClear", rid: 2, proxy: "10.0.2.2:9091" });
+  assert.equal(parseClientMsg('{"t":"proxyCheck"}'), null);
+  assert.equal(parseClientMsg('{"t":"proxyClear","rid":2}'), null);
+  assert.equal(parseClientMsg('{"t":"proxyClear","rid":"2","proxy":"x:1"}'), null);
+});
 
 test("parseClientMsg 解析 iosSimOpen / iosSimClose；udid 不是 UUID 写法时返回 null（它会交给 simctl）", () => {
   const u = "0A67FFC2-A5BD-43AB-9AA9-6E22B5511D40";

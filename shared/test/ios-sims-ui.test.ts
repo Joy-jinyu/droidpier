@@ -15,8 +15,8 @@ test("iosSimRows：默认只列没关机的并报出收起了几台；展开或�
   assert.deepEqual(iosSimRows(null, "", false), { rows: [], hidden: 0 });
 });
 
-test("iosSimStatus：运行中的是当前画面时说当前画面", () => {
-  assert.equal(iosSimStatus(on, true), "当前画面");
+test("iosSimStatus：运行中的是当前画面时同安卓模拟器行，说「运行中 · 当前画面」", () => {
+  assert.equal(iosSimStatus(on, true), "运行中 · 当前画面");
   assert.equal(iosSimStatus(on, false), "运行中");
   assert.equal(iosSimStatus(off, false), "未运行");
   assert.equal(iosSimStatus(booting, false), "启动中…");

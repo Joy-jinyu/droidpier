@@ -14,7 +14,7 @@ const STATE: Record<Exclude<IosSimInfo["state"], "booted">, string> = { shutdown
 
 /** 行副标题：current 表示它就是主区正在显示的设备。 */
 export function iosSimStatus(s: IosSimInfo, current: boolean): string {
-  if (s.state === "booted") return current ? "当前画面" : "运行中";
+  if (s.state === "booted") return current ? "运行中 · 当前画面" : "运行中";
   return STATE[s.state];
 }
 

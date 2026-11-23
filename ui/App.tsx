@@ -553,6 +553,34 @@ function DialogContent(props: { title: string; description?: string; scroll?: bo
 
 // 实时播报（ARIA 的 status）在 nsh 的 AccessibilityRole 里叫 "summary"：nsh 网页端把它写成 role="status"（nsh.js 的 ARIA_ROLES）
 
+/**
+ * 侧栏的分组标题（设备、手机、MuMu 模拟器、iOS 模拟器）：分组之间隔 SPACE.group，标题到下面第一行隔 SPACE.part。
+ * 列表里的标题上下已经有列表的 SPACE.hair 间隔，各减掉一个；「设备」在列表外面（outsideList），上面是搜索框，
+ * 下面隔的是侧栏自己的 SPACE.part。
+ * 给了 onToggle 时标题本身就是展开开关：字后面一个箭头，收起朝右、展开朝下（同「手动安装」那个开关的写法）；a11y 是读屏念的名字
+ */
+function GroupLabel(props: { children: string; outsideList?: boolean; open?: boolean; onToggle?: () => void; a11y?: string }) {
+  const pad = props.outsideList ? { paddingTop: SPACE.item, paddingBottom: 0 } : { paddingTop: SPACE.group - SPACE.hair, paddingBottom: SPACE.part - SPACE.hair };
+  const label = { color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong } as const;
+  return (
+    <If when={props.onToggle} else={<Text style={{ ...label, paddingHorizontal: ROW_X, ...pad }}>{props.children}</Text>}>
+      {(toggle) => (
+        <View style={{ paddingHorizontal: ROW_X, ...pad, alignItems: "flex-start" }}>
+          {/* 触发器按 nsh 文档（elements/collapsible.md）用 role="button" 的 View：Button 不收 accessibilityState，读屏要听到展开没有 */}
+          <View onPress={() => toggle()()} role="button" accessibilityLabel={props.a11y ?? props.children} accessibilityState={{ expanded: !!props.open }}
+            hoverStyle={{ opacity: 0.8 }} focusStyle={{ backgroundColor: token("accent") }}
+            style={{ flexDirection: "row", alignItems: "center", gap: SPACE.part, borderRadius: token("radius-sm"), ...ease() }}>
+            <Text style={label}>{props.children}</Text>
+            <View style={{ transform: [{ rotate: props.open ? "0deg" : "-90deg" }], ...ease() }}>
+              <Icon name="chevron" size={ICON.sm} tint={token("muted-foreground")} />
+            </View>
+          </View>
+        </View>
+      )}
+    </If>
+  );
+}
+
 /** 重启命令的名字（菜单项、adb 卡住时的按钮、确认框标题都用它）。 */
 const rebootLabel = (phone: boolean) => (phone ? "重启手机" : "重启模拟器");
 
@@ -2229,6 +2257,8 @@ function App() {
   });
 
   const isCurrentIos = (s: IosSimInfo) => currentIos()?.udid === s.udid;
+  // 没在运行的 iOS 模拟器有几台（收起时不列出来的）
+  const iosStopped = () => iosSimRows(iosSims(), "", false).hidden;
   effect(() => {
     const u = iosUseWhenBooted();
     const sim = u === null ? undefined : (iosSims() ?? []).find((x) => x.udid === u);
@@ -2269,7 +2299,8 @@ function App() {
               <Icon name="smartphone" size={ICON.md} tint={iosTint(s())} />
             </View>
             <View style={{ flex: 1, minWidth: 0, gap: SPACE.hair }}>
-              <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong }}>{s().name}</Text>
+              {/* 行尾有“启动”时名字可能放不下：单行省略，行高和别的行一样（同模拟器行） */}
+              <Text style={{ color: token("foreground"), ...TYPE.body, fontWeight: WEIGHT.strong, numberOfLines: 1 }}>{noBreak(s().name)}</Text>
               <Text style={{ color: token("muted-foreground"), ...TYPE.caption }}>{iosSimStatus(s(), isCurrentIos(s()))}</Text>
             </View>
             <If when={s().state !== "shutdown"}>
@@ -2306,7 +2337,7 @@ function App() {
           </FieldBox>
           {/* 搜索时只有手机或 MuMu 匹配：模拟器这组的标题也不留 */}
           <If when={!searching() || listed().length > 0 || noMatch()}>
-            <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.item, paddingBottom: SPACE.hair }}>设备</Text>
+            <GroupLabel outsideList>设备</GroupLabel>
           </If>
           <Scroll style={{ flex: 1 }} contentStyle={{ gap: SPACE.hair }}>
             {/* 没连着网关时读不到列表：不说「正在读取」；有断开前的旧列表时说明它可能不是最新的 */}
@@ -2329,7 +2360,7 @@ function App() {
               </If>
             </If>
             <If when={showPhones(phones()) && (!searching() || listedPhones().length > 0)}>
-              <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>手机</Text>
+              <GroupLabel>手机</GroupLabel>
               <If when={listedPhones().length > 0} else={
                 <Text style={{ color: token("muted-foreground"), ...TYPE.body, paddingHorizontal: ROW_X }}>
                   {env()?.missing.some((m) => m.id === "platform-tools") ? "先在环境检查里安装 platform-tools（adb），才能看到手机。" : "插上手机并打开 USB 调试。"}
@@ -2339,7 +2370,7 @@ function App() {
               </If>
             </If>
             <If when={listedMumu().length > 0 || (mumuAppClosed() && !searching())}>
-              <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>MuMu 模拟器</Text>
+              <GroupLabel>MuMu 模拟器</GroupLabel>
               <Each of={listedMumu()} key={(r) => r.key}>{(r) => <MumuDeviceRow row={r} />}</Each>
               {/* 只有装了 MuMu 的网关才会报 appClosed：没装的电脑上这一组不出现 */}
               <If when={mumuAppClosed() && !searching()}>
@@ -2351,13 +2382,10 @@ function App() {
             </If>
             {/* 搜索时没有匹配的模拟器就整组不显示，不留空标题 */}
             <If when={iosSimRows(iosSims(), query(), iosShowAll()).rows.length > 0 || iosSimRows(iosSims(), query(), iosShowAll()).hidden > 0}>
-              <Text style={{ color: token("muted-foreground"), ...TYPE.caption, fontWeight: WEIGHT.strong, paddingHorizontal: ROW_X, paddingTop: SPACE.inset, paddingBottom: SPACE.hair }}>iOS 模拟器</Text>
+              {/* 有没在运行的模拟器、又没在搜索时，标题就是「显示没在运行的」开关（搜索时本来就全列出来） */}
+              <GroupLabel open={iosShowAll()} onToggle={iosStopped() > 0 && !query().trim() ? () => { animateNext(); iosShowAll.set(!iosShowAll()); } : undefined}
+                a11y={iosShowAll() ? "iOS 模拟器，已列出没在运行的" : `iOS 模拟器，还有 ${iosStopped()} 台没在运行`}>iOS 模拟器</GroupLabel>
               <Each of={iosSimRows(iosSims(), query(), iosShowAll()).rows} key={(s) => s.udid}>{(s) => <IosSimRow sim={s} />}</Each>
-              <If when={iosSimRows(iosSims(), query(), iosShowAll()).hidden > 0 || (iosShowAll() && !query().trim())}>
-                <View style={{ paddingHorizontal: ROW_X, alignItems: "flex-start" }}>
-                  <Btn label={iosShowAll() ? "只显示运行中的" : `显示未运行的 ${iosSimRows(iosSims(), query(), false).hidden} 台`} onPress={() => { animateNext(); iosShowAll.set(!iosShowAll()); }} />
-                </View>
-              </If>
             </If>
           </Scroll>
           <View style={{ height: 1, marginHorizontal: ROW_X, backgroundColor: token("border-subtle") }} />

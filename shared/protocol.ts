@@ -14,8 +14,9 @@ export const PROTOCOL_VERSION = 1;
  * 4：logcatRead（WebMCP 读日志）。
  * 5：mumu 列表、mumuOpen / mumuClose（从页面开关 MuMu 模拟器）。
  * 6：iosSims 列表、iosSimOpen / iosSimClose、iosCatalog / createIosSim（iOS 模拟器）；use 认 iOS 模拟器的 UDID；caps.logs。
+ * 7：proxyCheck / proxyClear（检测、清除模拟器里连不上的代理）。
  */
-export const GATEWAY_LEVEL = 6;
+export const GATEWAY_LEVEL = 7;
 
 /** logcatRead 一次最多要多少行（WebMCP 的 droidpier_read_logcat）。 */
 export const LOGCAT_READ_MAX = 1000;
@@ -345,6 +346,10 @@ export type ClientMsg =
   | { t: "deleteAvd"; rid: number; name: string; stop?: true }
   /** 用户点了“停止运行”：关掉这台 AVD（开机中的也算），不管是不是当前设备；等它真的停了才回复，回复同 rid 的 stopAvd，成功后网关给所有页面发新的 avds。 */
   | { t: "stopAvd"; rid: number; name: string }
+  /** 用户点了“检测网络”：看当前模拟器的全局 HTTP 代理还能不能用（gateway/src/proxy-check.ts）；回复同 rid 的 proxyCheck。 */
+  | { t: "proxyCheck"; rid: number }
+  /** 用户在检测结果里点了“清除代理”：当前设备的全局 HTTP 代理还是 proxy（检测时看到的）才清掉；回复同 rid 的 proxyClear。 */
+  | { t: "proxyClear"; rid: number; proxy: string }
   /** 用户点了 MuMu 设备的“启动”：网关执行 mumutool open，状态变化随 mumu 列表推给所有页面；失败回 error。 */
   | { t: "mumuOpen"; index: number }
   /** 用户确认关机：网关执行 mumutool close，同上。 */
@@ -434,6 +439,13 @@ export type ServerMsg =
   /** DevTools 要高亮的元素，页面画在设备画面上（null 清掉）；网关在 DevTools 发 Overlay.highlightNode、选择元素模式下鼠标移动时发。 */
   | { t: "highlight"; box: HighlightBox | null }
   | { t: "stopAvd"; rid: number; ok: boolean; error?: string }
+  /**
+   * proxy 为 null 表示没设代理；ok 表示代理回了 HTTP 响应。有 error 时没检测成。
+   * untrusted：代理能连通时，最近 5 分钟因证书不受信任而 HTTPS 失败的 App 包名（进程已退出的是 ?）；非空说明抓包工具在解密、设备没装它的证书。
+   */
+  | { t: "proxyCheck"; rid: number; proxy: string | null; ok?: boolean; untrusted?: string[]; error?: string; code?: AdbErrorCode }
+  /** ok：清完读回来确实没有代理了。 */
+  | { t: "proxyClear"; rid: number; ok: boolean; error?: string; code?: AdbErrorCode }
   /** reset 为 true 时页面先清空再放这些行；dropped 是因为页面连接积压而没发的行数。 */
   | { t: "logcat"; lines: LogLine[]; reset: boolean; dropped?: number }
   | { t: "logcatApps"; rid: number; foreground: string | null; apps: string[] }
@@ -528,7 +540,11 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       if (!isStr(o.name)) return null;
       return o as ClientMsg;
     case "webviews":
+    case "proxyCheck":
       if (!isNum(o.rid)) return null;
+      return o as ClientMsg;
+    case "proxyClear":
+      if (!isNum(o.rid) || !isStr(o.proxy)) return null;
       return o as ClientMsg;
     case "inspect":
       if (!isNum(o.rid) || !isStr(o.socket) || !isStr(o.id)) return null;

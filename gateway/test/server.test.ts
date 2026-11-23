@@ -3292,3 +3292,80 @@ test("iOS 调试通道：带票据从网关本机地址连上后双向转发；�
   const again = new WebSocket(`ws://${wsPath}`, { headers: { Origin: `http://127.0.0.1:${port}` } });
   assert.equal(await new Promise((r) => again.on("close", (code) => r(code))), CLOSE_BAD_TOKEN);
 });
+
+// ─────────────── 检测、清除代理 ───────────────
+
+/** 假的代理检测：state 是 check 的结果，cleared 记下清过哪台设备；fail 时 check / clear 都抛它。 */
+function fakeProxy(state: { proxy: null } | { proxy: string; ok: false } | { proxy: string; ok: true; untrusted: string[] }, opts: { fail?: Error; clear?: "cleared" | "changed" | "failed" } = {}) {
+  const checked: string[] = [];
+  const cleared: string[] = [];
+  return {
+    checked,
+    cleared,
+    ops: {
+      check: async (id: string) => { checked.push(id); if (opts.fail) throw opts.fail; return state; },
+      clear: async (id: string, expected: string) => { cleared.push(`${id} ${expected}`); if (opts.fail) throw opts.fail; return opts.clear ?? "cleared"; },
+    },
+  };
+}
+
+test("proxyCheck：按当前设备检测，结果和 rid 原样带回", async (t) => {
+  const p = fakeProxy({ proxy: "10.20.95.233:9091", ok: false });
+  const { c } = await debugSetup(t, fakeDebug(), new FakeSession(), undefined, { proxy: p.ops });
+  c.ws.send(JSON.stringify({ t: "proxyCheck", rid: 41 }));
+  await until(() => !!reply(c, "proxyCheck", 41));
+  assert.deepEqual(reply(c, "proxyCheck", 41), { t: "proxyCheck", rid: 41, proxy: "10.20.95.233:9091", ok: false });
+  assert.deepEqual(p.checked, ["emulator-5554"]);
+});
+
+test("proxyClear：带着检测时看到的代理去清，清掉后回 ok 并记日志", async (t) => {
+  const p = fakeProxy({ proxy: null });
+  const { c, logs } = await debugSetup(t, fakeDebug(), new FakeSession(), undefined, { proxy: p.ops });
+  c.ws.send(JSON.stringify({ t: "proxyClear", rid: 42, proxy: "10.20.95.233:9091" }));
+  await until(() => !!reply(c, "proxyClear", 42));
+  assert.deepEqual(reply(c, "proxyClear", 42), { t: "proxyClear", rid: 42, ok: true });
+  assert.deepEqual(p.cleared, ["emulator-5554 10.20.95.233:9091"]);
+  assert.ok(logs.some((l) => l.includes("已清除 emulator-5554 的全局 HTTP 代理 10.20.95.233:9091")));
+});
+
+test("proxyClear：设置变了（换了设备）或清完还在时回 ok=false 和原因", async (t) => {
+  for (const [clear, error] of [["changed", "代理设置和检测时不一样了（可能换了设备），没有清除。请重新检测"], ["failed", "清除后代理设置还在"]] as const) {
+    const p = fakeProxy({ proxy: null }, { clear });
+    const { c } = await debugSetup(t, fakeDebug(), new FakeSession(), undefined, { proxy: p.ops });
+    c.ws.send(JSON.stringify({ t: "proxyClear", rid: 43, proxy: "10.20.95.233:9091" }));
+    await until(() => !!reply(c, "proxyClear", 43));
+    assert.deepEqual(reply(c, "proxyClear", 43), { t: "proxyClear", rid: 43, ok: false, error });
+  }
+});
+
+test("proxyCheck：网关没配代理检测时回「不支持」", async (t) => {
+  const { c } = await debugSetup(t);
+  c.ws.send(JSON.stringify({ t: "proxyCheck", rid: 44 }));
+  await until(() => !!reply(c, "proxyCheck", 44));
+  assert.deepEqual(reply(c, "proxyCheck", 44), { t: "proxyCheck", rid: 44, proxy: null, error: "网关不支持检测网络" });
+});
+
+test("proxyCheck：模拟器 adb 无响应时回统一的话和 code；真机回真机的说法", async (t) => {
+  const p = fakeProxy({ proxy: null }, { fail: new AdbUnresponsive() });
+  const { c } = await debugSetup(t, fakeDebug(), new FakeSession(), undefined, { proxy: p.ops });
+  c.ws.send(JSON.stringify({ t: "proxyCheck", rid: 45 }));
+  await until(() => !!reply(c, "proxyCheck", 45));
+  assert.deepEqual(reply(c, "proxyCheck", 45), { t: "proxyCheck", rid: 45, proxy: null, error: ADB_UNRESPONSIVE, code: "adb-unresponsive" });
+
+  const ph = await phoneSetup(t, new FakePhone(), new FakeSession(), { proxy: p.ops });
+  ph.c.ws.send(JSON.stringify({ t: "proxyClear", rid: 46, proxy: "10.20.95.233:9091" }));
+  await until(() => !!reply(ph.c, "proxyClear", 46));
+  const r = reply(ph.c, "proxyClear", 46);
+  assert.equal(r.ok, false);
+  assert.match(r.error, /手机的 adb 没有响应/);
+  assert.equal(r.code, undefined);
+});
+
+test("proxyCheck：iOS 模拟器不走 adb，回不支持，不去检测", async (t) => {
+  const p = fakeProxy({ proxy: null });
+  const { c } = await iosSetup(t, { proxy: p.ops });
+  c.ws.send(JSON.stringify({ t: "proxyCheck", rid: 47 }));
+  await until(() => !!reply(c, "proxyCheck", 47));
+  assert.deepEqual(reply(c, "proxyCheck", 47), { t: "proxyCheck", rid: 47, proxy: null, error: "iOS 模拟器暂不支持这个功能" });
+  assert.deepEqual(p.checked, []);
+});

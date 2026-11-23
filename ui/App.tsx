@@ -39,6 +39,10 @@ type InspectResult = { opened: true } | { cancelled: true } | { hint: string } |
 type Inspected = { key: string; title: string; device: string };
 type NavigateResult = { ok: boolean; title?: string; bridge?: boolean; error?: string; adbStuck?: boolean };
 type WebViewsResult = { list: Page[]; error?: string; adbStuck?: boolean };
+/** emu.proxyCheck / emu.proxyClear 的结果（host/src/main.ts）。 */
+type ProxyResult = { ok: boolean; proxy: string | null; untrusted?: string[]; error: string | null; adbStuck: boolean };
+/** 检测网络发现的问题：代理连不上，或代理能连通但在解密 HTTPS、设备不信任它的证书（apps 是受影响的 App 包名）。 */
+type ProxyIssue = { proxy: string; kind: "dead" } | { proxy: string; kind: "untrusted"; apps: string[] };
 type Msg = { text: string; error?: boolean; adbStuck?: boolean };
 /** 网关比页面旧时画面上方的提示（host/src/gateway-update.ts）。 */
 type GatewayBanner = { kind: "updating" | "manual"; text: string; command?: string };
@@ -552,6 +556,20 @@ function DialogContent(props: { title: string; description?: string; scroll?: bo
 // ---- ui 层结束 ----
 
 // 实时播报（ARIA 的 status）在 nsh 的 AccessibilityRole 里叫 "summary"：nsh 网页端把它写成 role="status"（nsh.js 的 ARIA_ROLES）
+
+/** 检测网络发现问题时弹框的说明：发生了什么。 */
+function proxyIssueText(issue: ProxyIssue | null): string {
+  if (issue === null) return "";
+  if (issue.kind === "dead") return `设备设置了全局 HTTP 代理 ${issue.proxy}，但这个代理连不上，设备里的 App 都上不了网。`;
+  const apps = issue.apps.map((a) => (a === "?" ? "已退出的 App" : a)).join("、");
+  return `设备经代理 ${issue.proxy} 上网。最近 5 分钟 ${apps} 的 HTTPS 请求因为证书不受信任而失败：抓包工具在解密这些请求，设备里却没有它的根证书。`;
+}
+
+/** 同上：常见原因和两条出路。 */
+function proxyIssueHint(issue: ProxyIssue | null): string {
+  if (issue?.kind === "untrusted") return "不抓包：清除代理，再重新打开这些 App。要抓包：取消，在抓包工具里给设备重新安装证书（如 Proxyman 的 Install certificate）；模拟器每次重启后证书会丢，要重装。";
+  return "常见原因是抓包工具（如 Proxyman、Charles）已经关掉，或者电脑换了 IP，设备上的代理设置却没有恢复。清除后设备直接上网，已经打开的 App 要重新打开才生效；还要抓包时，在抓包工具里重新配置一次。";
+}
 
 /** 重启命令的名字（菜单项、adb 卡住时的按钮、确认框标题都用它）。 */
 const rebootLabel = (phone: boolean) => (phone ? "重启手机" : "重启模拟器");
@@ -1524,6 +1542,27 @@ function App() {
     act(host.call("emu.reboot", {}));
   };
   const showNotice = (n: Notice) => notices.set(addNotice(notices(), n));
+  // 检测网络：设备的全局 HTTP 代理还能不能用（gateway/src/proxy-check.ts）；有问题时弹框，用户点了才清掉
+  const proxyBusy = signal(false);
+  const proxyIssue = signal<ProxyIssue | null>(null);
+  const proxyFailed = (r: ProxyResult) => (r.adbStuck ? adbStuck.set(true) : showNotice({ text: r.error ?? "操作失败", error: true }));
+  const checkNetwork = () => {
+    proxyBusy.set(true);
+    showNotice({ text: "正在检测网络，需要几秒…" });
+    call<ProxyResult>("emu.proxyCheck", {}).then((r) => {
+      if (r.error) proxyFailed(r);
+      else if (r.proxy === null) showNotice({ text: "网络设置正常：没有设置代理" });
+      else if (!r.ok) proxyIssue.set({ proxy: r.proxy, kind: "dead" });
+      else if (r.untrusted?.length) proxyIssue.set({ proxy: r.proxy, kind: "untrusted", apps: r.untrusted });
+      else showNotice({ text: `网络设置正常：设备经代理 ${r.proxy} 上网，代理能连通，最近没有证书错误` });
+    }).finally(() => proxyBusy.set(false));
+  };
+  const clearProxyIssue = () => {
+    const issue = proxyIssue();
+    proxyIssue.set(null);
+    if (issue === null) return;
+    call<ProxyResult>("emu.proxyClear", { proxy: issue.proxy }).then((r) => (r.error ? proxyFailed(r) : showNotice({ text: "已清除代理，设备改为直接上网。已经打开的 App 可能还在用旧代理，重新打开后恢复", sticky: true })));
+  };
 
   // H5 页面列表：连着设备时一直轮询（3 秒一次，连续成功后放宽到 5 秒；标签页隐藏时跳过，回到前台立即刷一次），左侧 H5 键和控制台都用它
   const pages = signal<Page[] | null>(null);
@@ -2428,6 +2467,7 @@ function App() {
                 {/* 和把文件拖到画面上走同一条路（host 的 emu.pickFiles 打开选择文件框） */}
                 <If when={viaAdb()}>
                   <Item label="安装 APK 或发送文件…" disabled={!shownIsLive() || state() !== "connected"} onSelect={pickFiles} />
+                  <Item label={proxyBusy() ? "正在检测网络…" : "检测网络"} disabled={proxyBusy() || !shownIsLive() || state() !== "connected"} onSelect={checkNetwork} />
                 </If>
                 <If when={caps()?.reboot !== false}>
                   <Item label={state() === "rebooting" ? "重启中…" : `${rebootLabel(kind() === "phone")}…`} disabled={!shownIsLive() || state() !== "connected"} onSelect={() => rebootAsk.set(true)} />
@@ -2815,6 +2855,15 @@ function App() {
             </DialogContent>
           )}
         </If>
+      </AppDialog>
+      <AppDialog open={proxyIssue() !== null} size="sm" onClose={() => proxyIssue.set(null)}>
+        <DialogContent title={proxyIssue()?.kind === "untrusted" ? "清除解密 HTTPS 的代理？" : "清除连不上的代理？"} footer={<>
+          <Btn label="取消" onPress={() => proxyIssue.set(null)} />
+          <Btn label="清除代理" kind="primary" onPress={clearProxyIssue} />
+        </>}>
+          <Text style={{ color: token("foreground"), ...TYPE.body }}>{proxyIssueText(proxyIssue())}</Text>
+          <Text style={{ color: token("muted-foreground"), ...TYPE.body }}>{proxyIssueHint(proxyIssue())}</Text>
+        </DialogContent>
       </AppDialog>
       <AppDialog open={rebootAsk()} size="sm" onClose={() => rebootAsk.set(false)}>
         <DialogContent title={`${rebootLabel(kind() === "phone")}？`} footer={<>

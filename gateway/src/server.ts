@@ -16,6 +16,7 @@ import { normalizeTarget } from "../../shared/target-url.ts";
 import type { EmulatorSession } from "./emulator.ts";
 import type { IosInspector } from "./ios-inspector.ts";
 import type { LogcatSub } from "./logcat.ts";
+import type { ProxyState } from "./proxy-check.ts";
 import type { LogFilter, LogLine } from "../../shared/logcat.ts";
 import type { StartJob } from "./lifecycle.ts";
 import type { InstallJob, Installer } from "./installer.ts";
@@ -230,6 +231,8 @@ export async function startServer(opts: {
   apps?: (id: string) => Promise<{ foreground: string | null; apps: string[] }>;
   /** WebMCP 读日志：导出这台设备最近的 logcat，按条件取最后 limit 行。 */
   logcatRead?: (id: string, f: LogFilter, limit: number) => Promise<LogLine[]>;
+  /** 检测、清除这台设备的全局 HTTP 代理（gateway/src/proxy-check.ts）；不传时回「网关不支持」。 */
+  proxy?: { check(id: string): Promise<ProxyState>; clear(id: string, expected: string): Promise<"cleared" | "changed" | "failed"> };
 }): Promise<{
   port: number;
   close(): Promise<void>;
@@ -997,6 +1000,35 @@ export async function startServer(opts: {
         send(ws, { t: "webviews", rid, list: [], ...adbFail("读取 WebView 列表失败：", e) });
       }
     };
+    // 检测、清除代理：走 adb 的设备都行（真机、MuMu 也会被抓包工具设上代理），iOS 模拟器不行
+    const proxyBlocked = (s: EmulatorSession | null): string | null =>
+      !s ? "没有连接设备" : !viaAdb(s) ? NO_ADB : !opts.proxy ? "网关不支持检测网络" : isRebooting(s) ? REBOOTING : null;
+    const proxyAdbFail = (s: EmulatorSession, prefix: string, e: unknown) =>
+      e instanceof AdbUnresponsive && s.kind === "phone" ? { error: PHONE_ADB_UNRESPONSIVE } : adbFail(prefix, e);
+    const proxyCheck = async (rid: number) => {
+      const s = conn.session;
+      const blocked = proxyBlocked(s);
+      if (blocked) return send(ws, { t: "proxyCheck", rid, proxy: null, error: blocked });
+      try {
+        send(ws, { t: "proxyCheck", rid, ...(await opts.proxy!.check(s!.id)) });
+      } catch (e) {
+        send(ws, { t: "proxyCheck", rid, proxy: null, ...proxyAdbFail(s!, "检测代理失败：", e) });
+      }
+    };
+    const proxyClear = async (rid: number, expected: string) => {
+      const s = conn.session;
+      const blocked = proxyBlocked(s);
+      if (blocked) return send(ws, { t: "proxyClear", rid, ok: false, error: blocked });
+      try {
+        const r = await opts.proxy!.clear(s!.id, expected);
+        if (r === "cleared") log(`已清除 ${s!.id} 的全局 HTTP 代理 ${expected}`);
+        if (r === "failed") log(`清除 ${s!.id} 的全局 HTTP 代理后读回来还在`);
+        const error = r === "changed" ? "代理设置和检测时不一样了（可能换了设备），没有清除。请重新检测" : r === "failed" ? "清除后代理设置还在" : null;
+        send(ws, { t: "proxyClear", rid, ok: r === "cleared", ...(error ? { error } : {}) });
+      } catch (e) {
+        send(ws, { t: "proxyClear", rid, ok: false, ...proxyAdbFail(s!, "清除代理失败：", e) });
+      }
+    };
     const findPage = async (socket: string, id: string) => {
       const s = conn.session;
       if (!s) return null;
@@ -1481,6 +1513,12 @@ export async function startServer(opts: {
           break;
         case "webviews":
           void webviews(m.rid);
+          break;
+        case "proxyCheck":
+          void proxyCheck(m.rid);
+          break;
+        case "proxyClear":
+          void proxyClear(m.rid, m.proxy);
           break;
         case "renameAvd": {
           if (!opts.avd) {

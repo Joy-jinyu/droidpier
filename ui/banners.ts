@@ -74,3 +74,20 @@ export function waitingShown(b: { shown: BannerKind | null; waiting: number }, g
 export function timedNotice(shown: BannerKind | null, q: Notices): Notice | null {
   return shown === "info" ? q.info : null;
 }
+
+/**
+ * 正在显示的那一条的内容：换成下一条时，旧的要原样留在画面上淡出（ui/App.tsx 的提示条进出场），
+ * 所以记下当时的通知和网关提示，不跟着状态变成下一条的。G 是网关提示（ui/App.tsx 的 GatewayBanner）。
+ */
+export type BannerShot<G> = { kind: BannerKind; notice: Notice | null; gateway: G | null };
+
+export function bannerShot<G>(kind: BannerKind | null, notice: Notice | null, gateway: G | null): BannerShot<G> | null {
+  if (kind === null) return null;
+  return { kind, notice: kind === "error" || kind === "info" ? notice : null, gateway: kind === "gateway" ? gateway : null };
+}
+
+/** 是不是同一条：种类、通知、网关提示都是同一个对象。同一条里的小变化（复制失败、排着几条）不算换了一条，不重新进场。 */
+export function sameBanner<G>(a: BannerShot<G> | null, b: BannerShot<G> | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.kind === b.kind && a.notice === b.notice && a.gateway === b.gateway;
+}

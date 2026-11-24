@@ -33,6 +33,8 @@ const AVD_STOP_LEVEL = 2;
 const LOGCAT_LEVEL = 3;
 // 从这个级别起网关能给 WebMCP 读日志（logcatRead）；更旧的网关上 droidpier_read_logcat 直接说网关要更新
 const LOGCAT_READ_LEVEL = 4;
+// 从这个级别起网关能检测、清除设备的代理（proxyCheck / proxyClear）；旧网关不认，等不到回复
+const PROXY_LEVEL = 7;
 
 // 以前记端口和启动口令的键，都不用了，清掉
 const OLD_KEYS = ["droidpier.port", "droidpier.launch"];
@@ -884,6 +886,16 @@ export async function createHost(player: Player) {
       if (name === "emu.webviews") {
         // 读失败不抛：adbStuck 时页面要就地给出“重启模拟器”
         return conn.request({ t: "webviews" }).then((r) => ({ list: r.list, error: r.error, adbStuck: r.code === "adb-unresponsive" }));
+      }
+      // 检测、清除代理：失败不抛，error 给页面显示，adbStuck 时页面给出重启按钮
+      if (name === "emu.proxyCheck" || name === "emu.proxyClear") {
+        if (gateway !== undefined && gatewayBelow(gateway, PROXY_LEVEL)) return { ok: false, proxy: null, error: tooOldText("检测网络", INSTALL), adbStuck: false };
+        const failed = (e: Error) => ({ ok: false, proxy: null, error: e.message, adbStuck: false });
+        if (name === "emu.proxyCheck") {
+          return conn.request({ t: "proxyCheck" }).then((r) => ({ ok: r.ok ?? false, proxy: r.proxy, untrusted: r.untrusted ?? [], error: r.error ?? null, adbStuck: r.code === "adb-unresponsive" }), failed);
+        }
+        if (typeof args?.proxy !== "string") throw new Error("emu.proxyClear 需要 proxy");
+        return conn.request({ t: "proxyClear", proxy: args.proxy }).then((r) => ({ ok: r.ok, proxy: null, error: r.error ?? null, adbStuck: r.code === "adb-unresponsive" }), failed);
       }
       // 拿到前端地址就在 testID="devtools" 的占位 View 里显示，返回 opened 让 TSX 展开控制台
       if (name === "emu.inspect") return inspect(needPage(name, args));

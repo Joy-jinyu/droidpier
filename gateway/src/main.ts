@@ -23,6 +23,7 @@ import { adb, emulatorId, killAdbChildren, streamAdb } from "./adb.ts";
 import { iosLogLines, iosLogStream, parseLaunchctlApps } from "./ios-log.ts";
 import { isIosSimUdid } from "../../shared/protocol.ts";
 import { turnOffAutoPrivateDns } from "./private-dns.ts";
+import { checkProxy, clearProxy } from "./proxy-check.ts";
 import { createPhones } from "./phones.ts";
 import { connectIosSim, createHelperSpawner, createIosSims, hasHomeButton, helperSourcePath, nativeAssetPath, simctl, simctlDeviceOps } from "./ios-sim.ts";
 import { createIosInspector, legacyProtocolVersion, type IosInspector } from "./ios-inspector.ts";
@@ -342,6 +343,7 @@ srv = await startServer({
   logcat,
   apps,
   logcatRead,
+  proxy: { check: (id) => checkProxy({ exec: adb.device(id) }), clear: (id, expected) => clearProxy({ exec: adb.device(id) }, expected) },
   version: VERSION,
   service,
   update: { autoUpdate: service && updater !== null, request: () => updater!.request(), last: () => updater?.last() ?? null },

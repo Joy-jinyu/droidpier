@@ -319,6 +319,37 @@ static void hidKey(uint32_t usage, BOOL down) {
   if (msg) hidSend(msg);
 }
 
+// SimulatorKit 的位置随 Xcode 版本变。Simulator.app 靠 rpath 找它，Xcode 26.0.1 的 rpath 是 Developer/Library/PrivateFrameworks、
+// Contents/Frameworks、Simulator.app/Contents/Frameworks（2026-11-23 用 otool -l 看的，实际在第一个）；Xcode 27.1 在
+// Contents/SharedFrameworks（2026-11-21 实测）。先试这些位置，都没有再在 Xcode 包的 Contents 下按目录名找：只找 5 层
+// （26.0.1 里它在第 4 层，fd 实测 0.02 秒），给以后换位置的版本留余地。tried 记下找过哪里，找不到时报给用户
+static void *loadSimulatorKit(NSString *dev, NSMutableArray<NSString *> *tried) {
+  NSString *contents = [dev stringByDeletingLastPathComponent];
+  NSArray<NSString *> *dirs = @[
+    [contents stringByAppendingPathComponent:@"SharedFrameworks"],
+    [dev stringByAppendingPathComponent:@"Library/PrivateFrameworks"],
+    [contents stringByAppendingPathComponent:@"Frameworks"],
+    [dev stringByAppendingPathComponent:@"Applications/Simulator.app/Contents/Frameworks"],
+  ];
+  for (NSString *d in dirs) {
+    NSString *p = [d stringByAppendingPathComponent:@"SimulatorKit.framework/SimulatorKit"];
+    [tried addObject:p];
+    void *h = dlopen(p.fileSystemRepresentation, RTLD_NOW);
+    if (h) return h;
+  }
+  NSDirectoryEnumerator<NSURL *> *it = [NSFileManager.defaultManager enumeratorAtURL:[NSURL fileURLWithPath:contents]
+    includingPropertiesForKeys:nil options:NSDirectoryEnumerationSkipsHiddenFiles errorHandler:nil];
+  for (NSURL *u in it) {
+    if (it.level >= 5) [it skipDescendants];
+    if (![u.lastPathComponent isEqualToString:@"SimulatorKit.framework"]) continue;
+    [it skipDescendants];
+    void *h = dlopen([u.path stringByAppendingPathComponent:@"SimulatorKit"].fileSystemRepresentation, RTLD_NOW);
+    if (h) return h;
+  }
+  [tried addObject:[NSString stringWithFormat:@"%@ 下 5 层以内", contents]];
+  return NULL;
+}
+
 static id findDevice(NSString *developerDir, NSString *udid) {
   NSError *e = nil;
   id ctx = ((id (*)(id, SEL, id, NSError **))objc_msgSend)(objc_getClass("SimServiceContext"), sel_registerName("sharedServiceContextForDeveloperDir:error:"), developerDir, &e);
@@ -340,9 +371,9 @@ int main(int argc, char **argv) {
     if (argc < 3) fail(@"用法：simhelper <Developer 目录> <UDID>");
     NSString *dev = @(argv[1]);
     if (!dlopen("/Library/Developer/PrivateFrameworks/CoreSimulator.framework/CoreSimulator", RTLD_NOW)) fail(@"找不到 CoreSimulator（Xcode 没装好或没启动过一次）");
-    NSString *sk = [[dev stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"SharedFrameworks/SimulatorKit.framework/SimulatorKit"];
-    void *skh = dlopen(sk.fileSystemRepresentation, RTLD_NOW);
-    if (!skh) fail([NSString stringWithFormat:@"找不到 SimulatorKit：%@", sk]);
+    NSMutableArray<NSString *> *tried = [NSMutableArray array];
+    void *skh = loadSimulatorKit(dev, tried);
+    if (!skh) fail([NSString stringWithFormat:@"找不到 SimulatorKit（这个版本的 Xcode 可能还不支持），找过：%@", [tried componentsJoinedByString:@"、"]]);
     mouseMessage = (MouseFn)dlsym(skh, "IndigoHIDMessageForMouseNSEvent");
     buttonMessage = (ButtonFn)dlsym(skh, "IndigoHIDMessageForButton");
     keyboardMessage = (KeyboardFn)dlsym(skh, "IndigoHIDMessageForKeyboardArbitrary");
